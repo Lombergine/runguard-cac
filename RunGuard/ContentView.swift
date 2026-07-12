@@ -44,11 +44,11 @@ struct ContentView: View {
                 case .loading:
                     ProgressView("Loading runs…")
 
-                case .loaded(let runs):
+                case .loaded(let runs, let risk):
                     if runs.isEmpty {
                         emptyState
                     } else {
-                        runList(runs)
+                        runList(runs, risk: risk)
                     }
 
                 case .failed(let message):
@@ -67,6 +67,17 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Runs")
+            .toolbar {
+                // Temporary: entry to the ACWR validation screen.
+                // Remove together with ACWRDebugView.swift.
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        ACWRDebugView()
+                    } label: {
+                        Label("ACWR Validation", systemImage: "waveform.path.ecg")
+                    }
+                }
+            }
         }
         .task {
             // Runs when the view first appears; decides which state to show.
@@ -74,9 +85,22 @@ struct ContentView: View {
         }
     }
 
-    private func runList(_ runs: [RunningWorkout]) -> some View {
-        List(runs) { run in
-            RunRow(run: run)
+    private func runList(_ runs: [RunningWorkout], risk: ACWRStatus) -> some View {
+        List {
+            // The card is a list row (not a header above the List) so it
+            // scrolls away with the content instead of eating screen space.
+            // Clearing the row chrome lets the card draw its own background.
+            Section {
+                RiskCard(status: risk)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+            Section {
+                ForEach(runs) { run in
+                    RunRow(run: run)
+                }
+            }
         }
         .refreshable {
             await viewModel.loadRuns()

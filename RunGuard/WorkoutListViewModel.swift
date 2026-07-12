@@ -28,9 +28,10 @@ final class WorkoutListViewModel {
         case requesting
         /// Fetching runs from HealthKit.
         case loading
-        /// Fetch finished. An empty array means no runs *or* denied access —
-        /// indistinguishable by design, so the view treats them as one.
-        case loaded([RunningWorkout])
+        /// Fetch finished. An empty runs array means no runs *or* denied
+        /// access — indistinguishable by design, so the view treats them as
+        /// one. The risk status rides along, computed from the same fetch.
+        case loaded(runs: [RunningWorkout], risk: ACWRStatus)
         /// A mechanical failure (not a user denial).
         case failed(String)
     }
@@ -85,7 +86,11 @@ final class WorkoutListViewModel {
     func loadRuns() async {
         state = .loading
         do {
-            state = .loaded(try await service.fetchRunningWorkouts())
+            let runs = try await service.fetchRunningWorkouts()
+            // ACWR math is pure and cheap (one pass over ~90 days), so it
+            // reuses this fetch instead of hitting HealthKit again.
+            let risk = ACWRService.compute(runs: runs).status
+            state = .loaded(runs: runs, risk: risk)
         } catch {
             state = .failed(error.localizedDescription)
         }
