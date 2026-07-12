@@ -8,12 +8,13 @@ RunGuard is an iOS app for running injury prevention. Users sync their runs from
 
 ## Current Scope — do not exceed
 
-The app currently does exactly two things:
+The app currently does exactly three things:
 
 1. Request HealthKit read authorization.
 2. Query recent running workouts and show them as a simple list: date, distance, duration, average heart rate. The lookback window is the single constant `HealthKitService.fetchWindowDays` (default 90) — change it there, nowhere else.
+3. Compute ACWR (acute:chronic workload ratio) in `ACWRService`: daily load = miles/day (rest days are explicit zeros), acute = 7-day rolling mean, chronic = 28-day rolling mean, ratio mapped to zones (<0.8 undertraining, 0.8–1.3 optimal, 1.3–1.5 caution, >1.5 high risk). Under 21 days of history → `lowConfidence`, no score. The math is a pure static function (`ACWRService.compute`) over `[RunningWorkout]` so it's testable without HealthKit; it is not wired into any UI yet.
 
-Nothing else. No injury analysis, no charts, no persistence, no settings, no networking. Do not add features, screens, or abstractions beyond this scope unless explicitly asked.
+Nothing else. No charts, no persistence, no settings, no networking. Do not add features, screens, or abstractions beyond this scope unless explicitly asked.
 
 ## Tech Constraints
 
