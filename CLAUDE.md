@@ -11,7 +11,7 @@ RunGuard is an iOS app for running injury prevention. Users sync their runs from
 The app currently does exactly two things:
 
 1. Request HealthKit read authorization.
-2. Query the last 28 days of running workouts and show them as a simple list: date, distance, duration, average heart rate.
+2. Query recent running workouts and show them as a simple list: date, distance, duration, average heart rate. The lookback window is the single constant `HealthKitService.fetchWindowDays` (default 90) — change it there, nowhere else.
 
 Nothing else. No injury analysis, no charts, no persistence, no settings, no networking. Do not add features, screens, or abstractions beyond this scope unless explicitly asked.
 
@@ -25,7 +25,7 @@ Nothing else. No injury analysis, no charts, no persistence, no settings, no net
 
 - The HealthKit entitlement is already configured (`RunGuard/RunGuard.entitlements`, `com.apple.developer.healthkit`).
 - The project uses a generated Info.plist (`GENERATE_INFOPLIST_FILE = YES`). HealthKit read access requires `NSHealthShareUsageDescription` — add it as an `INFOPLIST_KEY_NSHealthShareUsageDescription` build setting (or Info tab in Xcode) before any authorization request, or the app will crash at runtime.
-- Query running workouts via `HKSampleQuery` on `HKObjectType.workoutType()` with a predicate combining `HKQuery.predicateForWorkouts(with: .running)` and a 28-day `HKQuery.predicateForSamples(withStart:end:)`.
+- Query running workouts via `HKSampleQuery` on `HKObjectType.workoutType()` with a predicate combining `HKQuery.predicateForWorkouts(with: .running)` and a `HKQuery.predicateForSamples(withStart:end:)` window (see `HealthKitService.fetchWindowDays`).
 - Distance and duration come from the `HKWorkout` itself; average heart rate requires a separate statistics query per workout over the workout's date interval (or `workout.statistics(for:)` on iOS 16+).
 - HealthKit authorization status for read types is intentionally opaque (Apple privacy design): you cannot detect "denied" — a denied read just returns no data. Design UI copy accordingly (e.g., "No runs found — check Health app permissions") rather than trying to branch on authorization status.
 - HealthKit does not work in the iOS Simulator without manually adding sample data via the Health app; real-device testing is required for realistic data.

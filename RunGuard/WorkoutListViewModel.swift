@@ -1,5 +1,5 @@
 //
-//  HealthAuthorizationViewModel.swift
+//  WorkoutListViewModel.swift
 //  RunGuard
 //
 
@@ -12,12 +12,13 @@ import Observation
 
 @MainActor
 @Observable
-final class HealthAuthorizationViewModel {
-    /// Note the vocabulary: there is no `denied` case. HealthKit never tells
-    /// an app that read access was refused — the strongest statement we can
-    /// make is `requested` (the sheet has been shown).
-    enum AuthorizationState: Equatable {
-        /// Haven't finished checking yet (initial launch).
+final class WorkoutListViewModel {
+    /// The one screen's full lifecycle. Note the vocabulary: there is no
+    /// `denied` case. HealthKit never tells an app that read access was
+    /// refused — a denial just means queries come back empty, which lands
+    /// in `.loaded([])`.
+    enum ScreenState: Equatable {
+        /// Haven't finished checking authorization yet (initial launch).
         case checking
         /// Device has no Health data store (e.g. some iPads, visionOS).
         case unavailable
@@ -25,14 +26,16 @@ final class HealthAuthorizationViewModel {
         case needsRequest
         /// The permission sheet is currently up.
         case requesting
-        /// The sheet has been shown and dismissed. Access may be granted or
-        /// denied; we find out only by whether queries return data.
-        case requested
+        /// Fetching runs from HealthKit.
+        case loading
+        /// Fetch finished. An empty array means no runs *or* denied access —
+        /// indistinguishable by design, so the view treats them as one.
+        case loaded([RunningWorkout])
         /// A mechanical failure (not a user denial).
         case failed(String)
     }
 
-    private(set) var state: AuthorizationState = .checking
+    private(set) var state: ScreenState = .checking
 
     private let service: HealthKitService
 
@@ -43,8 +46,8 @@ final class HealthAuthorizationViewModel {
         self.service = service ?? HealthKitService()
     }
 
-    /// Called when the view appears: decide whether to show the
-    /// "Connect Health" call-to-action or go straight to content.
+    /// Called when the view appears: show the "Connect Health" call-to-action
+    /// if the sheet was never presented, otherwise go straight to fetching.
     func refreshStatus() async {
         guard service.isAvailable else {
             state = .unavailable
@@ -52,15 +55,13 @@ final class HealthAuthorizationViewModel {
         }
         do {
             switch try await service.authorizationRequestStatus() {
-            case .shouldRequest:
+            case .shouldRequest, .unknown:
+                // .unknown: HealthKit couldn't determine status; offer the
+                // request anyway — re-requesting is harmless (the sheet only
+                // appears if it's actually needed).
                 state = .needsRequest
             case .unnecessary:
-                state = .requested
-            case .unknown:
-                // HealthKit couldn't determine status; offer the request
-                // anyway — re-requesting is harmless (the sheet only appears
-                // if it's actually needed).
-                state = .needsRequest
+                await loadRuns()
             @unknown default:
                 state = .needsRequest
             }
@@ -73,7 +74,18 @@ final class HealthAuthorizationViewModel {
         state = .requesting
         do {
             try await service.requestAuthorization()
-            state = .requested
+            // The sheet resolved (allow or deny — we can't tell which), so
+            // the only way forward is to query and see what comes back.
+            await loadRuns()
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    func loadRuns() async {
+        state = .loading
+        do {
+            state = .loaded(try await service.fetchRunningWorkouts())
         } catch {
             state = .failed(error.localizedDescription)
         }
