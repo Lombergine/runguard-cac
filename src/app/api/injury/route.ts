@@ -1,0 +1,22 @@
+import { resolveAthlete } from "@/lib/apiAuth";
+import { getDb } from "@/lib/db";
+
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const athlete = await resolveAthlete(request, body.athleteId ?? null);
+  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+
+  const bodyPart = typeof body.bodyPart === "string" ? body.bodyPart.slice(0, 60) : "";
+  if (!bodyPart) return Response.json({ error: "Need bodyPart" }, { status: 400 });
+  getDb()
+    .prepare("INSERT INTO injuries (athlete_id, date, body_part, note) VALUES (?, ?, ?, ?)")
+    .run(
+      athlete.id,
+      typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+        ? body.date
+        : new Date().toISOString().slice(0, 10),
+      bodyPart,
+      typeof body.note === "string" ? body.note.slice(0, 300) : null
+    );
+  return Response.json({ ok: true });
+}

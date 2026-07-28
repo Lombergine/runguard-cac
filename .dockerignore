@@ -1,0 +1,8 @@
+node_modules
+.next
+data
+*.zip
+.git
+.env
+npm-debug.log
+milemarker-ios

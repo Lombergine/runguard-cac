@@ -1,0 +1,157 @@
+import crypto from "crypto";
+import { getDb, getAthlete, insertActivity, AthleteRow } from "./db";
+
+const TOKEN_URL = "https://www.strava.com/oauth/token";
+const API = "https://www.strava.com/api/v3";
+
+export function stravaConfigured(): boolean {
+  return Boolean(process.env.STRAVA_CLIENT_ID && process.env.STRAVA_CLIENT_SECRET);
+}
+
+export function signState(athleteId: number): string {
+  const sig = crypto
+    .createHmac("sha256", process.env.SESSION_SECRET || "milemarker-dev-secret")
+    .update(String(athleteId))
+    .digest("hex")
+    .slice(0, 16);
+  return `${athleteId}.${sig}`;
+}
+
+export function verifyState(state: string): number | null {
+  const [id] = state.split(".");
+  const n = Number(id);
+  if (!Number.isInteger(n)) return null;
+  return signState(n) === state ? n : null;
+}
+
+export function authorizeUrl(athleteId: number, origin: string): string {
+  const params = new URLSearchParams({
+    client_id: process.env.STRAVA_CLIENT_ID!,
+    response_type: "code",
+    redirect_uri: `${origin}/api/strava/callback`,
+    approval_prompt: "auto",
+    scope: "activity:read_all",
+    state: signState(athleteId),
+  });
+  return `https://www.strava.com/oauth/authorize?${params}`;
+}
+
+type TokenResponse = {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  athlete?: { id: number };
+};
+
+export async function exchangeCode(code: string): Promise<TokenResponse> {
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.STRAVA_CLIENT_ID,
+      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      code,
+      grant_type: "authorization_code",
+    }),
+  });
+  if (!res.ok) throw new Error(`Strava token exchange failed: ${res.status}`);
+  return res.json();
+}
+
+async function freshToken(athlete: AthleteRow): Promise<string> {
+  if (
+    athlete.strava_expires_at &&
+    athlete.strava_expires_at * 1000 > Date.now() + 60000 &&
+    athlete.strava_access_token
+  ) {
+    return athlete.strava_access_token;
+  }
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.STRAVA_CLIENT_ID,
+      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: athlete.strava_refresh_token,
+    }),
+  });
+  if (!res.ok) throw new Error(`Strava token refresh failed: ${res.status}`);
+  const tok = (await res.json()) as TokenResponse;
+  getDb()
+    .prepare(
+      "UPDATE athletes SET strava_access_token=?, strava_refresh_token=?, strava_expires_at=? WHERE id=?"
+    )
+    .run(tok.access_token, tok.refresh_token, tok.expires_at, athlete.id);
+  return tok.access_token;
+}
+
+type StravaActivity = {
+  id: number;
+  name: string;
+  type: string;
+  sport_type?: string;
+  start_date: string;
+  distance: number;
+  moving_time: number;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  total_elevation_gain?: number;
+};
+
+function storeActivity(athleteId: number, act: StravaActivity): boolean {
+  return insertActivity({
+    athlete_id: athleteId,
+    source: "strava",
+    external_id: String(act.id),
+    name: act.name,
+    type: act.sport_type || act.type,
+    start_time: act.start_date,
+    distance_m: act.distance,
+    duration_s: act.moving_time,
+    avg_hr: act.average_heartrate ?? null,
+    max_hr: act.max_heartrate ?? null,
+    elevation_gain_m: act.total_elevation_gain ?? null,
+  });
+}
+
+/** Pull recent activities (last `days`) for one athlete. Returns count imported. */
+export async function syncAthlete(athleteId: number, days = 120): Promise<number> {
+  const athlete = getAthlete(athleteId);
+  if (!athlete?.strava_refresh_token) return 0;
+  const token = await freshToken(athlete);
+  const after = Math.floor((Date.now() - days * 86400000) / 1000);
+  let page = 1;
+  let imported = 0;
+  for (;;) {
+    const res = await fetch(
+      `${API}/athlete/activities?after=${after}&per_page=100&page=${page}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) throw new Error(`Strava activities fetch failed: ${res.status}`);
+    const batch = (await res.json()) as StravaActivity[];
+    for (const act of batch) {
+      if (storeActivity(athlete.id, act)) imported++;
+    }
+    if (batch.length < 100) break;
+    page++;
+  }
+  return imported;
+}
+
+/** Handle a webhook "new activity" event. */
+export async function importOneActivity(
+  stravaAthleteId: string,
+  activityId: string
+): Promise<void> {
+  const athlete = getDb()
+    .prepare("SELECT * FROM athletes WHERE strava_athlete_id = ?")
+    .get(stravaAthleteId) as AthleteRow | undefined;
+  if (!athlete) return;
+  const token = await freshToken(athlete);
+  const res = await fetch(`${API}/activities/${activityId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return;
+  storeActivity(athlete.id, (await res.json()) as StravaActivity);
+}
