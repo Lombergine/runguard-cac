@@ -64,10 +64,10 @@ export default async function AthletePortal({
             {unread > 0 ? `${unread} alert${unread === 1 ? "" : "s"}` : "all clear"}
           </span>
           <div className="ml-auto flex items-center gap-3">
-            <span className="flex items-center gap-2 text-sm" style={{ color: "var(--ink-2)" }}>
+            <Link href="/athlete?tab=Profile" className="flex items-center gap-2 text-sm hover:opacity-70" style={{ color: "var(--ink-2)" }}>
               <Avatar name={p.athlete.name} hue={p.athlete.hue} size={26} />
               <span className="hidden sm:inline">{p.athlete.name.split(" ")[0]}</span>
-            </span>
+            </Link>
             <RiskBadge zone={p.risk.zone} />
             <form action="/api/athlete-logout" method="post">
               <button className="text-sm hover:opacity-70 cursor-pointer" style={{ color: "var(--ink-muted)" }}>

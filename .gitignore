@@ -43,3 +43,6 @@ next-env.d.ts
 # local scratch
 _to_delete/
 *.tgz
+
+# claude code
+.claude/

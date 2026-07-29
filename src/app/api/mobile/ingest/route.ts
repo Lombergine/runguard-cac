@@ -1,7 +1,7 @@
 import { getDb, insertActivity, upsertMetric, AthleteRow } from "@/lib/db";
 
 /**
- * The Core iOS app posts HealthKit data here:
+ * The RunGuard iOS app posts HealthKit data here:
  *   { workouts?: [...], metrics?: [{ date, restingHr, hrv, sleepHours, vo2max, respRate }] }
  * Auth: Authorization: Bearer <device_token> (each athlete has one).
  */

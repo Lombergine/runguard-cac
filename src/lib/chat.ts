@@ -58,8 +58,9 @@ export function coachWhy(p: CoreProfile): string {
     causes.push(`training monotony is ${p.patterns.monotony} — every day is the same medium-hard effort, which multiplies load stress`);
   if (rec.sleepAvg !== null && rec.sleepAvg < 7)
     causes.push(`they're averaging ${rec.sleepAvg}h of sleep, under the 8h where tissue repair actually happens`);
-  if (p.todayCheckin?.soreness_severity != null && p.todayCheckin.soreness_severity >= 5)
-    causes.push(`they logged ${p.todayCheckin.soreness_part ?? "muscle"} soreness at ${p.todayCheckin.soreness_severity}/10 today`);
+  const worstSoreness = [...p.todaySoreness].sort((a, b) => b.severity - a.severity)[0];
+  if (worstSoreness && worstSoreness.severity >= 5)
+    causes.push(`they logged ${worstSoreness.part} soreness at ${worstSoreness.severity}/10 today${p.todaySoreness.length > 1 ? ` (${p.todaySoreness.length} areas flagged)` : ""}`);
   if (p.patterns.highEffortStreak >= 5)
     causes.push(`${p.patterns.highEffortStreak} straight days above their typical load with no recovery day`);
   if (p.injuries.length > 0 && r.zone !== "ready") {
@@ -113,7 +114,7 @@ const INTENTS: Intent[] = [
     score: (q) =>
       hit(q, [/should i (run|train|go)/, /run today/, /legs (are|feel|really)/, /\bsore\b/, /\btired\b/, /feel (dead|awful|exhausted)/]),
     answer: ({ p, q }) => {
-      const sev = p.todayCheckin?.soreness_severity ?? null;
+      const sev = p.todaySoreness.length ? Math.max(...p.todaySoreness.map((s) => s.severity)) : null;
       const part = /shin/.test(q) ? "shins" : /knee/.test(q) ? "knee" : /achilles|heel/.test(q) ? "achilles" : /calf|calves/.test(q) ? "calves" : /hip|it band|itb/.test(q) ? "hip/IT band" : null;
       const sharp = /sharp|stabbing|one (leg|side)|point|spot|limp/.test(q);
       if (sharp || (sev !== null && sev >= 7)) {
@@ -528,7 +529,9 @@ function dataContext(p: CoreProfile): string {
     `Goals: ${p.goals.map((g) => `${g.event} ${g.targetLabel} (${g.onTrack ? "on track" : "chasing"})`).join(", ") || "none set"}.`,
     p.races.upcoming[0] ? `Next race: ${p.races.upcoming[0].name} (${p.races.upcoming[0].event}) in ${p.races.upcoming[0].daysUntil} days, readiness ${p.races.upcoming[0].readiness}/100.${p.plan.taperMode ? " Taper mode active." : ""}` : "No upcoming race.",
     `Today's plan: ${p.plan.days.find((d) => d.isToday)?.type ?? "rest"}. Injury history: ${p.injuries.map((i) => `${i.body_part} (${i.date.slice(0, 7)})`).join(", ") || "none"}.`,
-    p.todayCheckin ? `Today's check-in: soreness ${p.todayCheckin.soreness_severity ?? "—"}/10 (${p.todayCheckin.soreness_part ?? "general"}), energy ${p.todayCheckin.energy ?? "—"}/10.` : "No check-in today.",
+    p.todayCheckin
+      ? `Today's check-in: soreness ${p.todaySoreness.length ? p.todaySoreness.map((s) => `${s.part} ${s.severity}/10`).join(", ") : "none reported"}, energy ${p.todayCheckin.energy ?? "—"}/10.`
+      : "No check-in today.",
   ].join("\n");
 }
 

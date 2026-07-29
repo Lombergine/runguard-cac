@@ -12,7 +12,7 @@ import {
 import IntensityCalendar from "@/components/IntensityCalendar";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "./AthleteModel";
-import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, CopyToken, TeamMembership } from "./widgets";
+import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, RaceForm, RaceEditControls, CopyToken, TeamMembership } from "./widgets";
 
 /* ---------------- shared bits ---------------- */
 
@@ -165,7 +165,16 @@ export function HomeTab({ p }: { p: CoreProfile }) {
         className="enter card-ember rounded-2xl p-6 flex flex-wrap items-center gap-6 glow-ember"
         style={{ ["--i" as string]: 0, ...riskSurface(z, high) }}
       >
-        <Gauge value={p.readiness} color={z} size={132} stroke={10} label="readiness" />
+        {p.risk.hasActivityHistory ? (
+          <Gauge value={p.readiness} color={z} size={132} stroke={10} label="readiness" />
+        ) : (
+          <div
+            className="rounded-full flex items-center justify-center text-center px-3"
+            style={{ width: 132, height: 132, border: "10px solid var(--surface-2)", color: "var(--ink-muted)" }}
+          >
+            <span className="text-xs">No data yet — sync to see your readiness</span>
+          </div>
+        )}
         <div className="flex-1 min-w-60">
           <div className="text-2xl font-extrabold" style={{ color: z }}>{verdict}</div>
           <p className="text-base mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
@@ -257,7 +266,10 @@ export function HomeTab({ p }: { p: CoreProfile }) {
       {/* quick soreness check-in */}
       <div className="enter" style={{ ["--i" as string]: 7 }}>
         <Panel title="Quick check-in">
-          <CheckinWidget athleteId={p.athlete.id} current={p.todayCheckin?.soreness_severity ?? null} />
+          <CheckinWidget
+            athleteId={p.athlete.id}
+            initialSoreness={Object.fromEntries(p.todaySoreness.map((s) => [s.part, s.severity]))}
+          />
         </Panel>
       </div>
 
@@ -306,7 +318,7 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
           <details key={d.date} className="border-t group" style={{ borderColor: "var(--hairline)" }} open={d.isToday}>
             <summary className="px-5 py-3.5 flex flex-wrap items-center gap-3 cursor-pointer list-none">
               <span className="w-24 shrink-0 text-xs font-bold uppercase tracking-wide" style={{ color: d.isToday ? "var(--brand-strong)" : "var(--ink-muted)" }}>
-                {d.day.slice(0, 3)}{d.isToday ? " ·now" : ""}
+                {d.day.slice(0, 3)} {new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}{d.isToday ? " ·now" : ""}
               </span>
               <span className="flex-1 min-w-40">
                 <span className="text-sm font-medium">{d.type}</span>
@@ -339,9 +351,7 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
 export function StatsTab({ p }: { p: CoreProfile }) {
   const hotspots = [
     ...p.injuries.map((i) => ({ part: i.body_part, kind: "injury" as const })),
-    ...(p.todayCheckin?.soreness_part
-      ? [{ part: p.todayCheckin.soreness_part, severity: p.todayCheckin.soreness_severity, kind: "soreness" as const }]
-      : []),
+    ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),
   ];
   return (
     <div className="space-y-4">
@@ -349,7 +359,12 @@ export function StatsTab({ p }: { p: CoreProfile }) {
       <div className="grid lg:grid-cols-[1.05fr_1fr] gap-4 items-stretch">
         <AthleteModel readiness={p.readiness} zone={p.risk.zone} hotspots={hotspots} />
         <div className="grid grid-cols-2 gap-3 content-start">
-          <Stat label="Fitness score" value={String(p.fitness.score)} sub={`${p.fitness.trend} · ${p.fitness.tier} tier`} color={p.fitness.trend === "improving" ? "var(--status-good)" : undefined} />
+          <Stat
+            label="Fitness score"
+            value={p.risk.hasActivityHistory ? String(p.fitness.score) : "Not enough data yet"}
+            sub={p.risk.hasActivityHistory ? `${p.fitness.trend} · ${p.fitness.tier} tier` : undefined}
+            color={p.risk.hasActivityHistory && p.fitness.trend === "improving" ? "var(--status-good)" : undefined}
+          />
           <Stat label="VO₂max" value={p.fitness.vo2max !== null ? String(p.fitness.vo2max) : "—"} sub="Apple Cardio Fitness" />
           <Stat label="Week TRIMP" value={String(p.load.weekTrimp)} sub="training impulse" />
           <Stat label="Injury risk" value={`${p.risk.score}`} sub={`${p.risk.zone} zone`} color={p.risk.zone === "high" ? "var(--status-critical)" : p.risk.zone === "caution" ? "var(--status-warning)" : "var(--status-good)"} />
@@ -515,6 +530,11 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
 export function RaceTab({ p }: { p: CoreProfile }) {
   return (
     <div className="space-y-4">
+      {/* add a race you're planning to run */}
+      <Panel title="Add a race" note="races you add are yours to edit or remove — coach-added races aren't">
+        <RaceForm athleteId={p.athlete.id} events={["800m", "Mile", "5K", "XC 5K"]} />
+      </Panel>
+
       {/* upcoming */}
       {p.races.upcoming.map((r) => (
         <div key={r.id} className="rounded-2xl border p-5" style={{ borderColor: r.daysUntil <= 7 ? "var(--brand)" : "var(--hairline)", background: "var(--surface)" }}>
@@ -526,18 +546,29 @@ export function RaceTab({ p }: { p: CoreProfile }) {
             <div className="flex-1 min-w-40">
               <div className="font-semibold">{r.name}</div>
               <div className="text-xs" style={{ color: "var(--ink-muted)" }}>{r.event} · {r.location} · {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</div>
+              {r.canEdit && <RaceEditControls athleteId={p.athlete.id} raceId={r.id} />}
             </div>
             <div className="text-right">
               <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Race readiness</div>
-              <div className="text-xl font-bold tabular-nums" style={{ color: r.readiness >= 70 ? "var(--status-good)" : r.readiness >= 40 ? "var(--status-warning)" : "var(--status-critical)" }}>{r.readiness}/100</div>
+              {p.risk.hasActivityHistory ? (
+                <div className="text-xl font-bold tabular-nums" style={{ color: r.readiness >= 70 ? "var(--status-good)" : r.readiness >= 40 ? "var(--status-warning)" : "var(--status-critical)" }}>{r.readiness}/100</div>
+              ) : (
+                <div className="text-sm font-medium" style={{ color: "var(--ink-muted)" }}>Not enough data yet</div>
+              )}
             </div>
           </div>
           <div className="mt-4 grid sm:grid-cols-2 gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--ink-muted)" }}>Pacing strategy · predicted {r.predicted}</div>
-              {r.pacing.map((line, i) => (
-                <p key={i} className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>• {line}</p>
-              ))}
+              <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--ink-muted)" }}>
+                {p.risk.hasActivityHistory ? `Pacing strategy · predicted ${r.predicted}` : "Pacing strategy"}
+              </div>
+              {p.risk.hasActivityHistory ? (
+                r.pacing.map((line, i) => (
+                  <p key={i} className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>• {line}</p>
+                ))
+              ) : (
+                <p className="text-sm leading-relaxed" style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a race prediction — sync some runs first.</p>
+              )}
             </div>
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--ink-muted)" }}>Pre-race checklist</div>
@@ -633,8 +664,8 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
           <span className="text-sm font-medium">
             {p.connectedSources.includes("Apple Watch")
               ? "Apple Health — connected & syncing"
-              : p.connectedSources.includes("Demo data")
-                ? "Demo data (connect the RunGuard app for live data)"
+              : p.connectedSources.includes("No data yet")
+                ? "No data yet — connect the RunGuard app for live data"
                 : "Not synced yet"}
           </span>
         </div>
@@ -654,9 +685,8 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
         <div className="flex flex-wrap gap-2">
           {["Apple Health", "Apple Watch", "Garmin", "Strava", "WHOOP"].map((s) => {
             const on =
-              (s === "Apple Health" && (p.connectedSources.includes("Apple Watch") || p.connectedSources.includes("Demo data"))) ||
-              p.connectedSources.includes(s) ||
-              (s === "Apple Watch" && p.connectedSources.includes("Demo data"));
+              (s === "Apple Health" && p.connectedSources.includes("Apple Watch")) ||
+              p.connectedSources.includes(s);
             return (
               <span key={s} className="text-xs rounded-full border px-3 py-1.5 font-medium" style={{ borderColor: on ? "var(--status-good)" : "var(--hairline)", color: on ? "var(--status-good)" : "var(--ink-muted)" }}>
                 {on ? "✓ " : ""}{s}{s !== "Apple Health" && s !== "Apple Watch" ? " → Apple Health" : ""}

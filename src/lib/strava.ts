@@ -115,17 +115,25 @@ function storeActivity(athleteId: number, act: StravaActivity): boolean {
   });
 }
 
-/** Pull recent activities (last `days`) for one athlete. Returns count imported. */
-export async function syncAthlete(athleteId: number, days = 120): Promise<number> {
+/**
+ * Pull activities for one athlete. By default the trailing `days` window
+ * (120d); pass `after`/`before` (unix seconds) to bound an initial historical
+ * backfill to a specific date range instead. Returns count imported.
+ */
+export async function syncAthlete(
+  athleteId: number,
+  opts: { days?: number; after?: number; before?: number } = {}
+): Promise<number> {
   const athlete = getAthlete(athleteId);
   if (!athlete?.strava_refresh_token) return 0;
   const token = await freshToken(athlete);
-  const after = Math.floor((Date.now() - days * 86400000) / 1000);
+  const after = opts.after ?? Math.floor((Date.now() - (opts.days ?? 120) * 86400000) / 1000);
+  const before = opts.before;
   let page = 1;
   let imported = 0;
   for (;;) {
     const res = await fetch(
-      `${API}/athlete/activities?after=${after}&per_page=100&page=${page}`,
+      `${API}/athlete/activities?after=${after}${before ? `&before=${before}` : ""}&per_page=100&page=${page}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!res.ok) throw new Error(`Strava activities fetch failed: ${res.status}`);

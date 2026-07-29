@@ -12,6 +12,8 @@ import {
   ReferenceArea,
   ReferenceLine,
 } from "recharts";
+import { InsufficientData, hasEnoughData } from "./EmptyState";
+import { NOT_ENOUGH_ACWR_HISTORY } from "@/lib/risk";
 
 const INK_MUTED = "#94897b";
 const GRID = "#ece6da";
@@ -64,6 +66,7 @@ function TooltipBox({
 /** ACWR over time with the 0.8–1.3 sweet spot shaded and 1.5 danger line. */
 export function AcwrChart({ data }: { data: SeriesPoint[] }) {
   const pts = data.filter((d) => d.acwr !== null);
+  if (!hasEnoughData(pts, 5)) return <InsufficientData label={NOT_ENOUGH_ACWR_HISTORY} />;
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ComposedChart data={pts} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
@@ -129,6 +132,7 @@ export function AcwrChart({ data }: { data: SeriesPoint[] }) {
 
 /** Daily training load bars + acute/chronic EWMA lines. */
 export function LoadChart({ data }: { data: SeriesPoint[] }) {
+  if (!hasEnoughData(data, 5, (d) => d.load > 0)) return <InsufficientData />;
   return (
     <div>
       <ResponsiveContainer width="100%" height={220}>
@@ -219,6 +223,7 @@ export function WeeklyKmChart({
 }: {
   data: { week: string; km: number }[];
 }) {
+  if (!hasEnoughData(data, 3, (d) => d.km > 0)) return <InsufficientData />;
   return (
     <ResponsiveContainer width="100%" height={180}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
@@ -261,6 +266,7 @@ export function PaceChart({ data }: { data: { week: string; pace: number | null 
   const fmt = (v: number) =>
     `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`;
   const pts = data.filter((d) => d.pace !== null);
+  if (!hasEnoughData(pts, 3)) return <InsufficientData />;
   const paces = pts.map((d) => d.pace as number);
   const min = Math.min(...paces);
   const max = Math.max(...paces);
@@ -309,6 +315,7 @@ export function PaceChart({ data }: { data: { week: string; pace: number | null 
 
 /** Fitness score trend line (season). */
 export function FitnessChart({ data }: { data: { week: string; score: number }[] }) {
+  if (!hasEnoughData(data, 3)) return <InsufficientData />;
   return (
     <ResponsiveContainer width="100%" height={190}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
@@ -331,6 +338,7 @@ export function FitnessChart({ data }: { data: { week: string; score: number }[]
 
 /** Sleep hours over 30 days with the 8h target line. */
 export function SleepChart({ data }: { data: { date: string; hours: number | null }[] }) {
+  if (!hasEnoughData(data, 5, (d) => d.hours !== null)) return <InsufficientData />;
   const pts = data.map((d) => ({ ...d, hours: d.hours ?? 0 }));
   return (
     <ResponsiveContainer width="100%" height={190}>
@@ -360,6 +368,7 @@ export function PRChart({ data, event }: { data: { date: string; timeS: number }
     const s = Math.round(v % 60);
     return `${m}:${String(s).padStart(2, "0")}`;
   };
+  if (!hasEnoughData(data, 1)) return <InsufficientData height={100} label="No PRs logged yet for this event." />;
   const pts = data.map((d) => ({ ...d, label: fmtDay(d.date) }));
   const times = pts.map((p) => p.timeS);
   const pad = Math.max(5, (Math.max(...times) - Math.min(...times)) * 0.3);
@@ -385,6 +394,7 @@ export function PRChart({ data, event }: { data: { date: string; timeS: number }
 
 /** Energy & motivation trend from check-ins. */
 export function MentalChart({ data }: { data: { date: string; energy: number | null; motivation: number | null }[] }) {
+  if (!hasEnoughData(data, 5, (d) => d.energy != null || d.motivation != null)) return <InsufficientData />;
   return (
     <div>
       <ResponsiveContainer width="100%" height={170}>

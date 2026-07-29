@@ -6,7 +6,7 @@
  *  - 1 athlete: returning from time off, chronic base collapsed (caution/red)
  *  - 1 athlete: high monotony grinder (caution)
  */
-import { getDb, insertActivity, upsertMetric, upsertCheckin, hashPassword } from "../src/lib/db";
+import { getDb, insertActivity, upsertMetric, upsertCheckin, upsertCheckinSoreness, hashPassword } from "../src/lib/db";
 
 type Pattern = "steady" | "spiking" | "returning" | "monotone" | "building" | "light";
 
@@ -76,6 +76,18 @@ function seed() {
   const db = getDb();
   const existing = db.prepare("SELECT COUNT(*) c FROM athletes").get() as { c: number };
   if (existing.c > 0) {
+    // real signed-up accounts always have an email/password_hash; seed-created demo
+    // athletes never do. Refuse to wipe the DB if any real accounts would be lost.
+    const real = db
+      .prepare("SELECT COUNT(*) c FROM athletes WHERE email IS NOT NULL OR password_hash IS NOT NULL")
+      .get() as { c: number };
+    if (real.c > 0 && !process.env.SEED_FORCE) {
+      throw new Error(
+        `Refusing to reseed: found ${real.c} real signed-up athlete account(s) (email/password set) ` +
+          `that would be permanently deleted. This script wipes ALL athletes, not just demo data. ` +
+          `If you're sure, re-run with SEED_FORCE=1 npm run seed.`
+      );
+    }
     console.log("Already seeded, clearing first…");
     db.exec(
       "DELETE FROM activities; DELETE FROM health_metrics; DELETE FROM race_results; DELETE FROM races; DELETE FROM checkins; DELETE FROM injuries; DELETE FROM goals; DELETE FROM chat_messages; DELETE FROM workout_status; DELETE FROM athletes; DELETE FROM teams;"
@@ -257,18 +269,36 @@ function seed() {
         athlete_id: athleteId,
         date,
         rpe: Math.round((5 + rand() * 3 + (stressedNow ? 1.5 : 0)) * 10) / 10,
-        soreness_part: stressedNow && rand() < 0.6 ? ["shins", "calves", "left knee", "achilles"][Math.floor(rand() * 4)] : null,
-        soreness_severity: stressedNow ? Math.round(4 + rand() * 4) : Math.round(1 + rand() * 3),
         energy: Math.round((stressedNow ? 4 : 6.5) + rand() * 2.5),
         motivation: Math.round(6 + rand() * 3.5),
         academic_stress: rand() < 0.25 ? 1 : 0,
       });
+      // multi-part soreness demo: stressed days can log more than one sore area independently
+      const soreOptions = ["shins", "calves", "left knee", "achilles"];
+      if (stressedNow && rand() < 0.6) {
+        const parts = rand() < 0.4 ? 2 : 1;
+        for (let i = 0; i < parts; i++) {
+          upsertCheckinSoreness({
+            athlete_id: athleteId,
+            date,
+            body_part: soreOptions[Math.floor(rand() * soreOptions.length)],
+            severity: Math.round(4 + rand() * 4),
+          });
+        }
+      } else if (rand() < 0.3) {
+        upsertCheckinSoreness({
+          athlete_id: athleteId,
+          date,
+          body_part: soreOptions[Math.floor(rand() * soreOptions.length)],
+          severity: Math.round(1 + rand() * 3),
+        });
+      }
     }
   }
 
   // ----- races: season history + upcoming meets -----
   const insertRace = db.prepare(
-    "INSERT INTO races (name, date, event, distance_m, location) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO races (name, date, event, distance_m, location, team_id) VALUES (?, ?, ?, ?, ?, ?)"
   );
   const insertResult = db.prepare(
     `INSERT INTO race_results (athlete_id, race_id, event, date, time_s, place, feel, splits, conditions)
@@ -294,7 +324,7 @@ function seed() {
   ];
 
   for (const r of [...pastRaces, ...upcoming]) {
-    const raceId = Number(insertRace.run(r.name, iso(r.d), r.event, r.dist, r.loc).lastInsertRowid);
+    const raceId = Number(insertRace.run(r.name, iso(r.d), r.event, r.dist, r.loc, DEMO_TEAM).lastInsertRowid);
     if (r.d >= 0) continue; // no results for future races
 
     // simulate each athlete's time: fitness from base volume + season improvement
