@@ -120,7 +120,8 @@ function init(): Database.Database {
       athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
       date TEXT NOT NULL,
       body_part TEXT NOT NULL,
-      note TEXT
+      note TEXT,
+      resolved_at TEXT              -- YYYY-MM-DD once healed; null = still active
     );
 
     CREATE TABLE IF NOT EXISTS goals (
@@ -183,6 +184,7 @@ function init(): Database.Database {
   addColumn("athletes", "team_id INTEGER");
   addColumn("athletes", "email TEXT");
   addColumn("athletes", "password_hash TEXT");
+  addColumn("injuries", "resolved_at TEXT");           // null = still active
   addColumn("races", "created_by_athlete_id INTEGER REFERENCES athletes(id)"); // null = coach/seed-created
   addColumn("races", "team_id INTEGER REFERENCES teams(id)");
   db.exec(`
@@ -453,6 +455,7 @@ export type InjuryRow = {
   date: string;
   body_part: string;
   note: string | null;
+  resolved_at: string | null;
 };
 
 export type GoalRow = { id: number; athlete_id: number; event: string; target: number };

@@ -98,7 +98,7 @@ export type CoreProfile = {
     }[];
     prProgression: Record<string, { date: string; timeS: number }[]>;
   };
-  injuries: { id: number; date: string; body_part: string; note: string | null }[];
+  injuries: { id: number; date: string; body_part: string; note: string | null; resolved_at: string | null }[];
   goals: { event: string; target: number; targetLabel: string; predicted: string | null; onTrack: boolean | null }[];
   weeklyTargetKm: number;
   connectedSources: string[];
@@ -324,7 +324,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
       history,
       prProgression,
     },
-    injuries: injuries.map((i) => ({ id: i.id, date: i.date, body_part: i.body_part, note: i.note })),
+    injuries: injuries.map((i) => ({ id: i.id, date: i.date, body_part: i.body_part, note: i.note, resolved_at: i.resolved_at })),
     goals: goalRows,
     weeklyTargetKm: Math.max(20, Math.round(weeklyTargetKm)),
     connectedSources: connectedSources(athlete, acts),

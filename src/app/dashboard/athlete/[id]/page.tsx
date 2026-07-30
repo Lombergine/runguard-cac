@@ -11,6 +11,7 @@ import { RecoverySnapshot } from "@/lib/risk";
 import IntensityCalendar from "@/components/IntensityCalendar";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "@/components/athlete/AthleteModel";
+import InjuryManager from "@/components/InjuryManager";
 import {
   HomeTab,
   TrainingTab,
@@ -167,7 +168,7 @@ function CoachView({
           readiness={p.readiness}
           zone={p.risk.zone}
           hotspots={[
-            ...p.injuries.map((i) => ({ part: i.body_part, kind: "injury" as const })),
+            ...p.injuries.filter((i) => !i.resolved_at).map((i) => ({ part: i.body_part, kind: "injury" as const })),
             ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),
           ]}
         />
@@ -298,22 +299,10 @@ function CoachView({
         </Panel>
       </div>
 
-      {/* injuries */}
-      {p.injuries.length > 0 && (
-        <Panel title="Injury history">
-          <div className="space-y-2.5">
-            {p.injuries.map((i) => (
-              <div key={i.id} className="text-sm" style={{ color: "var(--ink-2)" }}>
-                <span className="font-medium">{i.body_part}</span>
-                <span className="text-xs ml-2" style={{ color: "var(--ink-muted)" }}>
-                  {new Date(i.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </span>
-                {i.note && <div className="text-xs mt-0.5" style={{ color: "var(--ink-muted)" }}>{i.note}</div>}
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
+      {/* injuries — coach-recorded, never computed */}
+      <Panel title="Injuries" note="recorded by the coach · only active ones show on the body scan">
+        <InjuryManager athleteId={p.athlete.id} injuries={p.injuries} />
+      </Panel>
 
       {p.chatSummary.length > 0 && (
         <Panel title="What they've been asking RunGuard AI" note="athlete chat summary">

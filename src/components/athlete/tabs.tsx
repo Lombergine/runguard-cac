@@ -10,6 +10,7 @@ import {
   MentalChart,
 } from "@/components/charts";
 import IntensityCalendar from "@/components/IntensityCalendar";
+import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "./AthleteModel";
 import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, RaceForm, RaceEditControls, CopyToken, TeamMembership } from "./widgets";
@@ -28,10 +29,13 @@ export function Panel({ title, note, children }: { title: string; note?: string;
   );
 }
 
-function Stat({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+function Stat({ label, value, sub, color, info }: { label: string; value: string; sub?: string; color?: string; info?: string }) {
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
-      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>{label}</div>
+    <div className="rounded-2xl border p-4 relative" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
+      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
+        {label}
+        {info && <InfoDot text={info} label={label} />}
+      </div>
       <div className="text-2xl font-bold mt-1 tabular-nums" style={{ color: color ?? "var(--ink)" }}>{value}</div>
       {sub && <div className="text-xs mt-0.5" style={{ color: "var(--ink-muted)" }}>{sub}</div>}
     </div>
@@ -350,7 +354,7 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
 
 export function StatsTab({ p }: { p: CoreProfile }) {
   const hotspots = [
-    ...p.injuries.map((i) => ({ part: i.body_part, kind: "injury" as const })),
+    ...p.injuries.filter((i) => !i.resolved_at).map((i) => ({ part: i.body_part, kind: "injury" as const })),
     ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),
   ];
   return (
@@ -474,11 +478,38 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label="Sleep (7d avg)" value={r.sleepAvg !== null ? `${r.sleepAvg} h` : "—"} color={r.sleepAvg !== null && r.sleepAvg < 7 ? "var(--status-warning)" : undefined} />
-        <Stat label="HRV" value={r.hrv !== null ? `${r.hrv} ms` : "—"} sub={r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : undefined} color={r.hrvDeltaPct !== null && r.hrvDeltaPct <= -12 ? "var(--status-critical)" : undefined} />
-        <Stat label="Resting HR" value={r.restingHr !== null ? `${r.restingHr} bpm` : "—"} sub={r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : undefined} color={r.restingHrDelta !== null && r.restingHrDelta >= 5 ? "var(--status-critical)" : undefined} />
-        <Stat label="Body battery" value={String(p.fitness.freshness)} sub="freshness 0-100" />
-        <Stat label="Sleep consistency" value={p.patterns.sleepConsistency !== null ? `${p.patterns.sleepConsistency}` : "—"} sub="same bedtime = higher" />
+        <Stat
+          label="Sleep (7d avg)"
+          value={r.sleepAvg !== null ? `${r.sleepAvg} h` : "—"}
+          color={r.sleepAvg !== null && r.sleepAvg < 7 ? "var(--status-warning)" : undefined}
+          info="Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h turns amber — short sleep is one of the strongest injury and illness signals there is."
+        />
+        <Stat
+          label="HRV"
+          value={r.hrv !== null ? `${r.hrv} ms` : "—"}
+          sub={r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : undefined}
+          color={r.hrvDeltaPct !== null && r.hrvDeltaPct <= -12 ? "var(--status-critical)" : undefined}
+          info="Heart rate variability — the tiny timing differences between heartbeats. Higher usually means recovered; a drop means your body is still under stress. Compared against your own baseline, not anyone else's, so only the % change matters."
+        />
+        <Stat
+          label="Resting HR"
+          value={r.restingHr !== null ? `${r.restingHr} bpm` : "—"}
+          sub={r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : undefined}
+          color={r.restingHrDelta !== null && r.restingHrDelta >= 5 ? "var(--status-critical)" : undefined}
+          info="Your heart rate at rest, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery — it's an early warning, often before you feel it."
+        />
+        <Stat
+          label="Body battery"
+          value={String(p.fitness.freshness)}
+          sub="freshness 0-100"
+          info="How fresh your legs are: how far this week's training sits below what your body is used to. High after an easy week or a taper, low mid-block. Not the same as fitness — you can be very fit and very tired."
+        />
+        <Stat
+          label="Sleep consistency"
+          value={p.patterns.sleepConsistency !== null ? `${p.patterns.sleepConsistency}` : "—"}
+          sub="same bedtime = higher"
+          info="How steady your sleep length is night to night, scored 0–100 from the swing across the last 7 nights. Same amount every night scores high; 5 h then 10 h scores low even if the average looks fine."
+        />
       </div>
 
       {/* what's driving the risk score */}
