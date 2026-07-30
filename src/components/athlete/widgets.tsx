@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { severityColor } from "@/lib/severityColor";
 
 /* ---------- join / leave a team ---------- */
 
@@ -124,113 +125,189 @@ const SORE_PARTS: { k: string; label: string; lateral: boolean }[] = [
   { k: "shoulder", label: "Shoulder", lateral: true },
 ];
 
-export function CheckinWidget({ athleteId, current }: { athleteId: number; current: number | null }) {
+export function CheckinWidget({
+  athleteId,
+  initialSoreness,
+}: {
+  athleteId: number;
+  initialSoreness: Record<string, number>;
+}) {
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState<number | null>(current);
+  const [soreness, setSoreness] = useState<Record<string, number>>(initialSoreness);
   const [part, setPart] = useState<string | null>(null);
   const [side, setSide] = useState<"left" | "right" | "both" | null>(null);
   const router = useRouter();
 
   const region = SORE_PARTS.find((p) => p.k === part) ?? null;
-  const sorenessPart = part
-    ? region?.lateral && side
-      ? `${side} ${part}`
-      : part
-    : null;
+  // for a lateral part, a side must be chosen before it's loggable — no bare "shin" entries
+  const sorenessKey = part ? (region?.lateral ? (side ? `${side} ${part}` : null) : part) : null;
+  const currentSeverity = sorenessKey ? soreness[sorenessKey] ?? null : null;
 
-  async function submit(v: number) {
-    setBusy(true);
+  async function clearKey(key: string) {
     await fetch("/api/checkin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ athleteId, sorenessSeverity: v, sorenessPart }),
+      body: JSON.stringify({ athleteId, sorenessSeverity: null, sorenessPart: key }),
     });
-    setSaved(v);
+  }
+
+  async function clearSoreness(key: string) {
+    setBusy(true);
+    await clearKey(key);
+    setSoreness((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     setBusy(false);
     router.refresh();
   }
 
-  const chip = (active: boolean): CSSProperties => ({
-    background: active ? "var(--brand-strong, #ea580c)" : "var(--surface-2)",
-    color: active ? "#fff" : "var(--ink-2)",
-    border: "1px solid var(--hairline)",
-  });
+  async function submit(v: number | null) {
+    if (!sorenessKey || !part) return;
+    setBusy(true);
+    // "both" supersedes separately-logged left/right; logging one side makes a prior "both" stale
+    const toClear =
+      side === "both" ? [`left ${part}`, `right ${part}`] : side ? [`both ${part}`] : [];
+    await fetch("/api/checkin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ athleteId, sorenessSeverity: v, sorenessPart: sorenessKey }),
+    });
+    for (const key of toClear) {
+      if (soreness[key] != null) await clearKey(key);
+    }
+    setSoreness((prev) => {
+      const next = { ...prev };
+      if (v === null) delete next[sorenessKey];
+      else next[sorenessKey] = v;
+      for (const key of toClear) delete next[key];
+      return next;
+    });
+    setBusy(false);
+    router.refresh();
+  }
+
+  const loggedParts = Object.entries(soreness);
 
   return (
     <div>
       <div className="text-xs mb-2" style={{ color: "var(--ink-muted)" }}>
         How sore are you today?{" "}
-        {saved !== null && (
+        {loggedParts.length > 0 && (
           <span style={{ color: "var(--brand-strong)" }}>
-            Logged: {saved}/10{sorenessPart ? ` · ${sorenessPart}` : ""}
+            Logged: {loggedParts.map(([p, v]) => `${p} ${v}/10`).join(" · ")}
           </span>
         )}
       </div>
 
-      {/* where? */}
+      {/* where? — each chip is colored by that part's own logged severity, independent of the others */}
       <div className="text-[11px] mb-1.5" style={{ color: "var(--ink-muted)" }}>
-        Where? <span style={{ opacity: 0.7 }}>(optional — lights up the body scan)</span>
+        Where? <span style={{ opacity: 0.7 }}>(tap to score — lights up the body scan)</span>
       </div>
       <div className="flex flex-wrap gap-1.5 mb-2">
-        {SORE_PARTS.map((p) => (
-          <button
-            key={p.k}
-            type="button"
-            disabled={busy}
-            onClick={() => setPart(part === p.k ? null : p.k)}
-            className="px-2.5 h-7 rounded-lg text-xs font-medium cursor-pointer transition-colors"
-            style={chip(part === p.k)}
-          >
-            {p.label}
-          </button>
-        ))}
+        {SORE_PARTS.map((p) => {
+          // a lateral part may be logged under "left knee"/"right knee"/"both knee" rather
+          // than the bare key — the chip should still light up, colored by the worst side
+          const matches = [p.k, `left ${p.k}`, `right ${p.k}`, `both ${p.k}`]
+            .map((k) => soreness[k])
+            .filter((v): v is number => v != null);
+          const partSeverity = matches.length ? Math.max(...matches) : null;
+          const isSelected = part === p.k;
+          return (
+            <button
+              key={p.k}
+              type="button"
+              disabled={busy}
+              onClick={() => setPart(part === p.k ? null : p.k)}
+              className="px-2.5 h-7 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+              style={{
+                background: partSeverity !== null ? severityColor(partSeverity) : "var(--surface-2)",
+                color: partSeverity !== null ? "#fff" : "var(--ink-2)",
+                border: isSelected ? "2px solid var(--ink)" : "1px solid var(--hairline)",
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* which side? — only for lateral regions */}
       {region?.lateral && (
         <div className="flex items-center gap-1.5 mb-3">
           <span className="text-[11px]" style={{ color: "var(--ink-muted)" }}>Side:</span>
-          {(["left", "right", "both"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              disabled={busy}
-              onClick={() => setSide(side === s ? null : s)}
-              className="px-2.5 h-7 rounded-lg text-xs font-medium cursor-pointer capitalize transition-colors"
-              style={chip(side === s)}
-            >
-              {s}
-            </button>
-          ))}
+          {(["left", "right", "both"] as const).map((s) => {
+            // stays highlighted (by severity color) whenever that side has a real logged
+            // score, independent of whether it's the one currently being edited
+            const sideSeverity = part ? soreness[`${s} ${part}`] ?? null : null;
+            const isSideSelected = side === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  // clicking the already-selected side again clears its score (if any),
+                  // same "tap again to clear" pattern as the severity buttons below
+                  if (isSideSelected && sideSeverity !== null) {
+                    clearSoreness(`${s} ${part}`);
+                    setSide(null);
+                  } else {
+                    setSide(side === s ? null : s);
+                  }
+                }}
+                className="px-2.5 h-7 rounded-lg text-xs font-medium cursor-pointer capitalize transition-colors"
+                style={{
+                  background: sideSeverity !== null ? severityColor(sideSeverity) : "var(--surface-2)",
+                  color: sideSeverity !== null ? "#fff" : "var(--ink-2)",
+                  border: isSideSelected ? "2px solid var(--ink)" : "1px solid var(--hairline)",
+                }}
+              >
+                {s}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* how sore? */}
-      <div className="text-[11px] mb-1.5" style={{ color: "var(--ink-muted)" }}>Severity</div>
-      <div className="flex flex-wrap gap-1.5">
-        {Array.from({ length: 10 }, (_, i) => i + 1).map((v) => (
-          <button
-            key={v}
-            disabled={busy}
-            onClick={() => submit(v)}
-            className="w-8 h-8 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-            style={{
-              background:
-                saved === v
-                  ? v >= 7
-                    ? "var(--status-critical)"
-                    : v >= 4
-                      ? "var(--status-warning)"
-                      : "var(--status-good)"
-                  : "var(--surface-2)",
-              color: saved === v ? "#000" : "var(--ink-2)",
-              border: "1px solid var(--hairline)",
-            }}
-          >
-            {v}
-          </button>
-        ))}
-      </div>
+      {/* how sore? — scoped to whichever part+side is currently selected above; tap the active value to clear it */}
+      {part && region?.lateral && !side && (
+        <div className="text-[11px]" style={{ color: "var(--ink-muted)" }}>
+          Choose a side above to log severity.
+        </div>
+      )}
+      {sorenessKey && (
+        <>
+          <div className="text-[11px] mb-1.5" style={{ color: "var(--ink-muted)" }}>
+            Severity for {sorenessKey}
+            {currentSeverity !== null && (
+              <span className="font-semibold" style={{ color: severityColor(currentSeverity) }}>
+                {" "}
+                — {currentSeverity}/10
+              </span>
+            )}{" "}
+            <span style={{ opacity: 0.7 }}>(tap again to clear)</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {Array.from({ length: 11 }, (_, i) => i).map((v) => (
+              <button
+                key={v}
+                disabled={busy}
+                onClick={() => submit(currentSeverity === v ? null : v)}
+                className="w-8 h-8 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                style={{
+                  background: currentSeverity === v ? severityColor(v) : "var(--surface-2)",
+                  color: currentSeverity === v ? "#fff" : "var(--ink-2)",
+                  border: "1px solid var(--hairline)",
+                }}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -246,10 +323,10 @@ export function PlanStatusButtons({
   date: string;
   status: string | null;
 }) {
-  const [cur, setCur] = useState(status);
+  const [cur, setCur] = useState<string | null>(status);
   const router = useRouter();
 
-  async function set(s: string) {
+  async function set(s: string | null) {
     setCur(s);
     await fetch("/api/workout-status", {
       method: "POST",
@@ -269,7 +346,8 @@ export function PlanStatusButtons({
       {opts.map((o) => (
         <button
           key={o.key}
-          onClick={() => set(o.key)}
+          onClick={() => set(cur === o.key ? null : o.key)}
+          title={cur === o.key ? "Click to clear" : undefined}
           className="text-[11px] rounded-full border px-2.5 py-1 cursor-pointer font-medium"
           style={{
             borderColor: cur === o.key ? o.color : "var(--hairline)",
@@ -460,5 +538,101 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
         </span>
       )}
     </form>
+  );
+}
+
+/* ---------- add an upcoming race (self-owned; coach/seed races can't be removed) ---------- */
+
+export function RaceForm({ athleteId, events }: { athleteId: number; events: string[] }) {
+  const [name, setName] = useState("");
+  const [date, setDate] = useState("");
+  const [event, setEvent] = useState(events[0]);
+  const [distanceKm, setDistanceKm] = useState("");
+  const [location, setLocation] = useState("");
+  const [msg, setMsg] = useState("");
+  const router = useRouter();
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const distanceM = parseFloat(distanceKm) * 1000;
+    const missing: string[] = [];
+    if (!name.trim()) missing.push("race name");
+    if (!date) missing.push("date");
+    if (!distanceM) missing.push("distance");
+    if (missing.length) {
+      setMsg(`Please fill in: ${missing.join(", ")}.`);
+      return;
+    }
+    if (date < new Date().toISOString().slice(0, 10)) {
+      setMsg("That race date is in the past — pick an upcoming date.");
+      return;
+    }
+    const res = await fetch("/api/race", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ athleteId, name, date, event, distanceM, location: location || undefined }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setMsg("Added ✓");
+      setName("");
+      setDate("");
+      setDistanceKm("");
+      setLocation("");
+      router.refresh();
+    } else {
+      setMsg(data.error || "Couldn't save.");
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Race name" className="w-40 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <select value={event} onChange={(e) => setEvent(e.target.value)} className="rounded-xl border px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)", background: "var(--page)" }}>
+        {events.map((ev) => (
+          <option key={ev}>{ev}</option>
+        ))}
+      </select>
+      <input value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)} placeholder="Distance (km)" className="w-28 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location (optional)" className="w-40 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <button className="rounded-xl px-4 py-2 text-sm font-semibold text-black cursor-pointer" style={{ background: "var(--brand)" }}>
+        Add race
+      </button>
+      {msg && (
+        <span className="text-xs" style={{ color: msg.includes("✓") ? "var(--status-good)" : "var(--status-serious)" }}>
+          {msg}
+        </span>
+      )}
+    </form>
+  );
+}
+
+export function RaceEditControls({ athleteId, raceId }: { athleteId: number; raceId: number }) {
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+
+  async function remove() {
+    if (!confirm("Remove this race?")) return;
+    setBusy(true);
+    await fetch(`/api/race/${raceId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ athleteId }),
+    });
+    setBusy(false);
+    router.refresh();
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={remove}
+      className="text-xs font-medium cursor-pointer"
+      style={{ color: "var(--status-serious, #dc2626)" }}
+    >
+      Remove
+    </button>
   );
 }

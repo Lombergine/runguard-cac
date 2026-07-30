@@ -1,5 +1,5 @@
 /**
- * Core's full athlete engine — everything computed on top of raw Apple Health /
+ * RunGuard's full athlete engine — everything computed on top of raw Apple Health /
  * Strava data: load metrics (TRIMP, HR zones), pattern detection, fitness &
  * freshness, race predictions, the weekly plan with taper mode, pre-practice
  * flags, notifications, badges, and comparison.
@@ -393,20 +393,29 @@ export function weeklyPlan(
 /* ---------------- pre-practice flag, readiness, insight ---------------- */
 
 export type PrePractice = { flag: "go" | "modify" | "sit_out"; reason: string };
+export type SorenessEntry = { part: string; severity: number };
 
-export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, sorenessSeverity: number | null): PrePractice {
+export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, soreness: SorenessEntry[]): PrePractice {
+  const sorted = [...soreness].sort((a, b) => b.severity - a.severity);
+  const worst = sorted[0] ?? null;
+  const extra = soreness.length > 1 ? ` (${soreness.length} areas flagged)` : "";
   if (illness) return { flag: "sit_out", reason: "Illness pattern: HRV drop + elevated resting HR. Keep them away from hard work today." };
   if (risk.zone === "high") return { flag: "sit_out", reason: "Injury risk is high — replace today's session with rest or 20 min recovery jog." };
-  if (sorenessSeverity !== null && sorenessSeverity >= 7) return { flag: "sit_out", reason: `Reported soreness ${sorenessSeverity}/10 — assess before any running.` };
-  if (risk.zone === "caution" || (sorenessSeverity !== null && sorenessSeverity >= 4)) {
+  if (worst && worst.severity >= 7) return { flag: "sit_out", reason: `Reported soreness ${worst.severity}/10 in the ${worst.part}${extra} — assess before any running.` };
+  if (risk.zone === "caution" || (worst && worst.severity >= 4)) {
     return { flag: "modify", reason: "Elevated risk or soreness — cut volume ~30% and skip intensity today." };
   }
   return { flag: "go", reason: "All signals green. Run the plan as written." };
 }
 
-export function readinessScore(risk: RiskSnapshot, checkin: CheckinRow | null): number {
+export function readinessScore(risk: RiskSnapshot, checkin: CheckinRow | null, soreness: SorenessEntry[] = []): number {
   let r = 100 - risk.score;
-  if (checkin?.soreness_severity != null) r -= checkin.soreness_severity * 2.5;
+  if (soreness.length) {
+    const sorted = soreness.map((s) => s.severity).sort((a, b) => b - a);
+    const primary = sorted[0] * 2.5; // worst part — same weight as a single-part check-in always had
+    const secondary = Math.min(10, sorted.slice(1).reduce((s, x) => s + x, 0)); // other sore parts, capped
+    r -= Math.min(35, primary + secondary);
+  }
   if (checkin?.energy != null) r += (checkin.energy - 5) * 1.5;
   if (checkin?.academic_stress) r -= 5;
   return Math.round(clamp(r, 0, 100));

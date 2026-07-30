@@ -17,6 +17,9 @@ export default function ConnectControls({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [showToken, setShowToken] = useState(false);
+  const [showRange, setShowRange] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const router = useRouter();
 
   async function syncNow() {
@@ -25,7 +28,7 @@ export default function ConnectControls({
     const res = await fetch("/api/strava/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ athleteId }),
+      body: JSON.stringify({ athleteId, startDate: startDate || undefined, endDate: endDate || undefined }),
     });
     const data = await res.json().catch(() => ({}));
     setMsg(res.ok ? `+${data.imported} runs` : data.error || "Sync failed");
@@ -51,14 +54,45 @@ export default function ConnectControls({
         </button>
       )}
       {linked ? (
-        <button
-          onClick={syncNow}
-          disabled={busy}
-          className="text-xs rounded-full border px-3 py-1.5 font-medium cursor-pointer disabled:opacity-50"
-          style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
-        >
-          {busy ? "Syncing…" : "Sync now"}
-        </button>
+        <>
+          {showRange && (
+            <span className="inline-flex items-center gap-1.5">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                title="Backfill from"
+                className="text-xs rounded-lg border px-2 py-1"
+                style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
+              />
+              <span className="text-xs" style={{ color: "var(--ink-muted)" }}>to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                title="Backfill to"
+                className="text-xs rounded-lg border px-2 py-1"
+                style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
+              />
+            </span>
+          )}
+          <button
+            onClick={() => setShowRange((s) => !s)}
+            className="text-xs rounded-full border px-3 py-1.5 cursor-pointer"
+            style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
+            title="Bound the historical backfill to a date range — new activity keeps syncing automatically afterward regardless"
+          >
+            {showRange ? "Hide range" : "Set range"}
+          </button>
+          <button
+            onClick={syncNow}
+            disabled={busy}
+            className="text-xs rounded-full border px-3 py-1.5 font-medium cursor-pointer disabled:opacity-50"
+            style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
+          >
+            {busy ? "Syncing…" : "Sync now"}
+          </button>
+        </>
       ) : (
         <a
           href={configured ? `/api/strava/connect?athlete=${athleteId}` : undefined}
@@ -84,6 +118,8 @@ export function AppleImportForm({
   const [file, setFile] = useState<File | null>(null);
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [msg, setMsg] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const router = useRouter();
 
   async function submit(e: React.FormEvent) {
@@ -94,6 +130,8 @@ export function AppleImportForm({
     const fd = new FormData();
     fd.set("file", file);
     fd.set("athleteId", String(athleteId));
+    if (startDate) fd.set("startDate", startDate);
+    if (endDate) fd.set("endDate", endDate);
     const res = await fetch("/api/import/apple", { method: "POST", body: fd });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -127,6 +165,25 @@ export function AppleImportForm({
         className="text-sm file:mr-3 file:rounded-full file:border-0 file:px-3 file:py-1.5 file:text-xs file:font-medium file:bg-black/10 file:text-black file:cursor-pointer"
         style={{ color: "var(--ink-muted)" }}
       />
+      <span className="inline-flex items-center gap-1.5">
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          title="Only import from this date (optional — defaults to the whole export)"
+          className="text-xs rounded-lg border px-2 py-1.5"
+          style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
+        />
+        <span className="text-xs" style={{ color: "var(--ink-muted)" }}>to</span>
+        <input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          title="Only import up to this date (optional)"
+          className="text-xs rounded-lg border px-2 py-1.5"
+          style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
+        />
+      </span>
       <button
         disabled={!file || state === "busy"}
         className="rounded-xl px-4 py-2 text-sm font-semibold text-black disabled:opacity-50 cursor-pointer"

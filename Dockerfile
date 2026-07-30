@@ -1,4 +1,4 @@
-# Core — production image. Node 22 (better-sqlite3 needs 20.9+).
+# RunGuard — production image. Node 22 (better-sqlite3 needs 20.9+).
 FROM node:22-slim AS base
 WORKDIR /app
 # build tools for better-sqlite3's native addon
@@ -20,7 +20,7 @@ RUN npm run build
 FROM base AS run
 ENV NODE_ENV=production
 # database lives on a mounted volume so accounts survive restarts
-ENV DATABASE_PATH=/data/core.db
+ENV DATABASE_PATH=/data/runguard.db
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public

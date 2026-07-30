@@ -11,6 +11,7 @@ import { RecoverySnapshot } from "@/lib/risk";
 import IntensityCalendar from "@/components/IntensityCalendar";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "@/components/athlete/AthleteModel";
+import InjuryManager from "@/components/InjuryManager";
 import {
   HomeTab,
   TrainingTab,
@@ -167,10 +168,8 @@ function CoachView({
           readiness={p.readiness}
           zone={p.risk.zone}
           hotspots={[
-            ...p.injuries.map((i) => ({ part: i.body_part, kind: "injury" as const })),
-            ...(p.todayCheckin?.soreness_part
-              ? [{ part: p.todayCheckin.soreness_part, severity: p.todayCheckin.soreness_severity, kind: "soreness" as const }]
-              : []),
+            ...p.injuries.filter((i) => !i.resolved_at).map((i) => ({ part: i.body_part, kind: "injury" as const })),
+            ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),
           ]}
         />
         <div className="rounded-2xl border p-5 space-y-3" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
@@ -211,8 +210,8 @@ function CoachView({
 
       {/* fitness & load detail */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <CStat label="Fitness score" value={`${p.fitness.score}`} />
-        <CStat label="Tier" value={p.fitness.tier} />
+        <CStat label="Fitness score" value={p.risk.hasActivityHistory ? `${p.fitness.score}` : "—"} />
+        <CStat label="Tier" value={p.risk.hasActivityHistory ? p.fitness.tier : "Not enough data"} />
         <CStat label="Trend" value={p.fitness.trend} />
         <CStat label="Freshness" value={`${p.fitness.freshness}`} />
         <CStat label="VO₂max" value={p.fitness.vo2max !== null ? `${p.fitness.vo2max}` : "—"} />
@@ -238,8 +237,12 @@ function CoachView({
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
             <PatternRow
               label="Soreness"
-              value={p.todayCheckin.soreness_severity !== null ? `${p.todayCheckin.soreness_severity}/10${p.todayCheckin.soreness_part ? ` (${p.todayCheckin.soreness_part})` : ""}` : "—"}
-              warn={(p.todayCheckin.soreness_severity ?? 0) >= 5}
+              value={
+                p.todaySoreness.length
+                  ? p.todaySoreness.map((s) => `${s.part} ${s.severity}/10`).join(", ")
+                  : "—"
+              }
+              warn={p.todaySoreness.some((s) => s.severity >= 5)}
             />
             <PatternRow label="Energy" value={p.todayCheckin.energy !== null ? `${p.todayCheckin.energy}/10` : "—"} warn={(p.todayCheckin.energy ?? 10) <= 4} />
             <PatternRow label="Session RPE" value={p.todayCheckin.rpe !== null ? `${p.todayCheckin.rpe}/10` : "—"} warn={false} />
@@ -260,13 +263,17 @@ function CoachView({
               <p className="font-semibold" style={{ color: "var(--ink)" }}>
                 {p.races.upcoming[0].name} · {p.races.upcoming[0].event}
               </p>
-              <p>
-                Race readiness:{" "}
-                <span className="font-bold tabular-nums" style={{ color: p.races.upcoming[0].readiness >= 70 ? "var(--status-good)" : p.races.upcoming[0].readiness >= 40 ? "var(--status-warning)" : "var(--status-critical)" }}>
-                  {p.races.upcoming[0].readiness}/100
-                </span>{" "}
-                · predicted {p.races.upcoming[0].predicted}
-              </p>
+              {p.risk.hasActivityHistory ? (
+                <p>
+                  Race readiness:{" "}
+                  <span className="font-bold tabular-nums" style={{ color: p.races.upcoming[0].readiness >= 70 ? "var(--status-good)" : p.races.upcoming[0].readiness >= 40 ? "var(--status-warning)" : "var(--status-critical)" }}>
+                    {p.races.upcoming[0].readiness}/100
+                  </span>{" "}
+                  · predicted {p.races.upcoming[0].predicted}
+                </p>
+              ) : (
+                <p style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a readiness/prediction estimate.</p>
+              )}
               {p.plan.taperMode && <p style={{ color: "var(--brand-strong)" }}>Taper mode active — their plan is already adjusted.</p>}
             </div>
           ) : (
@@ -292,22 +299,10 @@ function CoachView({
         </Panel>
       </div>
 
-      {/* injuries */}
-      {p.injuries.length > 0 && (
-        <Panel title="Injury history">
-          <div className="space-y-2.5">
-            {p.injuries.map((i) => (
-              <div key={i.id} className="text-sm" style={{ color: "var(--ink-2)" }}>
-                <span className="font-medium">{i.body_part}</span>
-                <span className="text-xs ml-2" style={{ color: "var(--ink-muted)" }}>
-                  {new Date(i.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </span>
-                {i.note && <div className="text-xs mt-0.5" style={{ color: "var(--ink-muted)" }}>{i.note}</div>}
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
+      {/* injuries — coach-recorded, never computed */}
+      <Panel title="Injuries" note="recorded by the coach · only active ones show on the body scan">
+        <InjuryManager athleteId={p.athlete.id} injuries={p.injuries} />
+      </Panel>
 
       {p.chatSummary.length > 0 && (
         <Panel title="What they've been asking RunGuard AI" note="athlete chat summary">

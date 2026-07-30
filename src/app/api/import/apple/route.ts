@@ -11,6 +11,10 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
   const athleteId = Number(form?.get("athleteId"));
+  const dateStr = (v: FormDataEntryValue | null | undefined) =>
+    typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined;
+  const startDate = dateStr(form?.get("startDate"));
+  const endDate = dateStr(form?.get("endDate"));
   if (!(file instanceof File) || !Number.isInteger(athleteId)) {
     return Response.json(
       { error: "Upload an export.zip (or export.xml) and pick an athlete." },
@@ -31,7 +35,11 @@ export async function POST(request: Request) {
   }
   try {
     const buf = Buffer.from(await file.arrayBuffer());
-    const { workouts, metrics } = await parseAppleHealthExport(buf, file.name);
+    const { workouts, metrics } = await parseAppleHealthExport(
+      buf,
+      file.name,
+      startDate || endDate ? { start: startDate, end: endDate } : undefined
+    );
     let imported = 0;
     for (const w of workouts) {
       const ok = insertActivity({

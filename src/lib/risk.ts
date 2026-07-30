@@ -1,7 +1,7 @@
 import { ActivityRow, MetricRow } from "./db";
 
 /**
- * Core risk engine.
+ * RunGuard risk engine.
  *
  * Training load model: session load ≈ sRPE = duration (min) × intensity (1–10).
  * Intensity is estimated from average heart rate when available (as a fraction
@@ -48,6 +48,7 @@ export type RiskSnapshot = {
   lastActivity: string | null; // ISO date of last activity
   recovery: RecoverySnapshot;
   insights: string[];
+  hasActivityHistory: boolean; // false = brand-new athlete, no real data yet — don't show fabricated-looking numbers
 };
 
 export type DailyPoint = DayLoad & {
@@ -57,6 +58,9 @@ export type DailyPoint = DayLoad & {
 };
 
 const DAY_MS = 86400000;
+
+export const NOT_ENOUGH_ACWR_HISTORY =
+  "Not enough training history yet for a reliable workload ratio — sync more data or give it a couple of weeks.";
 
 export function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -268,9 +272,7 @@ export function computeRisk(
       );
     }
   } else {
-    insights.push(
-      "Not enough training history yet for a reliable workload ratio — sync more data or give it a couple of weeks."
-    );
+    insights.push(NOT_ENOUGH_ACWR_HISTORY);
   }
 
   if (rampPct !== null && rampPct > 30) {
@@ -360,6 +362,7 @@ export function computeRisk(
     lastActivity: lastAct,
     recovery,
     insights,
+    hasActivityHistory: activities.length > 0,
     series,
   };
 }

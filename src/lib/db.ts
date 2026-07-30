@@ -103,12 +103,25 @@ function init(): Database.Database {
       UNIQUE(athlete_id, date)
     );
 
+    CREATE TABLE IF NOT EXISTS checkin_soreness (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      checkin_id INTEGER NOT NULL REFERENCES checkins(id) ON DELETE CASCADE,
+      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,             -- YYYY-MM-DD
+      body_part TEXT NOT NULL,
+      severity REAL NOT NULL,         -- 0-10
+      UNIQUE(athlete_id, date, body_part)
+    );
+    CREATE INDEX IF NOT EXISTS idx_checkin_soreness_athlete_date
+      ON checkin_soreness(athlete_id, date);
+
     CREATE TABLE IF NOT EXISTS injuries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
       date TEXT NOT NULL,
       body_part TEXT NOT NULL,
-      note TEXT
+      note TEXT,
+      resolved_at TEXT              -- YYYY-MM-DD once healed; null = still active
     );
 
     CREATE TABLE IF NOT EXISTS goals (
@@ -171,6 +184,13 @@ function init(): Database.Database {
   addColumn("athletes", "team_id INTEGER");
   addColumn("athletes", "email TEXT");
   addColumn("athletes", "password_hash TEXT");
+  addColumn("injuries", "resolved_at TEXT");           // null = still active
+  addColumn("races", "created_by_athlete_id INTEGER REFERENCES athletes(id)"); // null = coach/seed-created
+  addColumn("races", "team_id INTEGER REFERENCES teams(id)");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_races_created_by ON races(created_by_athlete_id);
+    CREATE INDEX IF NOT EXISTS idx_races_team ON races(team_id);
+  `);
   try {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_athletes_email ON athletes(email) WHERE email IS NOT NULL");
   } catch {
@@ -391,6 +411,8 @@ export type RaceRow = {
   event: string;
   distance_m: number;
   location: string | null;
+  created_by_athlete_id: number | null; // null = coach/seed-created
+  team_id: number | null;
 };
 
 export type RaceResultRow = {
@@ -418,21 +440,78 @@ export type CheckinRow = {
   academic_stress: number | null;
 };
 
+export type CheckinSorenessRow = {
+  id: number;
+  checkin_id: number;
+  athlete_id: number;
+  date: string;
+  body_part: string;
+  severity: number;
+};
+
 export type InjuryRow = {
   id: number;
   athlete_id: number;
   date: string;
   body_part: string;
   note: string | null;
+  resolved_at: string | null;
 };
 
 export type GoalRow = { id: number; athlete_id: number; event: string; target: number };
 
-export function upcomingRaces(): RaceRow[] {
+export function upcomingRaces(scope: { athleteId: number; teamId: number | null }): RaceRow[] {
   const today = new Date().toISOString().slice(0, 10);
   return getDb()
-    .prepare("SELECT * FROM races WHERE date >= ? ORDER BY date")
-    .all(today) as RaceRow[];
+    .prepare(
+      `SELECT * FROM races WHERE date >= ?
+         AND (created_by_athlete_id = ?
+              OR (created_by_athlete_id IS NULL AND team_id IS NOT NULL AND team_id = ?))
+       ORDER BY date`
+    )
+    .all(today, scope.athleteId, scope.teamId) as RaceRow[];
+}
+
+export function createRace(r: {
+  name: string;
+  date: string;
+  event: string;
+  distance_m: number;
+  location?: string | null;
+  created_by_athlete_id: number;
+  team_id: number | null;
+}): RaceRow {
+  const db = getDb();
+  const info = db
+    .prepare(
+      `INSERT INTO races (name, date, event, distance_m, location, created_by_athlete_id, team_id)
+       VALUES (@name, @date, @event, @distance_m, @location, @created_by_athlete_id, @team_id)`
+    )
+    .run({ location: null, ...r });
+  return db.prepare("SELECT * FROM races WHERE id = ?").get(info.lastInsertRowid) as RaceRow;
+}
+
+export function updateRace(
+  id: number,
+  athleteId: number,
+  patch: Partial<Pick<RaceRow, "name" | "date" | "event" | "distance_m" | "location">>
+): boolean {
+  const db = getDb();
+  const race = db.prepare("SELECT * FROM races WHERE id = ?").get(id) as RaceRow | undefined;
+  if (!race || race.created_by_athlete_id !== athleteId) return false;
+  const fields = Object.keys(patch);
+  if (!fields.length) return true;
+  const sets = fields.map((f) => `${f} = @${f}`).join(", ");
+  db.prepare(`UPDATE races SET ${sets} WHERE id = @id`).run({ ...patch, id });
+  return true;
+}
+
+export function deleteRace(id: number, athleteId: number): boolean {
+  const db = getDb();
+  const race = db.prepare("SELECT * FROM races WHERE id = ?").get(id) as RaceRow | undefined;
+  if (!race || race.created_by_athlete_id !== athleteId) return false;
+  db.prepare("DELETE FROM races WHERE id = ?").run(id);
+  return true;
 }
 
 export function raceResultsForAthlete(athleteId: number): RaceResultRow[] {
@@ -490,6 +569,37 @@ export function upsertCheckin(c: {
       academic_stress: null,
       ...c,
     });
+}
+
+export function sorenessForCheckin(athleteId: number, date: string): CheckinSorenessRow[] {
+  return getDb()
+    .prepare("SELECT * FROM checkin_soreness WHERE athlete_id = ? AND date = ? ORDER BY severity DESC")
+    .all(athleteId, date) as CheckinSorenessRow[];
+}
+
+export function upsertCheckinSoreness(s: {
+  athlete_id: number;
+  date: string;
+  body_part: string;
+  severity: number;
+}): void {
+  const db = getDb();
+  upsertCheckin({ athlete_id: s.athlete_id, date: s.date });
+  const checkin = db
+    .prepare("SELECT id FROM checkins WHERE athlete_id = ? AND date = ?")
+    .get(s.athlete_id, s.date) as { id: number };
+  db.prepare(
+    `INSERT INTO checkin_soreness (checkin_id, athlete_id, date, body_part, severity)
+     VALUES (@checkin_id, @athlete_id, @date, @body_part, @severity)
+     ON CONFLICT(athlete_id, date, body_part) DO UPDATE SET
+       severity = excluded.severity, checkin_id = excluded.checkin_id`
+  ).run({ ...s, checkin_id: checkin.id });
+}
+
+export function clearCheckinSoreness(s: { athlete_id: number; date: string; body_part: string }): void {
+  getDb()
+    .prepare("DELETE FROM checkin_soreness WHERE athlete_id = ? AND date = ? AND body_part = ?")
+    .run(s.athlete_id, s.date, s.body_part);
 }
 
 export function metricsForAthlete(athleteId: number, sinceIso: string): MetricRow[] {

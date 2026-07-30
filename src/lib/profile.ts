@@ -6,6 +6,7 @@ import {
   activitiesForAthlete,
   metricsForAthlete,
   checkinsForAthlete,
+  sorenessForCheckin,
   raceResultsForAthlete,
   injuriesForAthlete,
   goalsForAthlete,
@@ -26,6 +27,7 @@ import {
   weeklyPlan,
   prePracticeFlag,
   readinessScore,
+  SorenessEntry,
   aiInsight,
   buildNotifications,
   computeBadges,
@@ -79,8 +81,9 @@ export type CoreProfile = {
   stats: ReturnType<typeof personalStats>;
   insights: string[];
   todayCheckin: CheckinRow | null;
+  todaySoreness: SorenessEntry[];
   races: {
-    upcoming: (RaceRow & { daysUntil: number; readiness: number; pacing: string[]; predicted: string })[];
+    upcoming: (RaceRow & { daysUntil: number; readiness: number; pacing: string[]; predicted: string; canEdit: boolean })[];
     history: {
       id: number;
       event: string;
@@ -95,7 +98,7 @@ export type CoreProfile = {
     }[];
     prProgression: Record<string, { date: string; timeS: number }[]>;
   };
-  injuries: { id: number; date: string; body_part: string; note: string | null }[];
+  injuries: { id: number; date: string; body_part: string; note: string | null; resolved_at: string | null }[];
   goals: { event: string; target: number; targetLabel: string; predicted: string | null; onTrack: boolean | null }[];
   weeklyTargetKm: number;
   connectedSources: string[];
@@ -109,7 +112,7 @@ function connectedSources(a: AthleteRow, acts: ActivityRow[]): string[] {
     if (x.source === "healthkit" || x.source === "apple_export") out.add("Apple Watch");
     if (x.source === "strava") out.add("Strava");
   }
-  if (out.size === 0) out.add("Demo data");
+  if (out.size === 0) out.add("No data yet");
   return [...out];
 }
 
@@ -124,7 +127,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   const results = raceResultsForAthlete(athlete.id);
   const injuries = injuriesForAthlete(athlete.id);
   const goals = goalsForAthlete(athlete.id);
-  const races = upcomingRaces();
+  const races = upcomingRaces({ athleteId: athlete.id, teamId: athlete.team_id });
 
   const risk = computeRisk(acts, metrics, now);
   const restingHr = risk.recovery.restingHrBaseline ?? 55;
@@ -137,6 +140,10 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
 
   const todayIso = now.toISOString().slice(0, 10);
   const todayCheckin = checkins.find((c) => c.date === todayIso) ?? null;
+  const todaySoreness: SorenessEntry[] = sorenessForCheckin(athlete.id, todayIso).map((s) => ({
+    part: s.body_part,
+    severity: s.severity,
+  }));
 
   const nextRace = races[0] ?? null;
   const daysToRace = nextRace
@@ -233,7 +240,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   });
 
   const raceReadiness = (d: number): number => {
-    let s = readinessScore(risk, todayCheckin);
+    let s = readinessScore(risk, todayCheckin, todaySoreness);
     s = Math.round(s * 0.6 + fitness.freshness * 0.4);
     if (d > 7) s = Math.min(s + 5, 100);
     return s;
@@ -276,7 +283,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     risk,
     series: risk.series,
     yearDays: dailySeries(acts, 366).map(({ date, load: l, km }) => ({ date, load: l, km })),
-    readiness: readinessScore(risk, todayCheckin),
+    readiness: readinessScore(risk, todayCheckin, todaySoreness),
     aiInsight: aiInsight(risk, fitness, patterns),
     load,
     patterns,
@@ -288,7 +295,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
         : { event: ev, timeS: null, label: "—" }
     ),
     plan,
-    prePractice: prePracticeFlag(risk, illness, todayCheckin?.soreness_severity ?? null),
+    prePractice: prePracticeFlag(risk, illness, todaySoreness),
     illness,
     notifications,
     badges,
@@ -300,6 +307,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     stats: personalStats(risk.series, acts),
     insights: athleteInsights(risk),
     todayCheckin,
+    todaySoreness,
     races: {
       upcoming: races.map((r) => {
         const d = Math.ceil((new Date(r.date + "T12:00:00").getTime() - now.getTime()) / DAY_MS);
@@ -310,12 +318,13 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
           readiness: raceReadiness(d),
           pacing: pacingStrategy(ev, predictions[ev].timeS),
           predicted: predictions[ev].label,
+          canEdit: r.created_by_athlete_id === athlete.id,
         };
       }),
       history,
       prProgression,
     },
-    injuries: injuries.map((i) => ({ id: i.id, date: i.date, body_part: i.body_part, note: i.note })),
+    injuries: injuries.map((i) => ({ id: i.id, date: i.date, body_part: i.body_part, note: i.note, resolved_at: i.resolved_at })),
     goals: goalRows,
     weeklyTargetKm: Math.max(20, Math.round(weeklyTargetKm)),
     connectedSources: connectedSources(athlete, acts),

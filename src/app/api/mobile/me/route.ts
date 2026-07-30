@@ -1,7 +1,7 @@
 import { getDb, AthleteRow } from "@/lib/db";
 import { buildProfile } from "@/lib/profile";
 
-/** The iOS app fetches the athlete's complete Core profile here. */
+/** The iOS app fetches the athlete's complete RunGuard profile here. */
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;

@@ -80,8 +80,11 @@ function blank(): Acc {
  */
 export async function parseAppleHealthExport(
   data: Buffer,
-  filename: string
+  filename: string,
+  range?: { start?: string; end?: string } // YYYY-MM-DD, inclusive — bounds an initial historical backfill
 ): Promise<ParsedHealth> {
+  const inRange = (d: string) =>
+    (!range?.start || d >= range.start) && (!range?.end || d <= range.end);
   let xml: Buffer;
   if (filename.toLowerCase().endsWith(".zip")) {
     const zip = new AdmZip(data);
@@ -148,7 +151,7 @@ export async function parseAppleHealthExport(
         const d = localDay(attrs.startdate || "");
         if (t === "HKCategoryTypeIdentifierSleepAnalysis") {
           const wake = localDay(attrs.enddate || attrs.startdate || "");
-          if (!wake) return;
+          if (!wake || !inRange(wake)) return;
           const hrs = (toMs(attrs.enddate || "") - toMs(attrs.startdate || "")) / 3600000;
           if (!isFinite(hrs) || hrs <= 0 || hrs > 16) return;
           const a = day(wake);
@@ -161,7 +164,7 @@ export async function parseAppleHealthExport(
           // "InBed" ignored — we count actual asleep time
           return;
         }
-        if (!d || isNaN(val)) return;
+        if (!d || isNaN(val) || !inRange(d)) return;
         const a = day(d);
         switch (t) {
           case "HKQuantityTypeIdentifierRestingHeartRate":
@@ -182,7 +185,7 @@ export async function parseAppleHealthExport(
 
     parser.on("closetag", (name) => {
       if (name === "workout" && current) {
-        if (current.durationS > 300) {
+        if (current.durationS > 300 && inRange(current.start.slice(0, 10))) {
           workouts.push({ externalId: `${current.start}-${current.durationS}`, ...current });
         }
         current = null;
