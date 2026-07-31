@@ -9,6 +9,7 @@ import Avatar from "@/components/Avatar";
 import { AcwrChart, LoadChart, WeeklyKmChart } from "@/components/charts";
 import { RecoverySnapshot } from "@/lib/risk";
 import IntensityCalendar from "@/components/IntensityCalendar";
+import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "@/components/athlete/AthleteModel";
 import InjuryManager from "@/components/InjuryManager";
@@ -181,11 +182,31 @@ function CoachView({
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <CStat label="Workload ratio" value={p.risk.acwr?.toFixed(2) ?? "—"} />
-        <CStat label="This week" value={`${p.risk.weekKm} km`} />
-        <CStat label="Ramp" value={p.risk.rampPct !== null ? `${p.risk.rampPct > 0 ? "+" : ""}${p.risk.rampPct}%` : "—"} />
-        <CStat label="Week TRIMP" value={String(p.load.weekTrimp)} />
-        <CStat label="Days since rest" value={String(p.risk.daysSinceRest)} />
+        <CStat
+          label="Workload ratio"
+          value={p.risk.acwr?.toFixed(2) ?? "—"}
+          info="Their last 7 days of training weighted against their 28-day base, both smoothed so one big day can't swing it. 0.8–1.3 is the safe zone; above 1.5 is the classic spike-before-injury pattern. Blank until there's enough history for a real base."
+        />
+        <CStat
+          label="This week"
+          value={`${p.risk.weekKm} km`}
+          info="Distance run in the last 7 days — a rolling window, not since Monday."
+        />
+        <CStat
+          label="Ramp"
+          value={p.risk.rampPct !== null ? `${p.risk.rampPct > 0 ? "+" : ""}${p.risk.rampPct}%` : "—"}
+          info="Week-over-week change in distance: the last 7 days against the 7 before. Jumps over +30% start adding to the risk score. Blank if the previous week was under 3 km — too little to compare against."
+        />
+        <CStat
+          label="Week TRIMP"
+          value={String(p.load.weekTrimp)}
+          info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard their heart was working. Catches the intensity that distance alone misses. Runs synced without heart-rate data count as zero."
+        />
+        <CStat
+          label="Days since rest"
+          value={String(p.risk.daysSinceRest)}
+          info="Consecutive training days counting back from today; only a near-zero day breaks the streak. 10 or more in a row adds to the risk score — adaptation happens in recovery."
+        />
       </div>
 
       <RecoveryPanel recovery={p.risk.recovery} />
@@ -210,11 +231,31 @@ function CoachView({
 
       {/* fitness & load detail */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <CStat label="Fitness score" value={p.risk.hasActivityHistory ? `${p.fitness.score}` : "—"} />
-        <CStat label="Tier" value={p.risk.hasActivityHistory ? p.fitness.tier : "Not enough data"} />
-        <CStat label="Trend" value={p.fitness.trend} />
-        <CStat label="Freshness" value={`${p.fitness.freshness}`} />
-        <CStat label="VO₂max" value={p.fitness.vo2max !== null ? `${p.fitness.vo2max}` : "—"} />
+        <CStat
+          label="Fitness score"
+          value={p.risk.hasActivityHistory ? `${p.fitness.score}` : "—"}
+          info="0–100, from their most recent week with real running in it: 55% Apple's VO₂max reading, 45% distance-weighted pace (about 7:00/km scores 0, 3:20/km scores 100). With no VO₂max on file it's pace alone."
+        />
+        <CStat
+          label="Tier"
+          value={p.risk.hasActivityHistory ? p.fitness.tier : "Not enough data"}
+          info="A band on the fitness score: Developing under 40, Intermediate 40–57, Advanced 58–74, Elite 75 and up."
+        />
+        <CStat
+          label="Trend"
+          value={p.fitness.trend}
+          info="This week's fitness score against the average of the previous four weeks. More than 2 points up is improving, more than 2 down is declining, anything in between is a plateau."
+        />
+        <CStat
+          label="Freshness"
+          value={`${p.fitness.freshness}`}
+          info="How far the last 7 days sit below their 28-day base — high after a taper or an easy week, low mid-block. Not the same as fitness: an athlete can be very fit and very flat."
+        />
+        <CStat
+          label="VO₂max"
+          value={p.fitness.vo2max !== null ? `${p.fitness.vo2max}` : "—"}
+          info="Apple's Cardio Fitness estimate, read straight from Health — RunGuard doesn't calculate it. It's one of the two inputs to the fitness score."
+        />
       </div>
 
       {/* pattern detection */}
@@ -328,10 +369,13 @@ function PatternRow({ label, value, warn }: { label: string; value: string; warn
   );
 }
 
-function CStat({ label, value }: { label: string; value: string }) {
+function CStat({ label, value, info }: { label: string; value: string; info?: string }) {
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
-      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>{label}</div>
+    <div className="rounded-2xl border p-4 relative" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
+      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
+        {label}
+        {info && <InfoDot text={info} label={label} />}
+      </div>
       <div className="text-2xl font-bold mt-1 tabular-nums">{value}</div>
     </div>
   );

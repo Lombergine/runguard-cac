@@ -368,12 +368,38 @@ export function StatsTab({ p }: { p: CoreProfile }) {
             value={p.risk.hasActivityHistory ? String(p.fitness.score) : "Not enough data yet"}
             sub={p.risk.hasActivityHistory ? `${p.fitness.trend} · ${p.fitness.tier} tier` : undefined}
             color={p.risk.hasActivityHistory && p.fitness.trend === "improving" ? "var(--status-good)" : undefined}
+            info="0–100, from your most recent week with real running in it: 55% your VO₂max reading, 45% your distance-weighted pace (about 7:00/km scores 0, 3:20/km scores 100). Trend compares this week against the average of the last four."
           />
-          <Stat label="VO₂max" value={p.fitness.vo2max !== null ? String(p.fitness.vo2max) : "—"} sub="Apple Cardio Fitness" />
-          <Stat label="Week TRIMP" value={String(p.load.weekTrimp)} sub="training impulse" />
-          <Stat label="Injury risk" value={`${p.risk.score}`} sub={`${p.risk.zone} zone`} color={p.risk.zone === "high" ? "var(--status-critical)" : p.risk.zone === "caution" ? "var(--status-warning)" : "var(--status-good)"} />
-          <Stat label="7-day km" value={`${p.risk.weekKm}`} sub={`target ${p.weeklyTargetKm}`} />
-          <Stat label="Longest streak" value={`${p.badges.find((b) => b.id === "streak7")?.detail.replace("Longest streak: ", "") ?? "—"}`} />
+          <Stat
+            label="VO₂max"
+            value={p.fitness.vo2max !== null ? String(p.fitness.vo2max) : "—"}
+            sub="Apple Cardio Fitness"
+            info="Apple's Cardio Fitness estimate, read straight from Health — RunGuard doesn't calculate this one. It feeds into your fitness score."
+          />
+          <Stat
+            label="Week TRIMP"
+            value={String(p.load.weekTrimp)}
+            sub="training impulse"
+            info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard your heart was working. Two runs the same distance can score very differently. Runs synced without heart-rate data count as zero."
+          />
+          <Stat
+            label="Injury risk"
+            value={`${p.risk.score}`}
+            sub={`${p.risk.zone} zone`}
+            color={p.risk.zone === "high" ? "var(--status-critical)" : p.risk.zone === "caution" ? "var(--status-warning)" : "var(--status-good)"}
+            info="0–100, built from your workload ratio, how fast you're ramping, days without rest, and recovery signals — resting HR, HRV and sleep. Under 30 is ready, 30–59 caution, 60 and up high. Your daily check-in feeds readiness, not this number. It's a monitoring signal, not a diagnosis."
+          />
+          <Stat
+            label="7-day km"
+            value={`${p.risk.weekKm}`}
+            sub={`target ${p.weeklyTargetKm}`}
+            info="Distance over the last 7 days — a rolling window, not since Monday. The target is your weekly-distance goal if you've set one; otherwise it's a placeholder just above your current week."
+          />
+          <Stat
+            label="Longest streak"
+            value={`${p.badges.find((b) => b.id === "streak7")?.detail.replace("Longest streak: ", "") ?? "—"}`}
+            info="The most days in a row you trained without a rest day, over the last 120 days. Earns the 7-Day Streak badge at 7 — it's a record of consistency, not a target to chase."
+          />
         </div>
       </div>
 
