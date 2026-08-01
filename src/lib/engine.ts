@@ -1,3 +1,5 @@
+import { localDay } from "./day";
+import { HR_MAX_DEFAULT } from "./hrmax";
 /**
  * RunGuard's full athlete engine — everything computed on top of raw Apple Health /
  * Strava data: load metrics (TRIMP, HR zones), pattern detection, fitness &
@@ -17,7 +19,8 @@ import {
 import { computeRisk, RiskSnapshot, DailyPoint, sessionLoad } from "./risk";
 
 const DAY_MS = 86400000;
-const HR_MAX = 200; // assumed for high-schoolers
+// Fallback only. Real values come per-athlete from risk.hrMax (src/lib/hrmax.ts).
+const HR_MAX = HR_MAX_DEFAULT;
 export const EVENTS = ["800m", "Mile", "5K", "XC 5K"] as const;
 export type EventName = (typeof EVENTS)[number];
 export const EVENT_DIST: Record<EventName, number> = {
@@ -57,8 +60,8 @@ function clamp(n: number, lo: number, hi: number): number {
 
 export type ZoneMinutes = { z1: number; z2: number; z3: number; z4: number; z5: number };
 
-export function hrZone(avgHr: number): keyof ZoneMinutes {
-  const pct = avgHr / HR_MAX;
+export function hrZone(avgHr: number, hrMax: number = HR_MAX): keyof ZoneMinutes {
+  const pct = avgHr / hrMax;
   if (pct < 0.7) return "z1";
   if (pct < 0.8) return "z2";
   if (pct < 0.87) return "z3";
@@ -67,9 +70,9 @@ export function hrZone(avgHr: number): keyof ZoneMinutes {
 }
 
 /** Banister TRIMP for one session. */
-export function trimp(a: ActivityRow, restingHr = 55): number {
+export function trimp(a: ActivityRow, restingHr = 55, hrMax: number = HR_MAX): number {
   if (!a.avg_hr || a.duration_s <= 0) return 0;
-  const dHr = clamp((a.avg_hr - restingHr) / (HR_MAX - restingHr), 0, 1);
+  const dHr = clamp((a.avg_hr - restingHr) / (hrMax - restingHr), 0, 1);
   return (a.duration_s / 60) * dHr * 0.64 * Math.exp(1.92 * dHr);
 }
 
@@ -85,12 +88,13 @@ export type LoadMetrics = {
 
 export function loadMetrics(acts: ActivityRow[], risk: RiskSnapshot & { series: DailyPoint[] }, restingHr: number): LoadMetrics {
   const cutoff = Date.now() - 7 * DAY_MS;
+  const hrMax = risk.hrMax.value; // same per-athlete value the load model used
   const weekActs = acts.filter((a) => new Date(a.start_time).getTime() > cutoff);
   const weekZones: ZoneMinutes = { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0 };
   let weekTrimp = 0;
   for (const a of weekActs) {
-    weekTrimp += trimp(a, restingHr);
-    if (a.avg_hr) weekZones[hrZone(a.avg_hr)] += a.duration_s / 60;
+    weekTrimp += trimp(a, restingHr, hrMax);
+    if (a.avg_hr) weekZones[hrZone(a.avg_hr, hrMax)] += a.duration_s / 60;
   }
   return {
     weekKm: risk.weekKm,
@@ -213,7 +217,7 @@ export function computeFitness(
     const from = chunk[0].date;
     const to = chunk[chunk.length - 1].date;
     const weekActs = acts.filter(
-      (a) => a.start_time.slice(0, 10) >= from && a.start_time.slice(0, 10) <= to && a.distance_m > 2000
+      (a) => localDay(new Date(a.start_time)) >= from && localDay(new Date(a.start_time)) <= to && a.distance_m > 2000
     );
     const dist = weekActs.reduce((s, a) => s + a.distance_m, 0);
     const time = weekActs.reduce((s, a) => s + a.duration_s, 0);
@@ -340,7 +344,7 @@ export function weeklyPlan(
 
   const monday = new Date(now);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); // this week's Monday
-  const todayIso = now.toISOString().slice(0, 10);
+  const todayIso = localDay(now);
 
   const raceDate = nextRace ? new Date(nextRace.date + "T12:00:00") : null;
   const daysToRace = raceDate
@@ -373,7 +377,7 @@ export function weeklyPlan(
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const iso = d.toISOString().slice(0, 10);
+    const iso = localDay(d);
     const dtr = raceDate ? Math.ceil((raceDate.getTime() - d.getTime()) / DAY_MS) : null;
     const inTaper = taperMode && dtr !== null && dtr >= 0 && dtr <= 6;
     const t = inTaper ? taperTemplate(dtr as number) : template[i];

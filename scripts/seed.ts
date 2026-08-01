@@ -1,3 +1,4 @@
+import { localDay, localDayOffset } from "../src/lib/day";
 /**
  * Seeds a realistic varsity XC team: ~120 days of training history per athlete,
  * with deliberate risk patterns so the dashboard tells a story:
@@ -232,7 +233,7 @@ function seed() {
       const vo2 = vo2Base + 4 * fitnessGain + (rand() * 2 - 1) * 0.6;
 
       const date = new Date(now.getTime() - d * DAY);
-      const iso = date.toISOString().slice(0, 10);
+      const iso = localDay(date);
 
       // sleep stage breakdown (deep ~18%, REM ~24%, light ~53%, awake ~5%)
       const hasSleep = rand() < 0.92;
@@ -260,7 +261,7 @@ function seed() {
     // ----- daily check-ins (soreness, energy, motivation, stress) -----
     for (let d = 45; d >= 0; d--) {
       if (rand() < 0.25) continue; // kids don't log every day
-      const date = new Date(now.getTime() - d * DAY).toISOString().slice(0, 10);
+      const date = localDayOffset(d, now);
       const weeksAgo = Math.floor(d / 7);
       const stressedNow =
         (spec.pattern === "spiking" && weeksAgo <= 1) ||
@@ -306,7 +307,7 @@ function seed() {
   );
 
   const iso = (daysFromNow: number) =>
-    new Date(now.getTime() + daysFromNow * DAY).toISOString().slice(0, 10);
+    localDay(new Date(now.getTime() + daysFromNow * DAY));
 
   const pastRaces: { name: string; d: number; event: string; dist: number; loc: string; cond: string }[] = [
     { name: "Lynbrook Invitational", d: -300, event: "XC 5K", dist: 5000, loc: "Lynbrook HS", cond: "Warm, dry course" },

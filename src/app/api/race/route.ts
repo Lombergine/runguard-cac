@@ -1,3 +1,4 @@
+import { localDay } from "@/lib/day";
 import { resolveAthlete } from "@/lib/apiAuth";
 import { createRace } from "@/lib/db";
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   if (missing.length) {
     return Response.json({ error: `Please fill in: ${missing.join(", ")}.` }, { status: 400 });
   }
-  if (date < new Date().toISOString().slice(0, 10)) {
+  if (date < localDay()) {
     return Response.json({ error: "That race date is in the past — pick an upcoming date." }, { status: 400 });
   }
 

@@ -1,3 +1,4 @@
+import { localDay } from "@/lib/day";
 import { resolveAthlete } from "@/lib/apiAuth";
 import { upsertCheckin, upsertCheckinSoreness, clearCheckinSoreness } from "@/lib/db";
 
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
   const athlete = await resolveAthlete(request, body.athleteId ?? null);
   if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
 
-  const date = new Date().toISOString().slice(0, 10);
+  const date = localDay();
   upsertCheckin({
     athlete_id: athlete.id,
     date,

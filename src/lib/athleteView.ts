@@ -1,3 +1,4 @@
+import { localDay } from "./day";
 import { ActivityRow } from "./db";
 import { RiskSnapshot, DailyPoint } from "./risk";
 
@@ -31,7 +32,7 @@ export function paceTrend(series: DailyPoint[], activities: ActivityRow[]): Pace
   const byDay = new Map<string, { dist: number; time: number }>();
   for (const a of activities) {
     if (a.distance_m < 2000 || a.duration_s <= 0) continue;
-    const d = a.start_time.slice(0, 10);
+    const d = localDay(new Date(a.start_time));
     const cur = byDay.get(d) || { dist: 0, time: 0 };
     cur.dist += a.distance_m;
     cur.time += a.duration_s;

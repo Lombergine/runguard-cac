@@ -1,3 +1,4 @@
+import { localDay, localDayOffset } from "./day";
 import {
   getDb,
   getAthlete,
@@ -7,6 +8,7 @@ import {
   metricsForAthlete,
   checkinsForAthlete,
   sorenessForCheckin,
+  sorenessHistory,
   raceResultsForAthlete,
   injuriesForAthlete,
   goalsForAthlete,
@@ -129,7 +131,13 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   const goals = goalsForAthlete(athlete.id);
   const races = upcomingRaces({ athleteId: athlete.id, teamId: athlete.team_id });
 
-  const risk = computeRisk(acts, metrics, now);
+  // last 14 days of soreness reports — the risk engine reads the trend, not just today
+  const soreReports = sorenessHistory(
+    athlete.id,
+    localDayOffset(13, now)
+  ).map((s) => ({ date: s.date, body_part: s.body_part, severity: s.severity }));
+
+  const risk = computeRisk(acts, metrics, now, soreReports, athlete);
   const restingHr = risk.recovery.restingHrBaseline ?? 55;
   const load = loadMetrics(acts, risk, restingHr);
   const patterns = detectPatterns(risk, metrics);
@@ -138,7 +146,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   const prsMap = personalRecords(results);
   const illness = illnessFlag(risk);
 
-  const todayIso = now.toISOString().slice(0, 10);
+  const todayIso = localDay(now);
   const todayCheckin = checkins.find((c) => c.date === todayIso) ?? null;
   const todaySoreness: SorenessEntry[] = sorenessForCheckin(athlete.id, todayIso).map((s) => ({
     part: s.body_part,

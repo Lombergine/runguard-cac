@@ -1,3 +1,4 @@
+import { localDay } from "./day";
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
@@ -187,6 +188,10 @@ function init(): Database.Database {
   addColumn("injuries", "resolved_at TEXT");           // null = still active
   addColumn("races", "created_by_athlete_id INTEGER REFERENCES athletes(id)"); // null = coach/seed-created
   addColumn("races", "team_id INTEGER REFERENCES teams(id)");
+  // Max heart rate. null = the athlete hasn't set one, so it gets resolved from
+  // their workout history or their age at read time — see src/lib/hrmax.ts.
+  addColumn("athletes", "hr_max REAL");
+  addColumn("athletes", "hr_max_source TEXT"); // 'manual' | 'calibrated'
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_races_created_by ON races(created_by_athlete_id);
     CREATE INDEX IF NOT EXISTS idx_races_team ON races(team_id);
@@ -249,6 +254,8 @@ export type AthleteRow = {
   team_id: number | null;
   email: string | null;
   password_hash: string | null;
+  hr_max: number | null;
+  hr_max_source: string | null; // 'manual' | 'calibrated'; null = resolve automatically
 };
 
 export type TeamRow = {
@@ -461,7 +468,7 @@ export type InjuryRow = {
 export type GoalRow = { id: number; athlete_id: number; event: string; target: number };
 
 export function upcomingRaces(scope: { athleteId: number; teamId: number | null }): RaceRow[] {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   return getDb()
     .prepare(
       `SELECT * FROM races WHERE date >= ?
@@ -699,4 +706,27 @@ export function insertActivity(a: {
       ...a,
     });
   return res.changes > 0;
+}
+
+/** Every soreness report in a window. `checkin_soreness` has always stored the
+ *  full dated history and is indexed for it, but until now only the single
+ *  current day was ever read back. */
+export function sorenessHistory(athleteId: number, sinceIso: string): CheckinSorenessRow[] {
+  return getDb()
+    .prepare(
+      "SELECT * FROM checkin_soreness WHERE athlete_id = ? AND date >= ? ORDER BY date ASC, severity DESC"
+    )
+    .all(athleteId, sinceIso) as CheckinSorenessRow[];
+}
+
+/** Set (or clear) an athlete's max heart rate. Passing null for `hrMax` clears
+ *  the stored value so it falls back to automatic resolution. */
+export function setAthleteHrMax(
+  athleteId: number,
+  hrMax: number | null,
+  source: "manual" | "calibrated" | null
+): void {
+  getDb()
+    .prepare("UPDATE athletes SET hr_max = ?, hr_max_source = ? WHERE id = ?")
+    .run(hrMax, hrMax === null ? null : source, athleteId);
 }

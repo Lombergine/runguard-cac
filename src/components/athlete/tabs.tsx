@@ -13,7 +13,7 @@ import IntensityCalendar from "@/components/IntensityCalendar";
 import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "./AthleteModel";
-import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, RaceForm, RaceEditControls, CopyToken, TeamMembership } from "./widgets";
+import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, RaceForm, RaceEditControls, CopyToken, TeamMembership, HrMaxSetting } from "./widgets";
 
 /* ---------------- shared bits ---------------- */
 
@@ -697,6 +697,14 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
 
       <Panel title="Team" note={p.athlete.teamName ? "you're on a team" : "you're solo"}>
         <TeamMembership teamName={p.athlete.teamName} />
+      </Panel>
+
+      <Panel title="Max heart rate" note={`source: ${p.risk.hrMax.source}`}>
+        <HrMaxSetting
+          value={p.risk.hrMax.value}
+          source={p.risk.hrMax.source}
+          label={p.risk.hrMax.label}
+        />
       </Panel>
 
       {p.athlete.deviceToken && (

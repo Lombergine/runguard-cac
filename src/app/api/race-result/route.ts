@@ -1,3 +1,4 @@
+import { localDay } from "@/lib/day";
 import { resolveAthlete } from "@/lib/apiAuth";
 import { getDb } from "@/lib/db";
 
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
   const timeS = typeof body.timeS === "number" && body.timeS > 30 && body.timeS < 7200 ? body.timeS : null;
   const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
     ? body.date
-    : new Date().toISOString().slice(0, 10);
+    : localDay();
   if (!event || timeS === null) {
     return Response.json({ error: "Need event and timeS (seconds)" }, { status: 400 });
   }

@@ -1,6 +1,7 @@
+import { localDayOffset } from "@/lib/day";
 import Link from "next/link";
-import { listAthletes, athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete } from "@/lib/db";
-import { computeRisk } from "@/lib/risk";
+import { listAthletes, athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory } from "@/lib/db";
+import { computeRisk, type RiskSnapshot } from "@/lib/risk";
 import { computeFitness } from "@/lib/engine";
 import { currentTeamId } from "@/lib/session";
 import RiskBadge from "@/components/RiskBadge";
@@ -13,12 +14,21 @@ export const dynamic = "force-dynamic";
 export default async function Dashboard() {
   const teamId = await currentTeamId();
   const team = teamId ? getTeam(teamId) : null;
-  const since = new Date(Date.now() - 130 * 86400000).toISOString();
+  const nowMs = Date.now();
+  const since = new Date(nowMs - 130 * 86400000).toISOString();
+  const soreSince = localDayOffset(13, new Date(nowMs));
   const roster = teamId ? athletesForTeam(teamId) : listAthletes();
   const athletes = roster.map((a) => {
     const acts = activitiesForAthlete(a.id, since);
     const metrics = metricsForAthlete(a.id, since);
-    const risk = computeRisk(acts, metrics);
+    // the roster is the coach's triage screen — it has to see what athletes
+    // reported, not just what their watches recorded
+    const sore = sorenessHistory(a.id, soreSince).map((s) => ({
+      date: s.date,
+      body_part: s.body_part,
+      severity: s.severity,
+    }));
+    const risk = computeRisk(acts, metrics, new Date(nowMs), sore, a);
     const fitness = computeFitness(risk, metrics, acts);
     return { a, risk, fitness };
   });
@@ -150,6 +160,7 @@ export default async function Dashboard() {
                 </td>
                 <td className="px-3 py-3">
                   <RiskBadge zone={risk.zone} score={risk.score} />
+                  <SelfReportFlag self={risk.selfReport} />
                 </td>
                 <td
                   className="px-3 py-3 text-right tabular-nums"
@@ -192,6 +203,58 @@ export default async function Dashboard() {
         Ratio = acute:chronic workload (7-day vs 28-day training load). Sweet spot 0.8–1.3.
         Scores update automatically as athletes&apos; watches sync.
       </p>
+    </div>
+  );
+}
+
+/**
+ * What the athlete reported, shown next to the score rather than folded into it.
+ * Check-ins are optional, so scoring them would rank the athletes who report
+ * honestly above the ones who stay quiet. Keeping it separate means a coach
+ * reads both, and a blank here means "we don't know", not "they're fine".
+ */
+function SelfReportFlag({ self }: { self: RiskSnapshot["selfReport"] }) {
+  const persistent = self.persistentPart && self.persistentDays >= 3;
+  // a bad report today matters even when it isn't part of a pattern — an
+  // athlete saying 8/10 this morning must not be invisible on the triage screen
+  const acute = !persistent && self.todayMax >= 6;
+  const stale = self.hasData && (self.daysSinceReport ?? 0) >= 5;
+
+  if (acute) {
+    return (
+      <div
+        className="text-[11px] mt-1 font-medium"
+        style={{ color: "var(--status-critical)" }}
+        title={`Reported ${self.todayMax}/10 in the ${self.todayPart} today`}
+      >
+        ⚠ {self.todayPart} · {self.todayMax}/10 today
+      </div>
+    );
+  }
+
+  if (!persistent && !self.hasData) {
+    return (
+      <div className="text-[11px] mt-1" style={{ color: "var(--ink-muted)" }}>
+        no check-ins
+      </div>
+    );
+  }
+  if (!persistent && stale) {
+    return (
+      <div className="text-[11px] mt-1" style={{ color: "var(--ink-muted)" }}>
+        no check-in · {self.daysSinceReport}d
+      </div>
+    );
+  }
+  if (!persistent) return null;
+
+  return (
+    <div
+      className="text-[11px] mt-1 font-medium"
+      style={{ color: "var(--status-warning)" }}
+      title={`Reported sore on ${self.persistentDays} of the last 7 days, peak ${self.persistentPeak}/10`}
+    >
+      ⚠ {self.persistentPart} · {self.persistentDays}/7d{self.escalating ? " ↑" : ""}
     </div>
   );
 }

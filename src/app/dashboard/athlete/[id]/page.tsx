@@ -7,7 +7,7 @@ import { coachWhy } from "@/lib/chat";
 import RiskBadge from "@/components/RiskBadge";
 import Avatar from "@/components/Avatar";
 import { AcwrChart, LoadChart, WeeklyKmChart } from "@/components/charts";
-import { RecoverySnapshot } from "@/lib/risk";
+import { RecoverySnapshot, type RiskSnapshot } from "@/lib/risk";
 import IntensityCalendar from "@/components/IntensityCalendar";
 import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
@@ -273,27 +273,21 @@ function CoachView({
       </Panel>
 
       {/* self-reported check-in */}
-      <Panel title="Athlete self-report" note={p.todayCheckin ? "logged today" : "no check-in today"}>
-        {p.todayCheckin ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
-            <PatternRow
-              label="Soreness"
-              value={
-                p.todaySoreness.length
-                  ? p.todaySoreness.map((s) => `${s.part} ${s.severity}/10`).join(", ")
-                  : "—"
-              }
-              warn={p.todaySoreness.some((s) => s.severity >= 5)}
-            />
-            <PatternRow label="Energy" value={p.todayCheckin.energy !== null ? `${p.todayCheckin.energy}/10` : "—"} warn={(p.todayCheckin.energy ?? 10) <= 4} />
-            <PatternRow label="Session RPE" value={p.todayCheckin.rpe !== null ? `${p.todayCheckin.rpe}/10` : "—"} warn={false} />
-            <PatternRow label="Academic stress" value={p.todayCheckin.academic_stress ? "YES" : "no"} warn={Boolean(p.todayCheckin.academic_stress)} />
-          </div>
-        ) : (
-          <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
-            Nothing logged today — their most recent mood and soreness trends are in the app view under Profile.
-          </p>
-        )}
+      <Panel
+        title="Athlete self-report"
+        note={
+          p.todayCheckin
+            ? "logged today"
+            : p.risk.selfReport.daysSinceReport !== null
+              ? `last check-in ${p.risk.selfReport.daysSinceReport}d ago`
+              : "never checked in"
+        }
+      >
+        <SelfReportPanel
+          self={p.risk.selfReport}
+          todayCheckin={p.todayCheckin}
+          todaySoreness={p.todaySoreness}
+        />
       </Panel>
 
       {/* races & predictions */}
@@ -365,6 +359,80 @@ function PatternRow({ label, value, warn }: { label: string; value: string; warn
       <div className="font-semibold tabular-nums mt-0.5" style={{ color: warn ? "var(--status-warning)" : "var(--ink)" }}>
         {value}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The self-report panel. Deliberately shows the 7-day pattern *before* today's
+ * numbers, and shows it even when nothing was logged today — a shin that has
+ * been sore all week matters whether or not the athlete opened the app this
+ * morning. None of this moves the risk score (check-ins are optional, so
+ * scoring them would penalise honest reporters); it sits beside it.
+ */
+function SelfReportPanel({
+  self,
+  todayCheckin,
+  todaySoreness,
+}: {
+  self: RiskSnapshot["selfReport"];
+  todayCheckin: { energy: number | null; rpe: number | null; academic_stress: number | null } | null;
+  todaySoreness: { part: string; severity: number }[];
+}) {
+  const persistent = self.persistentPart && self.persistentDays >= 3;
+
+  return (
+    <div className="space-y-3">
+      {persistent && (
+        <div
+          className="rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed"
+          style={{
+            borderColor: "color-mix(in oklab, var(--status-warning) 45%, transparent)",
+            background: "color-mix(in oklab, var(--status-warning) 8%, var(--surface))",
+            color: "var(--ink-2)",
+          }}
+        >
+          <span className="font-semibold" style={{ color: "var(--ink)" }}>
+            {self.persistentPart} — sore {self.persistentDays} of the last 7 days
+          </span>
+          , peaking at {self.persistentPeak}/10
+          {self.escalating ? ", and getting worse rather than settling" : ""}. Soreness that keeps
+          returning to one area is worth assessing regardless of what the load numbers say.
+        </div>
+      )}
+
+      {!self.hasData && (
+        <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+          No check-ins on record — nothing is known about how this athlete actually feels. The score
+          above is built from training and recovery data alone.
+        </p>
+      )}
+
+      {todayCheckin ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+          <PatternRow
+            label="Soreness today"
+            value={
+              todaySoreness.length
+                ? todaySoreness.map((s) => `${s.part} ${s.severity}/10`).join(", ")
+                : "none reported"
+            }
+            warn={todaySoreness.some((s) => s.severity >= 5)}
+          />
+          <PatternRow label="Energy" value={todayCheckin.energy !== null ? `${todayCheckin.energy}/10` : "—"} warn={(todayCheckin.energy ?? 10) <= 4} />
+          <PatternRow label="Session RPE" value={todayCheckin.rpe !== null ? `${todayCheckin.rpe}/10` : "—"} warn={false} />
+          <PatternRow label="Academic stress" value={todayCheckin.academic_stress ? "YES" : "no"} warn={Boolean(todayCheckin.academic_stress)} />
+        </div>
+      ) : (
+        self.hasData && (
+          <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+            {self.daysSinceReport === 1
+              ? "No check-in today — yesterday was their last."
+              : `No check-in today; their last was ${self.daysSinceReport} days ago.`}{" "}
+            Nothing logged is not the same as nothing wrong.
+          </p>
+        )
+      )}
     </div>
   );
 }
