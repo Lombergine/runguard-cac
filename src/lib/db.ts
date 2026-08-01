@@ -141,6 +141,13 @@ function init(): Database.Database {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- chatSummary() reads this on EVERY athlete page render, not just chat, so the
+    -- unindexed scan sat on the dashboard's hot path. Cost without it depends on
+    -- rowid position, which makes the worst case a dormant athlete — exactly the
+    -- one a coach opens.
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_athlete_id
+      ON chat_messages(athlete_id, id);
+
     CREATE TABLE IF NOT EXISTS workout_status (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
@@ -202,13 +209,20 @@ function init(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
       ON risk_snapshots(athlete_id, date);
   `);
-  // additive migrations for columns introduced after first release
+  // Additive migrations for columns introduced after first release.
+  //
+  // Checked rather than caught, deliberately. SQLite gives "duplicate column name"
+  // and "no such table" the same error code, so a bare catch could not tell an
+  // already-applied migration from a typo'd table name even in principle — and it
+  // swallowed SQLITE_READONLY and SQLITE_BUSY too, which then surfaced much later
+  // as an unrelated 500. pragma_table_info on a missing table returns empty rather
+  // than throwing, so a real fault still propagates from the ALTER.
   const addColumn = (table: string, ddl: string) => {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
-    } catch {
-      // column already exists
-    }
+    const col = ddl.split(/\s+/)[0];
+    const has = db
+      .prepare("SELECT 1 FROM pragma_table_info(?) WHERE name = ?")
+      .get(table, col);
+    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
   };
   addColumn("health_metrics", "spo2 REAL");            // %
   addColumn("health_metrics", "wrist_temp REAL");      // deviation °C
@@ -229,6 +243,10 @@ function init(): Database.Database {
   // their workout history or their age at read time — see src/lib/hrmax.ts.
   addColumn("athletes", "hr_max REAL");
   addColumn("athletes", "hr_max_source TEXT"); // 'manual' | 'calibrated'
+  // Which path produced a chat row: 'rules' | 'safety:<id>'. Written on BOTH the
+  // user and assistant rows of a safety-intercepted exchange, which is what lets
+  // chatSummary keep those disclosures off the coach's screen.
+  addColumn("chat_messages", "engine TEXT");
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_races_created_by ON races(created_by_athlete_id);
     CREATE INDEX IF NOT EXISTS idx_races_team ON races(team_id);
