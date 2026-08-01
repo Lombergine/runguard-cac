@@ -675,7 +675,7 @@ const SYMPTOM_WORD =
 const HARD_RED_FLAG =
   /\bcan'?t (put weight|bear weight|walk|stand)\b|\bgave (out|way)\b|\bwalk(ing)? (funny|weird)\b|\blimp(ing)?\b|\bbrown (pee|urine)\b|\b(pee|urine) (is|was|looked?) (brown|dark|like coke|cola)\b|\bhit my head\b|\bhead injury\b|\bconcussion\b|\bwakes? me (up )?at night\b|\bhurts? at rest\b|\bnight pain\b/;
 
-function isSymptomShaped(lower: string): boolean {
+export function isSymptomShaped(lower: string): boolean {
   if (HARD_RED_FLAG.test(lower)) return true;
   return BODY_PART.test(lower) && SYMPTOM_WORD.test(lower);
 }

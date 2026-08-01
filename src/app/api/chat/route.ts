@@ -1,7 +1,8 @@
 import { resolveAthlete, resolveAthleteWithPath } from "@/lib/apiAuth";
 import { buildProfile } from "@/lib/profile";
-import { answer, logChat, chatHistory, lastUserEngine, isFollowUp } from "@/lib/chat";
+import { logChat, chatHistory, lastUserEngine, isFollowUp } from "@/lib/chat";
 import { safetyIntercept, replyFor } from "@/lib/safety";
+import { coachAnswer } from "@/lib/coach";
 
 export const maxDuration = 60;
 
@@ -41,9 +42,12 @@ export async function POST(request: Request) {
   if (!profile) return Response.json({ error: "No athlete" }, { status: 404 });
 
   logChat(athlete.id, "user", q);
-  const reply = await answer(q, profile);
-  logChat(athlete.id, "assistant", reply, "rules");
-  return Response.json({ reply });
+  // The local model, if one is configured. Every failure inside coachAnswer —
+  // model down, timeout, busy, unsafe output, a number it wasn't given — returns
+  // the rule engine's answer, so this can only ever be as bad as before.
+  const r = await coachAnswer(q, profile);
+  logChat(athlete.id, "assistant", r.text, r.engine);
+  return Response.json({ reply: r.text });
 }
 
 export async function GET(request: Request) {
