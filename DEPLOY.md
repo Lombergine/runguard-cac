@@ -19,7 +19,6 @@ deploy straight from the included `Dockerfile`.
    - `DATABASE_PATH=/data/runguard.db`
    - `SESSION_SECRET=` → paste output of `openssl rand -hex 32`
    - `COACH_PASSWORD=` → anything (only unlocks the demo team)
-   - `ANTHROPIC_API_KEY=` → optional, turns on the smart AI coach
 5. Deploy. Railway gives you a public URL like `https://runguard-production.up.railway.app`.
    That's your live site — coaches go to `/signup`, athletes to `/athlete/signup`.
 

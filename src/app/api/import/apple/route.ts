@@ -24,7 +24,9 @@ export async function POST(request: Request) {
   // team-scope: coaches can only import for their own athletes
   const teamId = await currentTeamId();
   const target = getAthlete(athleteId);
-  if (!target || (teamId && target.team_id && target.team_id !== teamId)) {
+  // Strict. `&& target.team_id` used to short-circuit this check for athletes
+  // with a null team — the default for self-signup — so any coach reached them.
+  if (!target || teamId == null || target.team_id !== teamId) {
     return Response.json({ error: "That athlete isn't on your team." }, { status: 403 });
   }
   if (file.size > 400 * 1024 * 1024) {

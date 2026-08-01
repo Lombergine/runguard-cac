@@ -415,7 +415,6 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
         {msgs.length === 0 && (
           <div className="text-sm space-y-2 pt-2" style={{ color: "var(--ink-muted)" }}>
             <p>Ask anything about your training — I&apos;m reading your last 14 days of data automatically, and I get smarter the longer you use me.</p>
-            <p className="text-xs">Your coach can see a summary of what you&apos;ve been asking.</p>
           </div>
         )}
         {msgs.map((m, i) => (
@@ -475,6 +474,13 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
           Send
         </button>
       </form>
+      {/* Persistent, not in the empty state — it used to sit inside
+          {msgs.length === 0 && …} and vanish forever after the first message, so
+          a returning athlete never saw it. Reworded because the coach panel
+          shows the last five messages verbatim, in quotes, not a summary. */}
+      <p className="text-xs pt-2" style={{ color: "var(--ink-muted)" }}>
+        Your coach can read your last 5 messages here, word for word.
+      </p>
     </div>
   );
 }

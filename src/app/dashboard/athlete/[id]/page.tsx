@@ -43,7 +43,8 @@ export default async function AthletePage({
   const teamId = await currentTeamId();
   const target = getAthlete(Number(id));
   if (!target) notFound();
-  if (teamId && target.team_id && target.team_id !== teamId) notFound();
+  // Strict: `&& target.team_id` short-circuited for team-less athletes.
+  if (teamId == null || target.team_id !== teamId) notFound();
 
   const p = buildProfile(Number(id));
   if (!p) notFound();

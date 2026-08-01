@@ -292,9 +292,18 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     goals.find((g) => g.event === "weekly_km")?.target ??
     Math.max(Math.round(risk.weekKm * 1.05), 20);
 
+  // The coach dashboard renders these VERBATIM, in quotes. Safety-intercepted
+  // messages are excluded — an athlete who has just been told to talk to a
+  // parent and a doctor should not then find that disclosure quoted on their
+  // coach's screen.
+  //
+  // The `engine IS NULL` half is mandatory, not defensive: in SQLite
+  // `NULL NOT LIKE 'safety:%'` evaluates to NULL rather than true, so without it
+  // every pre-migration row would be excluded and this panel would silently
+  // empty out.
   const chatQs = (getDb()
     .prepare(
-      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 5"
+      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT 5"
     )
     .all(athlete.id) as { text: string }[]).map((r) => r.text);
 
