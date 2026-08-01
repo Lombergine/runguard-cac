@@ -369,8 +369,8 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
           <span className="font-semibold" style={{ color: "var(--ink)" }}>
             This week&apos;s plan is a little lighter than usual.
           </span>{" "}
-          {p.plan.adjustment.reason} If that doesn&apos;t match how you actually feel, say so — your
-          coach can override it.
+          {p.plan.adjustment.reason}{" "}
+          If that doesn&apos;t match how you actually feel, say so — your coach can override it.
         </div>
       )}
       {p.plan.taperMode && (

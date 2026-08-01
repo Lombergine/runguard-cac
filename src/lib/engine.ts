@@ -340,7 +340,8 @@ const SUPPLEMENTAL = [
  *
  * What is left is driven only by signals that earned their place — a genuine
  * single-session spike, and what the athlete reported — and every adjustment
- * carries a reason string that is shown next to the plan. If it cannot be
+ * carries a reason string that is shown next to the plan (in second person —
+ * it renders inside the athlete's own app). If it cannot be
  * explained in a sentence, it does not get to change the training.
  */
 export type PlanAdjustment = { scale: number; reason: string | null };
@@ -356,19 +357,19 @@ export function planAdjustment(
   if (recentSpike) {
     scale -= 0.1;
     reasons.push(
-      `their ${recentSpike.km} km run was ${recentSpike.pctAbove}% past their recent longest`
+      `your ${recentSpike.km} km run was ${recentSpike.pctAbove}% past your recent longest`
     );
   }
   const self = risk.selfReport;
   if (self.persistentPart && self.persistentDays >= 3) {
     scale -= 0.1;
     reasons.push(
-      `they've reported ${self.persistentPart} soreness on ${self.persistentDays} of the last 7 days`
+      `you've reported ${self.persistentPart} soreness on ${self.persistentDays} of the last 7 days`
     );
   }
   if (energyTrend) {
     scale -= 0.05;
-    reasons.push(`their reported energy has fallen ${energyTrend.days} check-ins running`);
+    reasons.push(`your reported energy has fallen ${energyTrend.days} check-ins running`);
   }
 
   scale = clamp(scale, 0.75, 1.0);
