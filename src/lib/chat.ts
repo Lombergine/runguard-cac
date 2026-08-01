@@ -63,19 +63,19 @@ export function coachWhy(p: CoreProfile): string {
     causes.push(`they logged ${worstSoreness.part} soreness at ${worstSoreness.severity}/10 today${p.todaySoreness.length > 1 ? ` (${p.todaySoreness.length} areas flagged)` : ""}`);
   if (p.patterns.highEffortStreak >= 5)
     causes.push(`${p.patterns.highEffortStreak} straight days above their typical load with no recovery day`);
-  if (p.injuries.length > 0 && r.zone !== "ready") {
+  if (p.injuries.length > 0 && causes.length > 0) {
     causes.push(`history matters here: ${p.injuries[0].body_part} (${p.injuries[0].date.slice(0, 7)})`);
   }
 
-  if (r.zone === "high") {
+  if (causes.length >= 3 || p.prePractice.flag === "unusual") {
     const top = causes.slice(0, 3).join("; ");
-    return `This athlete is in the danger zone because ${top}. This is the exact pattern that precedes most overuse injuries — the body is absorbing more stress than it can repair. Today: no intensity, cut volume hard or rest fully, and check in with them face to face before warmup.`;
+    return `Several things are stacking up here: ${top}. This is the exact pattern that precedes most overuse injuries — the body is absorbing more stress than it can repair. Today: no intensity, cut volume hard or rest fully, and check in with them face to face before warmup.`;
   }
-  if (r.zone === "caution") {
-    const top = causes.slice(0, 2).join("; ") || "load and recovery are drifting out of balance";
-    return `Elevated risk because ${top}. Not an emergency — but this is the window where one more hard day tips it. Keep today genuinely easy and skip anything explosive.`;
+  if (causes.length > 0) {
+    const top = causes.slice(0, 2).join("; ");
+    return `Worth a look: ${top}. Not an emergency — but this is the window where one more hard day tips it. Keep today genuinely easy and skip anything explosive.`;
   }
-  return `All systems normal: load ratio ${r.acwr ?? "—"} in the safe zone, recovery markers at baseline${rec.sleepAvg !== null ? `, sleeping ${rec.sleepAvg}h` : ""}. Run the plan as written.`;
+  return `Nothing standing out: recovery markers are at their baseline${rec.sleepAvg !== null ? ` and they're sleeping ${rec.sleepAvg}h` : ""}. Run the plan as written.`;
 }
 
 /* ------------------------------------------------------------------ */
