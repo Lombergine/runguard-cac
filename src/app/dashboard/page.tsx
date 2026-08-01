@@ -1,6 +1,6 @@
 import { localDayOffset } from "@/lib/day";
 import Link from "next/link";
-import { listAthletes, athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory } from "@/lib/db";
+import { athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory } from "@/lib/db";
 import { computeRisk, sessionSpike, type RiskSnapshot, type SessionSpike } from "@/lib/risk";
 import { computeFitness } from "@/lib/engine";
 import { currentTeamId } from "@/lib/session";
@@ -16,7 +16,8 @@ export default async function Dashboard() {
   const nowMs = Date.now();
   const since = new Date(nowMs - 130 * 86400000).toISOString();
   const soreSince = localDayOffset(13, new Date(nowMs));
-  const roster = teamId ? athletesForTeam(teamId) : listAthletes();
+  // Fail closed rather than falling back to every athlete in the database.
+  const roster = teamId ? athletesForTeam(teamId) : [];
   const athletes = roster.map((a) => {
     const acts = activitiesForAthlete(a.id, since);
     const metrics = metricsForAthlete(a.id, since);
