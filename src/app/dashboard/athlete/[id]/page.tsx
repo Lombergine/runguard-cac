@@ -158,7 +158,7 @@ function CoachView({
       <div className="grid lg:grid-cols-[1fr_1.1fr] gap-4 items-stretch">
         <AthleteModel
           readiness={p.readiness}
-          zone={p.risk.zone}
+          zone={p.readiness < 40 ? "high" : p.readiness < 65 ? "caution" : "ready"}
           hotspots={[
             ...p.injuries.filter((i) => !i.resolved_at).map((i) => ({ part: i.body_part, kind: "injury" as const })),
             ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),

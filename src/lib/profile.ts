@@ -36,6 +36,7 @@ import {
   predictRaces,
   pacingStrategy,
   weeklyPlan,
+  planAdjustment,
   prePracticeFlag,
   readinessScore,
   SorenessEntry,
@@ -55,6 +56,7 @@ import {
   Fitness,
   Predictions,
   PlanDay,
+  PlanAdjustment,
   PrePractice,
   Notification,
   Badge,
@@ -79,7 +81,7 @@ export type CoreProfile = {
   fitness: Fitness;
   predictions: Predictions;
   prs: PRRecord[];
-  plan: { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null };
+  plan: { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null; adjustment: PlanAdjustment };
   prePractice: PrePractice;
   illness: boolean;
   notifications: Notification[];
@@ -175,7 +177,32 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
       .prepare("SELECT date, status FROM workout_status WHERE athlete_id = ?")
       .all(athlete.id) as { date: string; status: string }[]).map((r) => [r.date, r.status])
   );
-  const plan = weeklyPlan(risk, predictions, nextRace, statuses, now);
+  // Recent runs, newest first, each rated against the athlete's own longest run
+  // in the 30 days before it. This is the one load pattern the running evidence
+  // supports, and it is reported against the session rather than the athlete.
+  const recentRuns = [...acts]
+    .filter((a) => a.distance_m > 0)
+    .sort((a, b) => b.start_time.localeCompare(a.start_time))
+    .slice(0, 12)
+    .map((a) => ({
+      id: a.id,
+      date: localDay(new Date(a.start_time)),
+      km: Math.round((a.distance_m / 1000) * 10) / 10,
+      durationS: a.duration_s,
+      spike: sessionSpike(a, acts),
+    }));
+
+  const energyTrend: EnergyTrend | null = detectEnergyDecline(
+    checkins.map((c) => ({ date: c.date, energy: c.energy })),
+    now
+  );
+
+  // Plan volume responds only to signals that earned their place, and every
+  // adjustment carries a reason the coach can read and disagree with.
+  const recentSpike =
+    recentRuns.find((r) => r.spike && r.date >= localDayOffset(7, now))?.spike ?? null;
+  const adjustment = planAdjustment(risk, recentSpike, energyTrend);
+  const plan = weeklyPlan(risk, predictions, nextRace, statuses, now, adjustment);
 
   const lastActivityDaysAgo = risk.lastActivity
     ? Math.floor((now.getTime() - new Date(risk.lastActivity).getTime()) / DAY_MS)
@@ -199,26 +226,6 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   // predicted times is social-comparison pressure in a sport that already carries
   // elevated disordered-eating risk, and it penalises later-maturing athletes for
   // being biologically younger.
-
-  // Recent runs, newest first, each rated against the athlete's own longest run
-  // in the 30 days before it. This is the one load pattern the running evidence
-  // supports, and it is reported against the session rather than the athlete.
-  const recentRuns = [...acts]
-    .filter((a) => a.distance_m > 0)
-    .sort((a, b) => b.start_time.localeCompare(a.start_time))
-    .slice(0, 12)
-    .map((a) => ({
-      id: a.id,
-      date: localDay(new Date(a.start_time)),
-      km: Math.round((a.distance_m / 1000) * 10) / 10,
-      durationS: a.duration_s,
-      spike: sessionSpike(a, acts),
-    }));
-
-  const energyTrend: EnergyTrend | null = detectEnergyDecline(
-    checkins.map((c) => ({ date: c.date, energy: c.energy })),
-    now
-  );
 
   const weeks: { week: string; km: number }[] = [];
   for (let w = 11; w >= 0; w--) {

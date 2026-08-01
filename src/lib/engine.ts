@@ -329,13 +329,65 @@ const SUPPLEMENTAL = [
   null,
 ];
 
+/**
+ * How much to ease this week's volume, and why.
+ *
+ * The previous version read the internal risk zone and silently multiplied
+ * volume by 0.7 or 0.9. That was the worst remaining form of the problem the
+ * score removal was meant to fix: a metric dropped for lack of evidence still
+ * altering an athlete's training, invisibly, with no one able to see the reason
+ * or disagree with it. A displayed number can at least be argued with.
+ *
+ * What is left is driven only by signals that earned their place — a genuine
+ * single-session spike, and what the athlete reported — and every adjustment
+ * carries a reason string that is shown next to the plan. If it cannot be
+ * explained in a sentence, it does not get to change the training.
+ */
+export type PlanAdjustment = { scale: number; reason: string | null };
+
+export function planAdjustment(
+  risk: RiskSnapshot,
+  recentSpike: { km: number; pctAbove: number } | null,
+  energyTrend: { days: number } | null
+): PlanAdjustment {
+  const reasons: string[] = [];
+  let scale = 1.0;
+
+  if (recentSpike) {
+    scale -= 0.1;
+    reasons.push(
+      `their ${recentSpike.km} km run was ${recentSpike.pctAbove}% past their recent longest`
+    );
+  }
+  const self = risk.selfReport;
+  if (self.persistentPart && self.persistentDays >= 3) {
+    scale -= 0.1;
+    reasons.push(
+      `they've reported ${self.persistentPart} soreness on ${self.persistentDays} of the last 7 days`
+    );
+  }
+  if (energyTrend) {
+    scale -= 0.05;
+    reasons.push(`their reported energy has fallen ${energyTrend.days} check-ins running`);
+  }
+
+  scale = clamp(scale, 0.75, 1.0);
+  return {
+    scale,
+    reason: reasons.length
+      ? `Volume eased ${Math.round((1 - scale) * 100)}% because ${reasons.join(", and ")}.`
+      : null,
+  };
+}
+
 export function weeklyPlan(
   risk: RiskSnapshot,
   predictions: Predictions,
   nextRace: RaceRow | null,
   statuses: Map<string, string>,
-  now: Date = new Date()
-): { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null } {
+  now: Date = new Date(),
+  adjustment: PlanAdjustment = { scale: 1, reason: null }
+): { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null; adjustment: PlanAdjustment } {
   const pace5k = predictions["5K"].timeS / 5; // s/km
   const easy = fmtPaceKm(pace5k * 1.3);
   const tempo = fmtPaceKm(pace5k * 1.06);
@@ -353,7 +405,7 @@ export function weeklyPlan(
   const taperMode = daysToRace !== null && daysToRace >= 0 && daysToRace <= 6;
 
   const base = risk.weekKm > 10 ? risk.weekKm : 30;
-  const scale = risk.zone === "high" ? 0.7 : risk.zone === "caution" ? 0.9 : 1.0;
+  const scale = adjustment.scale;
 
   const template: Omit<PlanDay, "date" | "day" | "status" | "isToday" | "isTaper">[] = [
     { type: "Easy run", distanceKm: round(base * 0.14 * scale), targetPace: easy, why: "Flush the weekend's long run and start the week aerobic.", details: "Fully conversational. Heart rate under 150. If it feels fast, it is.", supplemental: SUPPLEMENTAL[0] },
@@ -391,7 +443,7 @@ export function weeklyPlan(
     });
   }
 
-  return { days, taperMode, taperCountdown: taperMode ? daysToRace : null };
+  return { days, taperMode, taperCountdown: taperMode ? daysToRace : null, adjustment };
 }
 
 /* ---------------- pre-practice flag, readiness, insight ---------------- */

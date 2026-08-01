@@ -356,6 +356,23 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
       <Panel title="Recent runs" note="long runs well past your usual are flagged">
         <RecentRuns runs={p.recentRuns} />
       </Panel>
+
+      {p.plan.adjustment.reason && (
+        <div
+          className="rounded-2xl border px-5 py-4 text-sm leading-relaxed"
+          style={{
+            borderColor: "color-mix(in oklab, var(--status-warning) 40%, transparent)",
+            background: "color-mix(in oklab, var(--status-warning) 7%, var(--surface))",
+            color: "var(--ink-2)",
+          }}
+        >
+          <span className="font-semibold" style={{ color: "var(--ink)" }}>
+            This week&apos;s plan is a little lighter than usual.
+          </span>{" "}
+          {p.plan.adjustment.reason} If that doesn&apos;t match how you actually feel, say so — your
+          coach can override it.
+        </div>
+      )}
       {p.plan.taperMode && (
         <div className="rounded-2xl border px-5 py-4 flex items-center gap-3" style={{ borderColor: "var(--brand)", background: "color-mix(in oklab, var(--brand) 10%, var(--surface))" }}>
           <span className="text-2xl font-extrabold tabular-nums" style={{ color: "var(--brand-strong)" }}>{p.plan.taperCountdown}</span>
@@ -413,7 +430,11 @@ export function StatsTab({ p }: { p: CoreProfile }) {
     <div className="space-y-4">
       {/* hero: rotating 3D athlete on the left, headline stats on the right */}
       <div className="grid lg:grid-cols-[1.05fr_1fr] gap-4 items-stretch">
-        <AthleteModel readiness={p.readiness} zone={p.risk.zone} hotspots={hotspots} />
+        <AthleteModel
+          readiness={p.readiness}
+          zone={p.readiness < 40 ? "high" : p.readiness < 65 ? "caution" : "ready"}
+          hotspots={hotspots}
+        />
         <div className="grid grid-cols-2 gap-3 content-start">
           <Stat
             label="Fitness score"
