@@ -396,38 +396,102 @@ export function weeklyPlan(
 
 /* ---------------- pre-practice flag, readiness, insight ---------------- */
 
-export type PrePractice = { flag: "go" | "modify" | "sit_out"; reason: string };
+/**
+ * An observation for the coach, NOT an instruction.
+ *
+ * "sit out" was a specific directive tied to a health condition, delivered to a
+ * layperson about a minor, with no way for them to review the basis for it —
+ * which is the wrong side of the line between a wellness feature and a clinical
+ * decision. The states now describe what the data looks like and hand the
+ * judgement to the humans, who are the ones qualified to make it.
+ */
+export type PrePractice = { flag: "clear" | "watch" | "unusual"; reason: string };
 export type SorenessEntry = { part: string; severity: number };
 
 export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, soreness: SorenessEntry[]): PrePractice {
   const sorted = [...soreness].sort((a, b) => b.severity - a.severity);
   const worst = sorted[0] ?? null;
   const extra = soreness.length > 1 ? ` (${soreness.length} areas flagged)` : "";
-  if (illness) return { flag: "sit_out", reason: "Illness pattern: HRV drop + elevated resting HR. Keep them away from hard work today." };
-  if (risk.zone === "high") return { flag: "sit_out", reason: "Injury risk is high — replace today's session with rest or 20 min recovery jog." };
-  if (worst && worst.severity >= 7) return { flag: "sit_out", reason: `Reported soreness ${worst.severity}/10 in the ${worst.part}${extra} — assess before any running.` };
-  if (risk.zone === "caution" || (worst && worst.severity >= 4)) {
-    return { flag: "modify", reason: "Elevated risk or soreness — cut volume ~30% and skip intensity today." };
-  }
-  return { flag: "go", reason: "All signals green. Run the plan as written." };
+  if (illness)
+    return {
+      flag: "unusual",
+      reason:
+        "Resting heart rate is up and HRV is down together — the pattern that often precedes illness. Worth asking how they feel before training.",
+    };
+  if (worst && worst.severity >= 7)
+    return {
+      flag: "unusual",
+      reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra}. That is high enough to be worth a conversation, and an athletic trainer or clinician if it persists.`,
+    };
+  if (worst && worst.severity >= 4)
+    return {
+      flag: "watch",
+      reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra} — worth checking in on before hard work.`,
+    };
+  return { flag: "clear", reason: "Nothing in today's check-in or recovery data stands out." };
 }
 
+/** How much of readiness comes from what the athlete says vs. what sensors say. */
+const SUBJECTIVE_WEIGHT = 0.55;
+
+/**
+ * How ready is this athlete to train today?
+ *
+ * Built primarily from the athlete's own check-in. Saw, Main & Gastin (2016,
+ * BJSM, 56 studies) found subjective self-report tracks training response with
+ * superior sensitivity and consistency to objective measures, and that the two
+ * generally do not correlate — so the check-in leads and the wearable data
+ * supports it, not the other way round.
+ *
+ * Deliberately NOT `100 − injury risk`, which is what this used to be. That
+ * double-counted training load and inherited the load-ratio assumptions the
+ * evidence does not support. `risk` is still passed in, but only for its
+ * recovery snapshot — resting HR, HRV and sleep, each already a 5-day median
+ * against the athlete's own 28-day baseline, so no single bad night moves this.
+ */
 export function readinessScore(risk: RiskSnapshot, checkin: CheckinRow | null, soreness: SorenessEntry[] = []): number {
-  let r = 100 - risk.score;
-  if (soreness.length) {
-    const sorted = soreness.map((s) => s.severity).sort((a, b) => b - a);
-    const primary = sorted[0] * 2.5; // worst part — same weight as a single-part check-in always had
-    const secondary = Math.min(10, sorted.slice(1).reduce((s, x) => s + x, 0)); // other sore parts, capped
-    r -= Math.min(35, primary + secondary);
+  // ---- what the athlete reported ----
+  let subjective: number | null = null;
+  if (checkin || soreness.length) {
+    let s = 100;
+    if (soreness.length) {
+      const sorted = soreness.map((x) => x.severity).sort((a, b) => b - a);
+      const primary = sorted[0] * 5; // 10/10 in one place is most of the story
+      const secondary = Math.min(15, sorted.slice(1).reduce((a, b) => a + b, 0) * 1.5);
+      s -= Math.min(60, primary + secondary);
+    }
+    if (checkin?.energy != null) s += (checkin.energy - 6) * 5; // 6/10 is neutral
+    if (checkin?.academic_stress) s -= 8; // school stress is training stress
+    subjective = clamp(s, 0, 100);
   }
-  if (checkin?.energy != null) r += (checkin.energy - 5) * 1.5;
-  if (checkin?.academic_stress) r -= 5;
-  return Math.round(clamp(r, 0, 100));
+
+  // ---- what the sensors reported, as trends against personal baselines ----
+  const r = risk.recovery;
+  let objective = 100;
+  if (r.hrvDeltaPct !== null && r.hrvDeltaPct < 0) {
+    objective -= Math.min(30, Math.abs(r.hrvDeltaPct) * 1.2);
+  }
+  if (r.restingHrDelta !== null && r.restingHrDelta > 0) {
+    objective -= Math.min(25, r.restingHrDelta * 4);
+  }
+  if (r.sleepAvg !== null && r.sleepAvg < 7) {
+    objective -= Math.min(25, (7 - r.sleepAvg) * 6);
+  }
+  objective = clamp(objective, 0, 100);
+
+  // With no check-in there is nothing subjective to weight, so this falls back
+  // to the sensors alone rather than treating silence as "fine".
+  const combined =
+    subjective === null
+      ? objective
+      : SUBJECTIVE_WEIGHT * subjective + (1 - SUBJECTIVE_WEIGHT) * objective;
+
+  return Math.round(clamp(combined, 0, 100));
 }
 
 export function aiInsight(risk: RiskSnapshot, fitness: Fitness, patterns: Patterns): string {
   const rec = risk.recovery;
-  if (risk.zone === "high") return "Your load is in the danger zone — today is the day that decides whether next month is training or rehab.";
+  if (patterns.overreaching) return "Your training has been stacking up without much let-up lately. An easy day now is cheaper than a forced week off later.";
   if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct >= 10) return `Your HRV is up ${rec.hrvDeltaPct}% this week — good time to push hard.`;
   if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct <= -12) return `HRV is ${Math.abs(rec.hrvDeltaPct)}% below baseline — make today genuinely easy and it rebounds faster.`;
   if (fitness.peakThisWeek) return "You hit a new fitness peak this week — the training is working.";
@@ -454,8 +518,7 @@ export function buildNotifications(args: {
   const out: Notification[] = [];
   const { risk, fitness, patterns, illness, nextRace, daysToRace, predictions, prs, lastActivityDaysAgo } = args;
 
-  if (risk.zone === "high") out.push({ type: "injury", text: "You could get injured tomorrow — your risk score is in the red. Back off today.", severity: "critical" });
-  if (risk.acwr !== null && risk.acwr > 1.3) out.push({ type: "acwr", text: `Your ACWR is spiking (${risk.acwr.toFixed(2)}), consider an easy day tomorrow.`, severity: "warning" });
+  if (patterns.overreaching) out.push({ type: "load", text: "You've had a long stretch of hard days without much recovery. Worth an easy one.", severity: "warning" });
   if (nextRace && daysToRace !== null && daysToRace <= 3 && daysToRace >= 0) out.push({ type: "race", text: `Race in ${daysToRace} day${daysToRace === 1 ? "" : "s"} — here's your taper plan in the Training tab.`, severity: "info" });
   if (fitness.peakThisWeek) out.push({ type: "fitness", text: "You hit a new training fitness peak this week.", severity: "info" });
   if (risk.recovery.restingHrDelta !== null && risk.recovery.restingHrDelta >= 5) out.push({ type: "rhr", text: "Your resting HR is elevated, check your recovery today.", severity: "warning" });

@@ -12,8 +12,7 @@ console.log("plan days:", p.plan.days.length, "| taper:", p.plan.taperMode, "| c
 console.log("plan sample:", p.plan.days.map(d=>`${d.day.slice(0,3)}:${d.type.slice(0,18)}${d.isTaper?"*":""}`).join(" | "));
 console.log("notifications:", p.notifications.map(n=>n.type).join(","));
 console.log("badges:", p.badges.map(b=>`${b.label}=${b.earned}`).join(" "));
-console.log("comparison:", JSON.stringify(p.comparison));
-console.log("upcoming races:", p.races.upcoming.map(r=>`${r.name} in ${r.daysUntil}d readiness ${r.readiness} pred ${r.predicted}`).join(" | "));
+console.log("upcoming races:", p.races.upcoming.map(r=>`${r.name} in ${r.daysUntil}d pred ${r.predicted}`).join(" | "));
 console.log("history:", p.races.history.length, "results; latest:", JSON.stringify(p.races.history[0]));
 console.log("goals:", p.goals.map(g=>`${g.event} ${g.targetLabel} pred ${g.predicted} ${g.onTrack?"ON":"off"}`).join(" | "));
 console.log("sleep30 days:", p.sleep30.length, "| mental30:", p.mental30.length, "| target km:", p.weeklyTargetKm);

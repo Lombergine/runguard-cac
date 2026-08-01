@@ -42,8 +42,11 @@ function Stat({ label, value, sub, color, info }: { label: string; value: string
   );
 }
 
-const zoneColor = (z: "ready" | "caution" | "high") =>
-  z === "high" ? "var(--status-critical)" : z === "caution" ? "var(--status-warning)" : "var(--status-good)";
+/** Colour + wording from readiness, which is what the athlete is actually shown.
+ *  The internal risk zone is deliberately not surfaced anywhere. */
+const readyColor = (r: number) =>
+  r < 40 ? "var(--status-critical)" : r < 65 ? "var(--status-warning)" : "var(--status-good)";
+
 
 /* tinted surface + border + glow for a given status color — makes risk "punch" on light theme */
 function riskSurface(color: string, strong = false) {
@@ -152,14 +155,14 @@ function BentoTile({
 }
 
 export function HomeTab({ p }: { p: CoreProfile }) {
-  const z = zoneColor(p.risk.zone);
+  const z = readyColor(p.readiness);
   const nextRace = p.races.upcoming[0] ?? null;
   const today = p.plan.days.find((d) => d.isToday);
   const rawPct = Math.round((p.risk.weekKm / p.weeklyTargetKm) * 100);
   const pct = Math.min(100, rawPct);
   const r = p.risk.recovery;
-  const high = p.risk.zone === "high";
-  const verdict = p.risk.zone === "ready" ? "Good to go" : p.risk.zone === "caution" ? "Train with care" : "High risk today";
+  const high = p.readiness < 40;
+  const verdict = p.readiness >= 65 ? "Good to go" : p.readiness >= 40 ? "Train with care" : "Take it easy today";
   const todayBlocks = today ? workoutBlocks(today) : [];
 
   return (
@@ -198,8 +201,8 @@ export function HomeTab({ p }: { p: CoreProfile }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <BentoTile
           i={1}
-          label="Injury risk"
-          value={String(p.risk.score)}
+          label="Readiness"
+          value={String(p.readiness)}
           unit="/100"
           sub={verdict}
           accent={z}
@@ -301,9 +304,58 @@ export function HomeTab({ p }: { p: CoreProfile }) {
 
 /* ---------------- TRAINING ---------------- */
 
+/**
+ * Recent runs, with a spike warning attached to the session that earned it.
+ *
+ * This is the whole point of the change: instead of an athlete-level score that
+ * names nothing, the warning sits on the specific run, names the specific thing
+ * that was different about it, and is visible at a point where the next session
+ * can still be changed.
+ */
+function RecentRuns({ runs }: { runs: CoreProfile["recentRuns"] }) {
+  if (!runs.length) {
+    return <p className="text-sm" style={{ color: "var(--ink-muted)" }}>No runs logged yet.</p>;
+  }
+  return (
+    <div className="space-y-1.5">
+      {runs.map((r) => (
+        <div
+          key={r.id}
+          className="rounded-xl px-3.5 py-2.5"
+          style={{
+            background: r.spike
+              ? `color-mix(in oklab, ${r.spike.level === "large" ? "var(--status-critical)" : "var(--status-warning)"} 8%, var(--surface-2))`
+              : "var(--surface-2)",
+          }}
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm font-medium tabular-nums">{r.km} km</span>
+            <span className="text-xs tabular-nums" style={{ color: "var(--ink-muted)" }}>
+              {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+            </span>
+          </div>
+          {r.spike && (
+            <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+              <span className="font-semibold">
+                {r.spike.pctAbove}% longer than your longest run in the month before it
+              </span>{" "}
+              ({r.spike.longestKm} km). In a study of 5,205 adult runners, single sessions well past
+              a runner&apos;s recent longest carried a higher injury rate — the clearest load signal
+              there is, though it hasn&apos;t been shown specifically in teenagers.
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function TrainingTab({ p }: { p: CoreProfile }) {
   return (
     <div className="space-y-4">
+      <Panel title="Recent runs" note="long runs well past your usual are flagged">
+        <RecentRuns runs={p.recentRuns} />
+      </Panel>
       {p.plan.taperMode && (
         <div className="rounded-2xl border px-5 py-4 flex items-center gap-3" style={{ borderColor: "var(--brand)", background: "color-mix(in oklab, var(--brand) 10%, var(--surface))" }}>
           <span className="text-2xl font-extrabold tabular-nums" style={{ color: "var(--brand-strong)" }}>{p.plan.taperCountdown}</span>
@@ -381,13 +433,6 @@ export function StatsTab({ p }: { p: CoreProfile }) {
             value={String(p.load.weekTrimp)}
             sub="training impulse"
             info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard your heart was working. Two runs the same distance can score very differently. Runs synced without heart-rate data count as zero."
-          />
-          <Stat
-            label="Injury risk"
-            value={`${p.risk.score}`}
-            sub={`${p.risk.zone} zone`}
-            color={p.risk.zone === "high" ? "var(--status-critical)" : p.risk.zone === "caution" ? "var(--status-warning)" : "var(--status-good)"}
-            info="0–100, built from your workload ratio, how fast you're ramping, days without rest, and recovery signals — resting HR, HRV and sleep. Under 30 is ready, 30–59 caution, 60 and up high. Your daily check-in feeds readiness, not this number. It's a monitoring signal, not a diagnosis."
           />
           <Stat
             label="7-day km"
@@ -474,7 +519,7 @@ export function StatsTab({ p }: { p: CoreProfile }) {
 
 export function RecoveryTab({ p }: { p: CoreProfile }) {
   const r = p.risk.recovery;
-  const z = zoneColor(p.risk.zone);
+  const z = readyColor(p.readiness);
   const stages = p.sleep30.slice(-7);
   const avg = (k: "deep" | "rem" | "light") => {
     const v = stages.map((s) => s[k]).filter((x): x is number => x != null);
@@ -493,13 +538,13 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
         <div>
           <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Today&apos;s recovery status</div>
           <div className="text-2xl font-extrabold mt-0.5" style={{ color: z }}>
-            {p.risk.zone === "ready" ? "Green — recovered" : p.risk.zone === "caution" ? "Yellow — partial" : "Red — under-recovered"}
+            {p.readiness >= 65 ? "Green — recovered" : p.readiness >= 40 ? "Yellow — partial" : "Red — under-recovered"}
           </div>
         </div>
         <div className="flex-1" />
         <div className="text-right">
-          <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Injury risk</div>
-          <div className="text-3xl font-extrabold tabular-nums" style={{ color: z }}>{p.risk.score}<span className="text-base" style={{ color: "var(--ink-muted)" }}>/100</span></div>
+          <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Readiness</div>
+          <div className="text-3xl font-extrabold tabular-nums" style={{ color: z }}>{p.readiness}<span className="text-base" style={{ color: "var(--ink-muted)" }}>/100</span></div>
         </div>
       </div>
 
@@ -538,8 +583,8 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
         />
       </div>
 
-      {/* what's driving the risk score */}
-      <Panel title={`What's driving your ${p.risk.score}/100`}>
+      {/* what the data is showing — observations, not a score breakdown */}
+      <Panel title="What your data is showing">
         <div className="space-y-2.5">
           {p.risk.insights.map((line, i) => (
             <p key={i} className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>{line}</p>
@@ -606,9 +651,9 @@ export function RaceTab({ p }: { p: CoreProfile }) {
               {r.canEdit && <RaceEditControls athleteId={p.athlete.id} raceId={r.id} />}
             </div>
             <div className="text-right">
-              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Race readiness</div>
+              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Predicted</div>
               {p.risk.hasActivityHistory ? (
-                <div className="text-xl font-bold tabular-nums" style={{ color: r.readiness >= 70 ? "var(--status-good)" : r.readiness >= 40 ? "var(--status-warning)" : "var(--status-critical)" }}>{r.readiness}/100</div>
+                <div className="text-xl font-bold tabular-nums">{r.predicted}</div>
               ) : (
                 <div className="text-sm font-medium" style={{ color: "var(--ink-muted)" }}>Not enough data yet</div>
               )}
@@ -776,21 +821,10 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
         </table>
       </Panel>
 
-      {p.comparison.peers > 0 && (
-        <Panel title="Competitor comparison" note={`anonymous · vs ${p.comparison.peers} athletes at your level`}>
-          <div className="space-y-3">
-            {[["Weekly volume", p.comparison.weekKmPercentile], ["Predicted 5K", p.comparison.fivekPercentile]].map(([label, pct]) => (
-              <div key={label as string} className="flex items-center gap-3">
-                <span className="w-28 text-xs" style={{ color: "var(--ink-muted)" }}>{label}</span>
-                <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "var(--surface-2)" }}>
-                  <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--series-1)" }} />
-                </div>
-                <span className="text-sm tabular-nums font-medium w-24 text-right">{pct}th %ile</span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
+      {/* Peer percentile panel removed: ranking teenagers against teammates on
+          volume and predicted times is social-comparison pressure in a sport with
+          elevated disordered-eating risk, and it penalises later-maturing
+          athletes for being biologically younger. */}
 
       <Panel title="Achievement badges">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

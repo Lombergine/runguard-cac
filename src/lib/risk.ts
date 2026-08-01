@@ -333,6 +333,121 @@ export function summarizeSelfReport(
   };
 }
 
+/* ---------------- single-session spikes ---------------- */
+
+/**
+ * The one load pattern that survives scrutiny in runners.
+ *
+ * The Garmin-RUNSAFE cohort (5,205 runners, 588,071 sessions, 1,311 overuse
+ * injuries) found no association between injury and either the acute:chronic
+ * workload ratio or week-to-week volume ratios — but single sessions markedly
+ * longer than the runner's recent longest did carry elevated risk.
+ *
+ * So this compares one run against the longest single run before it, and is
+ * reported against that run rather than against the athlete. Nothing here feeds
+ * a score: it is a warning attached to a specific session, naming the specific
+ * thing that could have been done differently.
+ *
+ * Provenance caveat the UI copy must preserve: that cohort had a mean age of
+ * 45.8. Nothing equivalent has been shown in adolescents.
+ */
+export type SessionSpike = {
+  km: number;
+  /** longest single run in the window before this one */
+  longestKm: number;
+  /** how much longer this run was, as a percentage */
+  pctAbove: number;
+  level: "notable" | "large";
+};
+
+const SPIKE_WINDOW_DAYS = 30;
+/** below this the comparison is noise, not a spike */
+const SPIKE_MIN_PCT = 25;
+const SPIKE_LARGE_PCT = 50;
+/** ignore short runs — 30% more than a 2 km jog is not a risk event */
+const SPIKE_MIN_KM = 5;
+
+/**
+ * Rate one activity against the athlete's own recent history.
+ * `history` may contain the activity itself; it is excluded.
+ * Returns null when the run is unremarkable or there is nothing to compare to.
+ */
+export function sessionSpike(
+  activity: ActivityRow,
+  history: ActivityRow[]
+): SessionSpike | null {
+  const km = activity.distance_m / 1000;
+  if (km < SPIKE_MIN_KM) return null;
+
+  const at = new Date(activity.start_time);
+  const day = localDay(at);
+  const from = localDay(new Date(at.getTime() - SPIKE_WINDOW_DAYS * DAY_MS));
+
+  let longestKm = 0;
+  for (const a of history) {
+    if (a === activity || a.id === activity.id) continue;
+    const d = localDay(new Date(a.start_time));
+    if (d < from || d > day) continue; // only what was already known by then
+    longestKm = Math.max(longestKm, a.distance_m / 1000);
+  }
+  if (longestKm <= 0) return null; // nothing to compare against yet
+
+  const pctAbove = ((km - longestKm) / longestKm) * 100;
+  if (pctAbove < SPIKE_MIN_PCT) return null;
+
+  return {
+    km: round(km),
+    longestKm: round(longestKm),
+    pctAbove: Math.round(pctAbove),
+    level: pctAbove >= SPIKE_LARGE_PCT ? "large" : "notable",
+  };
+}
+
+/* ---------------- energy trend ---------------- */
+
+/** One dated check-in energy rating, as stored in `checkins`. */
+export type EnergyReport = { date: string; energy: number | null };
+
+/**
+ * A run of consecutive check-ins where reported energy is falling. Not a score —
+ * a pattern worth a conversation ("energy has dropped four days running").
+ * Self-report is the most sensitive signal available here, so the trend is worth
+ * surfacing even where the absolute level is not.
+ */
+export type EnergyTrend = {
+  /** consecutive reports in the decline, counting the first */
+  days: number;
+  from: number;
+  to: number;
+};
+
+export function detectEnergyDecline(
+  reports: EnergyReport[],
+  now: Date = new Date()
+): EnergyTrend | null {
+  const from = localDay(new Date(now.getTime() - 13 * DAY_MS));
+  const today = localDay(now);
+  const rated = reports
+    .filter((r) => r.energy != null && r.date >= from && r.date <= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (rated.length < 3) return null;
+
+  // walk back from the most recent while each report is lower than the one before
+  let days = 1;
+  for (let i = rated.length - 1; i > 0; i--) {
+    if ((rated[i].energy as number) < (rated[i - 1].energy as number)) days++;
+    else break;
+  }
+  if (days < 3) return null;
+
+  const slice = rated.slice(rated.length - days);
+  return {
+    days,
+    from: slice[0].energy as number,
+    to: slice[slice.length - 1].energy as number,
+  };
+}
+
 export function computeRisk(
   activities: ActivityRow[],
   metrics: MetricRow[] = [],

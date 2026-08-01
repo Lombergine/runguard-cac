@@ -4,10 +4,9 @@ import { buildProfile } from "@/lib/profile";
 import { getAthlete } from "@/lib/db";
 import { currentTeamId } from "@/lib/session";
 import { coachWhy } from "@/lib/chat";
-import RiskBadge from "@/components/RiskBadge";
 import Avatar from "@/components/Avatar";
 import { AcwrChart, LoadChart, WeeklyKmChart } from "@/components/charts";
-import { RecoverySnapshot, type RiskSnapshot } from "@/lib/risk";
+import { RecoverySnapshot, type RiskSnapshot, type EnergyTrend } from "@/lib/risk";
 import IntensityCalendar from "@/components/IntensityCalendar";
 import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
@@ -51,13 +50,17 @@ export default async function AthletePage({
 
   const first = p.athlete.name.split(" ")[0];
   const flagColor =
-    p.risk.zone === "high"
+    p.prePractice.flag === "unusual"
       ? "var(--status-critical)"
-      : p.risk.zone === "caution"
+      : p.prePractice.flag === "watch"
         ? "var(--status-warning)"
         : "var(--status-good)";
   const flagLabel =
-    p.risk.zone === "high" ? "High risk" : p.risk.zone === "caution" ? "Elevated" : "All clear";
+    p.prePractice.flag === "unusual"
+      ? "Worth a look"
+      : p.prePractice.flag === "watch"
+        ? "Check in with them"
+        : "Nothing standing out";
 
   return (
     <div className="space-y-6">
@@ -75,19 +78,7 @@ export default async function AthletePage({
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Gauge
-            value={p.risk.score}
-            color={
-              p.risk.zone === "high"
-                ? "var(--status-critical)"
-                : p.risk.zone === "caution"
-                  ? "var(--status-warning)"
-                  : "var(--status-good)"
-            }
-            size={76}
-            label="risk"
-          />
-          <RiskBadge zone={p.risk.zone} size="lg" />
+          <Gauge value={p.readiness} color={flagColor} size={76} label="readiness" />
         </div>
       </div>
 
@@ -195,7 +186,7 @@ function CoachView({
         <CStat
           label="Ramp"
           value={p.risk.rampPct !== null ? `${p.risk.rampPct > 0 ? "+" : ""}${p.risk.rampPct}%` : "—"}
-          info="Week-over-week change in distance: the last 7 days against the 7 before. Jumps over +30% start adding to the risk score. Blank if the previous week was under 3 km — too little to compare against."
+          info="Week-over-week change in distance: the last 7 days against the 7 before. Shown for context only — in a cohort of 5,205 runners, week-to-week ratios like this had no association with injury. Blank if the previous week was under 3 km."
         />
         <CStat
           label="Week TRIMP"
@@ -205,14 +196,14 @@ function CoachView({
         <CStat
           label="Days since rest"
           value={String(p.risk.daysSinceRest)}
-          info="Consecutive training days counting back from today; only a near-zero day breaks the streak. 10 or more in a row adds to the risk score — adaptation happens in recovery."
+          info="Consecutive training days counting back from today; only a near-zero day breaks the streak. Adaptation happens in recovery, so long unbroken runs of training days are worth noticing."
         />
       </div>
 
       <RecoveryPanel recovery={p.risk.recovery} />
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Injury risk ratio (60 days)" note="Shaded band = safe zone 0.8–1.3 · dashed = danger 1.5">
+        <Panel title="Workload ratio (60 days)" note="context only — this ratio showed no link to injury in a 5,205-runner study">
           <AcwrChart data={p.series.slice(-60)} />
         </Panel>
         <Panel title="Training load (60 days)">
@@ -287,6 +278,7 @@ function CoachView({
           self={p.risk.selfReport}
           todayCheckin={p.todayCheckin}
           todaySoreness={p.todaySoreness}
+          energyTrend={p.energyTrend}
         />
       </Panel>
 
@@ -299,13 +291,7 @@ function CoachView({
                 {p.races.upcoming[0].name} · {p.races.upcoming[0].event}
               </p>
               {p.risk.hasActivityHistory ? (
-                <p>
-                  Race readiness:{" "}
-                  <span className="font-bold tabular-nums" style={{ color: p.races.upcoming[0].readiness >= 70 ? "var(--status-good)" : p.races.upcoming[0].readiness >= 40 ? "var(--status-warning)" : "var(--status-critical)" }}>
-                    {p.races.upcoming[0].readiness}/100
-                  </span>{" "}
-                  · predicted {p.races.upcoming[0].predicted}
-                </p>
+                <p>Predicted {p.races.upcoming[0].predicted}</p>
               ) : (
                 <p style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a readiness/prediction estimate.</p>
               )}
@@ -374,15 +360,33 @@ function SelfReportPanel({
   self,
   todayCheckin,
   todaySoreness,
+  energyTrend,
 }: {
   self: RiskSnapshot["selfReport"];
   todayCheckin: { energy: number | null; rpe: number | null; academic_stress: number | null } | null;
   todaySoreness: { part: string; severity: number }[];
+  energyTrend: EnergyTrend | null;
 }) {
   const persistent = self.persistentPart && self.persistentDays >= 3;
 
   return (
     <div className="space-y-3">
+      {energyTrend && (
+        <div
+          className="rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed"
+          style={{
+            borderColor: "color-mix(in oklab, var(--status-warning) 45%, transparent)",
+            background: "color-mix(in oklab, var(--status-warning) 8%, var(--surface))",
+            color: "var(--ink-2)",
+          }}
+        >
+          <span className="font-semibold" style={{ color: "var(--ink)" }}>
+            Reported energy has fallen {energyTrend.days} check-ins running
+          </span>
+          , {energyTrend.from}/10 down to {energyTrend.to}/10. Not a number to act on by itself — a
+          pattern worth asking about.
+        </div>
+      )}
       {persistent && (
         <div
           className="rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed"

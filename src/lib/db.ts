@@ -164,6 +164,43 @@ function init(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_metrics_athlete_date
       ON health_metrics(athlete_id, date);
+
+    -- One row per athlete per day: what the engine saw, kept even though none of
+    -- it is shown as a score any more.
+    --
+    -- The engine recomputes from scratch on every request, so without this the
+    -- state preceding an injury is unrecoverable. Paired with the injuries
+    -- table these rows are the only thing that could ever justify a real score:
+    -- a season of them, labelled by what actually happened to these athletes,
+    -- is what a future model would be fitted on instead of borrowed coefficients
+    -- from a cohort of middle-aged Danes.
+    CREATE TABLE IF NOT EXISTS risk_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,             -- YYYY-MM-DD the features describe
+      acwr REAL,
+      ramp_pct REAL,
+      monotony REAL,
+      days_since_rest INTEGER,
+      week_km REAL,
+      rhr_delta REAL,
+      hrv_delta_pct REAL,
+      sleep_avg REAL,
+      soreness_max REAL,
+      soreness_days_7 INTEGER,
+      energy REAL,
+      readiness INTEGER,
+      -- the one load pattern the running evidence supports
+      spike_pct_above REAL,           -- null = no spike that day
+      spike_km REAL,
+      hr_max REAL,
+      hr_max_source TEXT,
+      legacy_risk_score INTEGER,      -- kept for comparison, never displayed
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(athlete_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
+      ON risk_snapshots(athlete_id, date);
   `);
   // additive migrations for columns introduced after first release
   const addColumn = (table: string, ddl: string) => {
@@ -729,4 +766,65 @@ export function setAthleteHrMax(
   getDb()
     .prepare("UPDATE athletes SET hr_max = ?, hr_max_source = ? WHERE id = ?")
     .run(hrMax, hrMax === null ? null : source, athleteId);
+}
+
+
+/* ---------------- daily snapshots ---------------- */
+
+export type RiskSnapshotRow = {
+  id: number;
+  athlete_id: number;
+  date: string;
+  acwr: number | null;
+  ramp_pct: number | null;
+  monotony: number | null;
+  days_since_rest: number | null;
+  week_km: number | null;
+  rhr_delta: number | null;
+  hrv_delta_pct: number | null;
+  sleep_avg: number | null;
+  soreness_max: number | null;
+  soreness_days_7: number | null;
+  energy: number | null;
+  readiness: number | null;
+  spike_pct_above: number | null;
+  spike_km: number | null;
+  hr_max: number | null;
+  hr_max_source: string | null;
+  legacy_risk_score: number | null;
+  created_at: string;
+};
+
+/** Idempotent per (athlete, day) so backfills and re-runs converge. */
+export function upsertRiskSnapshot(s: Omit<RiskSnapshotRow, "id" | "created_at">): void {
+  getDb()
+    .prepare(
+      `INSERT INTO risk_snapshots
+         (athlete_id, date, acwr, ramp_pct, monotony, days_since_rest, week_km,
+          rhr_delta, hrv_delta_pct, sleep_avg, soreness_max, soreness_days_7,
+          energy, readiness, spike_pct_above, spike_km, hr_max, hr_max_source,
+          legacy_risk_score)
+       VALUES
+         (@athlete_id, @date, @acwr, @ramp_pct, @monotony, @days_since_rest, @week_km,
+          @rhr_delta, @hrv_delta_pct, @sleep_avg, @soreness_max, @soreness_days_7,
+          @energy, @readiness, @spike_pct_above, @spike_km, @hr_max, @hr_max_source,
+          @legacy_risk_score)
+       ON CONFLICT(athlete_id, date) DO UPDATE SET
+         acwr = excluded.acwr, ramp_pct = excluded.ramp_pct,
+         monotony = excluded.monotony, days_since_rest = excluded.days_since_rest,
+         week_km = excluded.week_km, rhr_delta = excluded.rhr_delta,
+         hrv_delta_pct = excluded.hrv_delta_pct, sleep_avg = excluded.sleep_avg,
+         soreness_max = excluded.soreness_max, soreness_days_7 = excluded.soreness_days_7,
+         energy = excluded.energy, readiness = excluded.readiness,
+         spike_pct_above = excluded.spike_pct_above, spike_km = excluded.spike_km,
+         hr_max = excluded.hr_max, hr_max_source = excluded.hr_max_source,
+         legacy_risk_score = excluded.legacy_risk_score`
+    )
+    .run(s);
+}
+
+export function allRiskSnapshots(): RiskSnapshotRow[] {
+  return getDb()
+    .prepare("SELECT * FROM risk_snapshots ORDER BY athlete_id ASC, date ASC")
+    .all() as RiskSnapshotRow[];
 }
