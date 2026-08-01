@@ -1,5 +1,6 @@
 "use client";
 
+import { localDay } from "@/lib/day";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { severityColor } from "@/lib/severityColor";
@@ -414,7 +415,6 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
         {msgs.length === 0 && (
           <div className="text-sm space-y-2 pt-2" style={{ color: "var(--ink-muted)" }}>
             <p>Ask anything about your training — I&apos;m reading your last 14 days of data automatically, and I get smarter the longer you use me.</p>
-            <p className="text-xs">Your coach can see a summary of what you&apos;ve been asking.</p>
           </div>
         )}
         {msgs.map((m, i) => (
@@ -474,6 +474,13 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
           Send
         </button>
       </form>
+      {/* Persistent, not in the empty state — it used to sit inside
+          {msgs.length === 0 && …} and vanish forever after the first message, so
+          a returning athlete never saw it. Reworded because the coach panel
+          shows the last five messages verbatim, in quotes, not a summary. */}
+      <p className="text-xs pt-2" style={{ color: "var(--ink-muted)" }}>
+        Your coach can read your last 5 messages here, word for word.
+      </p>
     </div>
   );
 }
@@ -563,7 +570,7 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
       setMsg(`Please fill in: ${missing.join(", ")}.`);
       return;
     }
-    if (date < new Date().toISOString().slice(0, 10)) {
+    if (date < localDay()) {
       setMsg("That race date is in the past — pick an upcoming date.");
       return;
     }
@@ -634,5 +641,112 @@ export function RaceEditControls({ athleteId, raceId }: { athleteId: number; rac
     >
       Remove
     </button>
+  );
+}
+
+/**
+ * Max heart rate control.
+ *
+ * Intensity for every run is scored as a fraction of this number, so it is
+ * worth getting right — but there is no reliable way to know it automatically.
+ * The athlete sees what the app is currently using and where it came from, and
+ * can override it if they know better. Clearing returns to automatic.
+ */
+export function HrMaxSetting({
+  value,
+  source,
+  label,
+}: {
+  value: number;
+  source: string;
+  label: string;
+}) {
+  const [entry, setEntry] = useState(String(value));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
+
+  const isSet = source === "manual" || source === "calibrated";
+
+  async function send(hrMax: number | null) {
+    setBusy(true);
+    setErr(null);
+    const res = await fetch("/api/hrmax", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hrMax }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      router.refresh();
+      setBusy(false);
+    } else {
+      setErr(d.error || "Couldn't save that.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="text-3xl font-extrabold tabular-nums">{value}</span>
+        <span className="text-sm" style={{ color: "var(--ink-muted)" }}>bpm · {label}</span>
+      </div>
+
+      <p className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
+        Every run&apos;s intensity is scored against this number, so it feeds your training load,
+        workload ratio and TRIMP. If you know your real max from a test or a hard race, enter it —
+        it&apos;s more accurate than anything we can infer.
+      </p>
+
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(Number(entry));
+        }}
+      >
+        <input
+          type="number"
+          inputMode="numeric"
+          value={entry}
+          onChange={(e) => setEntry(e.target.value)}
+          className="rounded-xl border px-3 py-2 text-sm w-28 tabular-nums"
+          style={{ borderColor: "var(--hairline)", background: "var(--surface-2)" }}
+          aria-label="Max heart rate in bpm"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          style={{ background: "var(--ember)", color: "#000" }}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+        {isSet && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => send(null)}
+            className="rounded-xl border px-4 py-2 text-sm disabled:opacity-50"
+            style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
+          >
+            Use automatic
+          </button>
+        )}
+      </form>
+
+      {err && <p className="text-sm" style={{ color: "var(--status-critical)" }}>{err}</p>}
+
+      <details className="text-sm" style={{ color: "var(--ink-muted)" }}>
+        <summary className="cursor-pointer">How to find your real max</summary>
+        <p className="mt-2 leading-relaxed">
+          The most accurate figure comes from an all-out effort: after a full warm-up, run hard
+          uphill for 3 minutes, jog 2 minutes, then repeat going as hard as you can to the finish.
+          The highest number your watch records is close to your true max. Do it fresh, not on tired
+          legs, and not without your coach knowing.
+        </p>
+      </details>
+    </div>
   );
 }

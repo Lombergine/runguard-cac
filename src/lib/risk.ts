@@ -1,12 +1,15 @@
+import { localDay } from "./day";
+import { HR_MAX_DEFAULT, resolveHrMax, type HrMaxResolution, type HrMaxAthlete } from "./hrmax";
 import { ActivityRow, MetricRow } from "./db";
 
 /**
  * RunGuard risk engine.
  *
  * Training load model: session load ≈ sRPE = duration (min) × intensity (1–10).
- * Intensity is estimated from average heart rate when available (as a fraction
- * of an assumed HRmax of 200 for high-schoolers), otherwise from pace, otherwise
- * a moderate default.
+ * Intensity is estimated from average heart rate when available, as a fraction
+ * of that athlete's own HRmax (see src/lib/hrmax.ts — set by them, detected from
+ * their history, or estimated from their age), otherwise from pace, otherwise a
+ * moderate default.
  *
  * ACWR (acute:chronic workload ratio) uses exponentially weighted moving
  * averages: acute ≈ 7-day, chronic ≈ 28-day (Williams et al. 2017 EWMA method).
@@ -32,10 +35,47 @@ export type RecoverySnapshot = {
   hasData: boolean;
 };
 
+/** One dated soreness report, as stored in `checkin_soreness`. */
+export type SorenessReport = {
+  date: string; // YYYY-MM-DD
+  body_part: string;
+  severity: number; // 0–10
+};
+
+/**
+ * What the athlete has been telling us, over the last 7 days rather than just
+ * today. Every other input infers strain from training data; this is the athlete
+ * directly reporting that something hurts.
+ *
+ * It contributes NO points to the score — check-ins are optional, so scoring
+ * them would rank honest reporters above quiet ones. It rides alongside the
+ * score as its own flag instead. See the self-report block in computeRisk.
+ */
+export type SelfReport = {
+  hasData: boolean;
+  /** worst severity reported today, 0 if nothing reported */
+  todayMax: number;
+  /** the body part carrying that worst severity today */
+  todayPart: string | null;
+  /** the body part reported most often in the window */
+  persistentPart: string | null;
+  /** how many distinct days that part was reported sore, last 7 */
+  persistentDays: number;
+  /** peak severity for that part in the window */
+  persistentPeak: number;
+  /** true when that part's severity is trending upward across its reports */
+  escalating: boolean;
+  /** days since any check-in at all — null if never */
+  daysSinceReport: number | null;
+};
+
 export type RiskSnapshot = {
   score: number; // 0–100
   zone: "ready" | "caution" | "high";
   zoneLabel: string;
+  selfReport: SelfReport;
+  /** the max heart rate every intensity in this snapshot was scored against */
+  hrMax: HrMaxResolution;
   acwr: number | null;
   acute: number;
   chronic: number;
@@ -63,13 +103,13 @@ export const NOT_ENOUGH_ACWR_HISTORY =
   "Not enough training history yet for a reliable workload ratio — sync more data or give it a couple of weeks.";
 
 export function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return localDay(d);
 }
 
-export function estimateIntensity(a: ActivityRow): number {
+export function estimateIntensity(a: ActivityRow, hrMax: number = HR_MAX_DEFAULT): number {
   if (a.avg_hr && a.avg_hr > 60) {
-    // % of assumed HRmax 200 → map 50%..95% to 2..10
-    const pct = Math.min(0.98, a.avg_hr / 200);
+    // % of this athlete's own HRmax → map 50%..95% to 2..10
+    const pct = Math.min(0.98, a.avg_hr / hrMax);
     return Math.max(1, Math.min(10, ((pct - 0.5) / 0.45) * 8 + 2));
   }
   if (a.distance_m > 0 && a.duration_s > 0) {
@@ -81,16 +121,17 @@ export function estimateIntensity(a: ActivityRow): number {
   return 5;
 }
 
-export function sessionLoad(a: ActivityRow): number {
+export function sessionLoad(a: ActivityRow, hrMax: number = HR_MAX_DEFAULT): number {
   const minutes = a.duration_s / 60;
-  return minutes * estimateIntensity(a);
+  return minutes * estimateIntensity(a, hrMax);
 }
 
 /** Group activities into per-day loads over the trailing `days` window ending at `end`. */
 export function dailySeries(
   activities: ActivityRow[],
   days: number,
-  end: Date = new Date()
+  end: Date = new Date(),
+  hrMax: number = HR_MAX_DEFAULT
 ): DayLoad[] {
   const map = new Map<string, DayLoad>();
   for (let i = days - 1; i >= 0; i--) {
@@ -98,10 +139,13 @@ export function dailySeries(
     map.set(d, { date: d, load: 0, km: 0, minutes: 0 });
   }
   for (const a of activities) {
-    const d = a.start_time.slice(0, 10);
+    // Bucket by the local calendar day the run happened on. The map keys are
+    // local days and `start_time` is a UTC timestamp, so slicing its string
+    // would file an evening run under tomorrow.
+    const d = localDay(new Date(a.start_time));
     const slot = map.get(d);
     if (!slot) continue;
-    slot.load += sessionLoad(a);
+    slot.load += sessionLoad(a, hrMax);
     slot.km += a.distance_m / 1000;
     slot.minutes += a.duration_s / 60;
   }
@@ -209,12 +253,213 @@ export function computeRecovery(
   };
 }
 
+/**
+ * Collapse a window of soreness reports into the handful of things that matter:
+ * how bad it is today, and whether one area keeps coming back and getting worse.
+ * A single sore day is noise. The same shin, five days running, climbing from
+ * 4 to 7, is how a running injury announces itself.
+ */
+export function summarizeSelfReport(
+  reports: SorenessReport[],
+  now: Date = new Date()
+): SelfReport {
+  const empty: SelfReport = {
+    hasData: false,
+    todayMax: 0,
+    todayPart: null,
+    persistentPart: null,
+    persistentDays: 0,
+    persistentPeak: 0,
+    escalating: false,
+    daysSinceReport: null,
+  };
+  if (!reports.length) return empty;
+
+  const today = isoDay(now);
+  const from = isoDay(new Date(now.getTime() - 6 * DAY_MS));
+  const window = reports.filter((r) => r.date >= from && r.date <= today);
+
+  const lastDate = reports.reduce((m, r) => (r.date > m ? r.date : m), reports[0].date);
+  const daysSinceReport = Math.max(
+    0,
+    Math.round((new Date(today + "T12:00:00").getTime() - new Date(lastDate + "T12:00:00").getTime()) / DAY_MS)
+  );
+  if (!window.length) return { ...empty, hasData: true, daysSinceReport };
+
+  const todays = window.filter((r) => r.date === today);
+  const todayWorst = todays.reduce<SorenessReport | null>(
+    (m, r) => (!m || r.severity > m.severity ? r : m),
+    null
+  );
+
+  // the part reported on the most distinct days; ties broken by peak severity
+  const byPart = new Map<string, SorenessReport[]>();
+  for (const r of window) {
+    if (r.severity <= 0) continue;
+    byPart.set(r.body_part, [...(byPart.get(r.body_part) ?? []), r]);
+  }
+  let persistentPart: string | null = null;
+  let best: SorenessReport[] = [];
+  for (const [part, rs] of byPart) {
+    const days = new Set(rs.map((r) => r.date)).size;
+    const bestDays = new Set(best.map((r) => r.date)).size;
+    const peak = Math.max(...rs.map((r) => r.severity));
+    const bestPeak = best.length ? Math.max(...best.map((r) => r.severity)) : -1;
+    if (days > bestDays || (days === bestDays && peak > bestPeak)) {
+      persistentPart = part;
+      best = rs;
+    }
+  }
+
+  // escalating = the mean of the later half of that part's reports is at least a
+  // point above the earlier half. Needs 3+ reports so one bad morning can't fire it.
+  let escalating = false;
+  if (best.length >= 3) {
+    const ordered = [...best].sort((a, b) => a.date.localeCompare(b.date));
+    const mid = Math.floor(ordered.length / 2);
+    const mean = (xs: SorenessReport[]) => xs.reduce((s, r) => s + r.severity, 0) / xs.length;
+    escalating = mean(ordered.slice(mid)) - mean(ordered.slice(0, mid)) >= 1;
+  }
+
+  return {
+    hasData: true,
+    todayMax: todayWorst?.severity ?? 0,
+    todayPart: todayWorst?.body_part ?? null,
+    persistentPart,
+    persistentDays: best.length ? new Set(best.map((r) => r.date)).size : 0,
+    persistentPeak: best.length ? Math.max(...best.map((r) => r.severity)) : 0,
+    escalating,
+    daysSinceReport,
+  };
+}
+
+/* ---------------- single-session spikes ---------------- */
+
+/**
+ * The one load pattern that survives scrutiny in runners.
+ *
+ * The Garmin-RUNSAFE cohort (5,205 runners, 588,071 sessions, 1,311 overuse
+ * injuries) found no association between injury and either the acute:chronic
+ * workload ratio or week-to-week volume ratios — but single sessions markedly
+ * longer than the runner's recent longest did carry elevated risk.
+ *
+ * So this compares one run against the longest single run before it, and is
+ * reported against that run rather than against the athlete. Nothing here feeds
+ * a score: it is a warning attached to a specific session, naming the specific
+ * thing that could have been done differently.
+ *
+ * Provenance caveat the UI copy must preserve: that cohort had a mean age of
+ * 45.8. Nothing equivalent has been shown in adolescents.
+ */
+export type SessionSpike = {
+  km: number;
+  /** longest single run in the window before this one */
+  longestKm: number;
+  /** how much longer this run was, as a percentage */
+  pctAbove: number;
+  level: "notable" | "large";
+};
+
+const SPIKE_WINDOW_DAYS = 30;
+/** below this the comparison is noise, not a spike */
+const SPIKE_MIN_PCT = 25;
+const SPIKE_LARGE_PCT = 50;
+/** ignore short runs — 30% more than a 2 km jog is not a risk event */
+const SPIKE_MIN_KM = 5;
+
+/**
+ * Rate one activity against the athlete's own recent history.
+ * `history` may contain the activity itself; it is excluded.
+ * Returns null when the run is unremarkable or there is nothing to compare to.
+ */
+export function sessionSpike(
+  activity: ActivityRow,
+  history: ActivityRow[]
+): SessionSpike | null {
+  const km = activity.distance_m / 1000;
+  if (km < SPIKE_MIN_KM) return null;
+
+  const at = new Date(activity.start_time);
+  const day = localDay(at);
+  const from = localDay(new Date(at.getTime() - SPIKE_WINDOW_DAYS * DAY_MS));
+
+  let longestKm = 0;
+  for (const a of history) {
+    if (a === activity || a.id === activity.id) continue;
+    const d = localDay(new Date(a.start_time));
+    if (d < from || d > day) continue; // only what was already known by then
+    longestKm = Math.max(longestKm, a.distance_m / 1000);
+  }
+  if (longestKm <= 0) return null; // nothing to compare against yet
+
+  const pctAbove = ((km - longestKm) / longestKm) * 100;
+  if (pctAbove < SPIKE_MIN_PCT) return null;
+
+  return {
+    km: round(km),
+    longestKm: round(longestKm),
+    pctAbove: Math.round(pctAbove),
+    level: pctAbove >= SPIKE_LARGE_PCT ? "large" : "notable",
+  };
+}
+
+/* ---------------- energy trend ---------------- */
+
+/** One dated check-in energy rating, as stored in `checkins`. */
+export type EnergyReport = { date: string; energy: number | null };
+
+/**
+ * A run of consecutive check-ins where reported energy is falling. Not a score —
+ * a pattern worth a conversation ("energy has dropped four days running").
+ * Self-report is the most sensitive signal available here, so the trend is worth
+ * surfacing even where the absolute level is not.
+ */
+export type EnergyTrend = {
+  /** consecutive reports in the decline, counting the first */
+  days: number;
+  from: number;
+  to: number;
+};
+
+export function detectEnergyDecline(
+  reports: EnergyReport[],
+  now: Date = new Date()
+): EnergyTrend | null {
+  const from = localDay(new Date(now.getTime() - 13 * DAY_MS));
+  const today = localDay(now);
+  const rated = reports
+    .filter((r) => r.energy != null && r.date >= from && r.date <= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (rated.length < 3) return null;
+
+  // walk back from the most recent while each report is lower than the one before
+  let days = 1;
+  for (let i = rated.length - 1; i > 0; i--) {
+    if ((rated[i].energy as number) < (rated[i - 1].energy as number)) days++;
+    else break;
+  }
+  if (days < 3) return null;
+
+  const slice = rated.slice(rated.length - days);
+  return {
+    days,
+    from: slice[0].energy as number,
+    to: slice[slice.length - 1].energy as number,
+  };
+}
+
 export function computeRisk(
   activities: ActivityRow[],
   metrics: MetricRow[] = [],
-  now: Date = new Date()
+  now: Date = new Date(),
+  soreness: SorenessReport[] = [],
+  athlete: HrMaxAthlete | null = null
 ): RiskSnapshot & { series: DailyPoint[] } {
-  const daily = dailySeries(activities, 120, now);
+  // Resolved here rather than passed in, so every caller gets a per-athlete
+  // value without threading it through. `athlete` only refines the answer (a
+  // manually-set figure, or their age); history alone is usually enough.
+  const hrMax = resolveHrMax(athlete, activities);
+  const daily = dailySeries(activities, 120, now, hrMax.value);
   const series = acwrSeries(daily);
   const last = series[series.length - 1];
 
@@ -334,6 +579,43 @@ export function computeRisk(
     );
   }
 
+  // ----- what the athlete has actually told us -----
+  // Deliberately scores ZERO points. Check-ins are optional, so an athlete who
+  // never logs would otherwise look healthier than one who reports honestly —
+  // and since a high score gets you pulled from practice, folding soreness into
+  // the number teaches athletes to stop reporting it. Worse, the roster sorts
+  // by score, so it would rank diligent reporters above quiet ones rather than
+  // ranking by actual risk.
+  //
+  // So the score stays objective (load + recovery, always present) and the
+  // self-report travels alongside it as its own flag. The two are read
+  // together by the coach instead of being averaged into one misleading number.
+  // If the check-in ever becomes a required one-tap "nothing hurts", a reported
+  // zero becomes a fact rather than missing data, and this can be revisited.
+  const self = summarizeSelfReport(soreness, now);
+
+  if (self.persistentPart && self.persistentDays >= 3) {
+    insights.push(
+      `The ${self.persistentPart} has been reported sore on ${self.persistentDays} of the last 7 days (peak ${self.persistentPeak}/10)${self.escalating ? ", and it is getting worse rather than settling" : ""}. Soreness that keeps returning to one area is how a running injury usually starts — worth assessing regardless of what the load numbers say.`
+    );
+  } else if (self.todayMax >= 6) {
+    insights.push(
+      `Reported soreness ${self.todayMax}/10 in the ${self.todayPart} today.`
+    );
+  }
+
+  // Absence of a report is not the same as absence of pain — say so rather than
+  // letting a silent week look like a clean one.
+  if (!self.hasData) {
+    insights.push(
+      "No check-ins on record — nothing is known about how this athlete actually feels."
+    );
+  } else if ((self.daysSinceReport ?? 0) >= 5) {
+    insights.push(
+      `No check-in for ${self.daysSinceReport} days, so there is no current self-reported picture.`
+    );
+  }
+
   score = Math.max(0, Math.min(100, Math.round(score)));
   const zone: RiskSnapshot["zone"] =
     score >= 60 ? "high" : score >= 30 ? "caution" : "ready";
@@ -350,6 +632,8 @@ export function computeRisk(
     score,
     zone,
     zoneLabel: zone === "high" ? "High risk" : zone === "caution" ? "Caution" : "Ready",
+    selfReport: self,
+    hrMax,
     acwr: acwr !== null ? round(acwr, 2) : null,
     acute: round(last?.acute ?? 0),
     chronic: round(last?.chronic ?? 0),

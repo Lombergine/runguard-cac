@@ -1,3 +1,4 @@
+import { localDay } from "./day";
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
@@ -140,6 +141,13 @@ function init(): Database.Database {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- chatSummary() reads this on EVERY athlete page render, not just chat, so the
+    -- unindexed scan sat on the dashboard's hot path. Cost without it depends on
+    -- rowid position, which makes the worst case a dormant athlete — exactly the
+    -- one a coach opens.
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_athlete_id
+      ON chat_messages(athlete_id, id);
+
     CREATE TABLE IF NOT EXISTS workout_status (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
@@ -163,14 +171,58 @@ function init(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_metrics_athlete_date
       ON health_metrics(athlete_id, date);
+
+    -- One row per athlete per day: what the engine saw, kept even though none of
+    -- it is shown as a score any more.
+    --
+    -- The engine recomputes from scratch on every request, so without this the
+    -- state preceding an injury is unrecoverable. Paired with the injuries
+    -- table these rows are the only thing that could ever justify a real score:
+    -- a season of them, labelled by what actually happened to these athletes,
+    -- is what a future model would be fitted on instead of borrowed coefficients
+    -- from a cohort of middle-aged Danes.
+    CREATE TABLE IF NOT EXISTS risk_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,             -- YYYY-MM-DD the features describe
+      acwr REAL,
+      ramp_pct REAL,
+      monotony REAL,
+      days_since_rest INTEGER,
+      week_km REAL,
+      rhr_delta REAL,
+      hrv_delta_pct REAL,
+      sleep_avg REAL,
+      soreness_max REAL,
+      soreness_days_7 INTEGER,
+      energy REAL,
+      readiness INTEGER,
+      -- the one load pattern the running evidence supports
+      spike_pct_above REAL,           -- null = no spike that day
+      spike_km REAL,
+      hr_max REAL,
+      hr_max_source TEXT,
+      legacy_risk_score INTEGER,      -- kept for comparison, never displayed
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(athlete_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
+      ON risk_snapshots(athlete_id, date);
   `);
-  // additive migrations for columns introduced after first release
+  // Additive migrations for columns introduced after first release.
+  //
+  // Checked rather than caught, deliberately. SQLite gives "duplicate column name"
+  // and "no such table" the same error code, so a bare catch could not tell an
+  // already-applied migration from a typo'd table name even in principle — and it
+  // swallowed SQLITE_READONLY and SQLITE_BUSY too, which then surfaced much later
+  // as an unrelated 500. pragma_table_info on a missing table returns empty rather
+  // than throwing, so a real fault still propagates from the ALTER.
   const addColumn = (table: string, ddl: string) => {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
-    } catch {
-      // column already exists
-    }
+    const col = ddl.split(/\s+/)[0];
+    const has = db
+      .prepare("SELECT 1 FROM pragma_table_info(?) WHERE name = ?")
+      .get(table, col);
+    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
   };
   addColumn("health_metrics", "spo2 REAL");            // %
   addColumn("health_metrics", "wrist_temp REAL");      // deviation °C
@@ -187,6 +239,14 @@ function init(): Database.Database {
   addColumn("injuries", "resolved_at TEXT");           // null = still active
   addColumn("races", "created_by_athlete_id INTEGER REFERENCES athletes(id)"); // null = coach/seed-created
   addColumn("races", "team_id INTEGER REFERENCES teams(id)");
+  // Max heart rate. null = the athlete hasn't set one, so it gets resolved from
+  // their workout history or their age at read time — see src/lib/hrmax.ts.
+  addColumn("athletes", "hr_max REAL");
+  addColumn("athletes", "hr_max_source TEXT"); // 'manual' | 'calibrated'
+  // Which path produced a chat row: 'rules' | 'safety:<id>'. Written on BOTH the
+  // user and assistant rows of a safety-intercepted exchange, which is what lets
+  // chatSummary keep those disclosures off the coach's screen.
+  addColumn("chat_messages", "engine TEXT");
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_races_created_by ON races(created_by_athlete_id);
     CREATE INDEX IF NOT EXISTS idx_races_team ON races(team_id);
@@ -249,6 +309,8 @@ export type AthleteRow = {
   team_id: number | null;
   email: string | null;
   password_hash: string | null;
+  hr_max: number | null;
+  hr_max_source: string | null; // 'manual' | 'calibrated'; null = resolve automatically
 };
 
 export type TeamRow = {
@@ -461,7 +523,7 @@ export type InjuryRow = {
 export type GoalRow = { id: number; athlete_id: number; event: string; target: number };
 
 export function upcomingRaces(scope: { athleteId: number; teamId: number | null }): RaceRow[] {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   return getDb()
     .prepare(
       `SELECT * FROM races WHERE date >= ?
@@ -699,4 +761,88 @@ export function insertActivity(a: {
       ...a,
     });
   return res.changes > 0;
+}
+
+/** Every soreness report in a window. `checkin_soreness` has always stored the
+ *  full dated history and is indexed for it, but until now only the single
+ *  current day was ever read back. */
+export function sorenessHistory(athleteId: number, sinceIso: string): CheckinSorenessRow[] {
+  return getDb()
+    .prepare(
+      "SELECT * FROM checkin_soreness WHERE athlete_id = ? AND date >= ? ORDER BY date ASC, severity DESC"
+    )
+    .all(athleteId, sinceIso) as CheckinSorenessRow[];
+}
+
+/** Set (or clear) an athlete's max heart rate. Passing null for `hrMax` clears
+ *  the stored value so it falls back to automatic resolution. */
+export function setAthleteHrMax(
+  athleteId: number,
+  hrMax: number | null,
+  source: "manual" | "calibrated" | null
+): void {
+  getDb()
+    .prepare("UPDATE athletes SET hr_max = ?, hr_max_source = ? WHERE id = ?")
+    .run(hrMax, hrMax === null ? null : source, athleteId);
+}
+
+
+/* ---------------- daily snapshots ---------------- */
+
+export type RiskSnapshotRow = {
+  id: number;
+  athlete_id: number;
+  date: string;
+  acwr: number | null;
+  ramp_pct: number | null;
+  monotony: number | null;
+  days_since_rest: number | null;
+  week_km: number | null;
+  rhr_delta: number | null;
+  hrv_delta_pct: number | null;
+  sleep_avg: number | null;
+  soreness_max: number | null;
+  soreness_days_7: number | null;
+  energy: number | null;
+  readiness: number | null;
+  spike_pct_above: number | null;
+  spike_km: number | null;
+  hr_max: number | null;
+  hr_max_source: string | null;
+  legacy_risk_score: number | null;
+  created_at: string;
+};
+
+/** Idempotent per (athlete, day) so backfills and re-runs converge. */
+export function upsertRiskSnapshot(s: Omit<RiskSnapshotRow, "id" | "created_at">): void {
+  getDb()
+    .prepare(
+      `INSERT INTO risk_snapshots
+         (athlete_id, date, acwr, ramp_pct, monotony, days_since_rest, week_km,
+          rhr_delta, hrv_delta_pct, sleep_avg, soreness_max, soreness_days_7,
+          energy, readiness, spike_pct_above, spike_km, hr_max, hr_max_source,
+          legacy_risk_score)
+       VALUES
+         (@athlete_id, @date, @acwr, @ramp_pct, @monotony, @days_since_rest, @week_km,
+          @rhr_delta, @hrv_delta_pct, @sleep_avg, @soreness_max, @soreness_days_7,
+          @energy, @readiness, @spike_pct_above, @spike_km, @hr_max, @hr_max_source,
+          @legacy_risk_score)
+       ON CONFLICT(athlete_id, date) DO UPDATE SET
+         acwr = excluded.acwr, ramp_pct = excluded.ramp_pct,
+         monotony = excluded.monotony, days_since_rest = excluded.days_since_rest,
+         week_km = excluded.week_km, rhr_delta = excluded.rhr_delta,
+         hrv_delta_pct = excluded.hrv_delta_pct, sleep_avg = excluded.sleep_avg,
+         soreness_max = excluded.soreness_max, soreness_days_7 = excluded.soreness_days_7,
+         energy = excluded.energy, readiness = excluded.readiness,
+         spike_pct_above = excluded.spike_pct_above, spike_km = excluded.spike_km,
+         hr_max = excluded.hr_max, hr_max_source = excluded.hr_max_source,
+         legacy_risk_score = excluded.legacy_risk_score`
+    )
+    .run(s);
+}
+
+export function allRiskSnapshots(): RiskSnapshotRow[] {
+  return getDb()
+    .prepare("SELECT * FROM risk_snapshots ORDER BY athlete_id ASC, date ASC")
+    .all() as RiskSnapshotRow[];
 }

@@ -1,3 +1,4 @@
+import { localDay } from "@/lib/day";
 import { resolveAthlete } from "@/lib/apiAuth";
 import { getDb } from "@/lib/db";
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
       athlete.id,
       typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
         ? body.date
-        : new Date().toISOString().slice(0, 10),
+        : localDay(),
       bodyPart,
       typeof body.note === "string" ? body.note.slice(0, 300) : null
     );
@@ -35,7 +36,7 @@ export async function PATCH(request: Request) {
       ? null
       : typeof body.resolvedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.resolvedAt)
         ? body.resolvedAt
-        : new Date().toISOString().slice(0, 10);
+        : localDay();
 
   // athlete_id in the WHERE keeps a coach from editing another athlete's record
   const res = getDb()

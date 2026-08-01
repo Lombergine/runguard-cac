@@ -4,27 +4,77 @@
  * Not a chatbot with canned lines: a scored intent engine with real
  * sports-science knowledge (ACWR research, 80/20 training, taper science,
  * injury red-flag screening, sleep/recovery physiology, race execution),
- * where EVERY answer is grounded in the athlete's own numbers. If
- * ANTHROPIC_API_KEY is set, Claude answers with the same knowledge and the
- * athlete's live data as context; otherwise this engine handles it.
+ * where EVERY answer is grounded in the athlete's own numbers.
+ *
+ * Everything here runs on this machine. No athlete data leaves it.
+ *
+ * Deterministic safety intercepts run BEFORE this engine, in the chat route —
+ * see src/lib/safety.ts, which also owns the copy for the weight, menstrual and
+ * cardiac intents below so there is one version of each.
  */
 import { getDb } from "./db";
 import { CoreProfile } from "./profile";
 import { fmtTime, EventName, EVENTS } from "./engine";
 import { FACTS, KNOWLEDGE_FOR_PROMPT } from "./knowledge";
+import {
+  WEIGHT_PATTERNS,
+  MENSTRUAL_PATTERNS,
+  CARDIAC_PATTERNS,
+  CARDIAC_EXCLUSIONS,
+  FUELLING_CONTEXT,
+  WEIGHT_REPLY,
+  MENSTRUAL_REPLY,
+  CARDIAC_REPLY,
+  SYMPTOM_ESCALATION,
+} from "./safety";
 
-export function logChat(athleteId: number, role: "user" | "assistant", text: string): void {
+/**
+ * `engine` records which path produced the row — 'rules' or 'safety:<id>'. It is
+ * written on BOTH rows of a safety-intercepted exchange, including the athlete's
+ * own message, because that is what lets chatSummary keep the disclosure off the
+ * coach's screen.
+ */
+export function logChat(
+  athleteId: number,
+  role: "user" | "assistant",
+  text: string,
+  engine?: string
+): void {
   getDb()
-    .prepare("INSERT INTO chat_messages (athlete_id, role, text) VALUES (?, ?, ?)")
-    .run(athleteId, role, text);
+    .prepare(
+      "INSERT INTO chat_messages (athlete_id, role, text, engine) VALUES (?, ?, ?, ?)"
+    )
+    .run(athleteId, role, text, engine ?? null);
 }
 
-export function chatHistory(athleteId: number, limit = 30): { role: string; text: string }[] {
-  return (getDb()
+/** The engine tag on this athlete's most recent user message, if any. */
+export function lastUserEngine(athleteId: number): string | null {
+  const row = getDb()
     .prepare(
-      "SELECT role, text FROM chat_messages WHERE athlete_id = ? ORDER BY id DESC LIMIT ?"
+      "SELECT engine FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1"
     )
-    .all(athleteId, limit) as { role: string; text: string }[]).reverse();
+    .get(athleteId) as { engine: string | null } | undefined;
+  return row?.engine ?? null;
+}
+
+/**
+ * `includeSafety: false` drops both halves of a safety-intercepted exchange.
+ * Used when a COACH is reading an athlete's transcript — the same exclusion
+ * chatSummary applies, so the disclosure isn't simply one tab away.
+ */
+export function chatHistory(
+  athleteId: number,
+  limit = 30,
+  opts: { includeSafety?: boolean } = {}
+): { role: string; text: string }[] {
+  const includeSafety = opts.includeSafety !== false;
+  const sql = includeSafety
+    ? "SELECT role, text FROM chat_messages WHERE athlete_id = ? ORDER BY id DESC LIMIT ?"
+    : "SELECT role, text FROM chat_messages WHERE athlete_id = ? AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT ?";
+  return (getDb().prepare(sql).all(athleteId, limit) as {
+    role: string;
+    text: string;
+  }[]).reverse();
 }
 
 /* ------------------------------------------------------------------ */
@@ -63,19 +113,19 @@ export function coachWhy(p: CoreProfile): string {
     causes.push(`they logged ${worstSoreness.part} soreness at ${worstSoreness.severity}/10 today${p.todaySoreness.length > 1 ? ` (${p.todaySoreness.length} areas flagged)` : ""}`);
   if (p.patterns.highEffortStreak >= 5)
     causes.push(`${p.patterns.highEffortStreak} straight days above their typical load with no recovery day`);
-  if (p.injuries.length > 0 && r.zone !== "ready") {
+  if (p.injuries.length > 0 && causes.length > 0) {
     causes.push(`history matters here: ${p.injuries[0].body_part} (${p.injuries[0].date.slice(0, 7)})`);
   }
 
-  if (r.zone === "high") {
+  if (causes.length >= 3 || p.prePractice.flag === "unusual") {
     const top = causes.slice(0, 3).join("; ");
-    return `This athlete is in the danger zone because ${top}. This is the exact pattern that precedes most overuse injuries — the body is absorbing more stress than it can repair. Today: no intensity, cut volume hard or rest fully, and check in with them face to face before warmup.`;
+    return `Several things are stacking up here: ${top}. This is the exact pattern that precedes most overuse injuries — the body is absorbing more stress than it can repair. Today: no intensity, cut volume hard or rest fully, and check in with them face to face before warmup.`;
   }
-  if (r.zone === "caution") {
-    const top = causes.slice(0, 2).join("; ") || "load and recovery are drifting out of balance";
-    return `Elevated risk because ${top}. Not an emergency — but this is the window where one more hard day tips it. Keep today genuinely easy and skip anything explosive.`;
+  if (causes.length > 0) {
+    const top = causes.slice(0, 2).join("; ");
+    return `Worth a look: ${top}. Not an emergency — but this is the window where one more hard day tips it. Keep today genuinely easy and skip anything explosive.`;
   }
-  return `All systems normal: load ratio ${r.acwr ?? "—"} in the safe zone, recovery markers at baseline${rec.sleepAvg !== null ? `, sleeping ${rec.sleepAvg}h` : ""}. Run the plan as written.`;
+  return `Nothing standing out: recovery markers are at their baseline${rec.sleepAvg !== null ? ` and they're sleeping ${rec.sleepAvg}h` : ""}. Run the plan as written.`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,11 +170,11 @@ const INTENTS: Intent[] = [
       if (sharp || (sev !== null && sev >= 7)) {
         return `Stop — this one matters. Pain that's sharp, on one side, or focused on a single spot${part ? ` (your ${part})` : ""} is different from normal training soreness, and running through it is how a 3-day problem becomes a 6-week one. The screen I'd use: press on the spot with one finger — if there's one precise painful point, or it hurts to hop on that leg, you don't run today and you tell your coach or athletic trainer. Your data agrees: readiness is ${p.readiness}/100${p.risk.acwr !== null && p.risk.acwr > 1.3 ? ` and your load ratio is ${p.risk.acwr} — your tissue is already behind on repair` : ""}. One day off costs you nothing. Bone stress costs a season.`;
       }
-      if (p.risk.zone === "high" || (sev !== null && sev >= 5)) {
-        return `Today, no — or 20 minutes of genuine jogging at most. Here's why: your risk score is ${p.risk.score}/100${p.risk.rampPct !== null && p.risk.rampPct > 30 ? `, your mileage just jumped ${Math.round(p.risk.rampPct)}%` : ""}${p.risk.recovery.hrvDeltaPct !== null && p.risk.recovery.hrvDeltaPct <= -12 ? `, and your HRV is ${Math.abs(p.risk.recovery.hrvDeltaPct)}% below baseline` : ""}. Fitness is built when your body absorbs training, and right now it's not absorbing — it's accumulating damage. The workout you skip today is the one that lets next week's workouts count. General muscle soreness both legs equally = fine to jog easy. Anything localized = rest.`;
+      if (p.readiness < 40 || (sev !== null && sev >= 5)) {
+        return `Today, go easy — or 20 minutes of genuine jogging at most. Here's why: your readiness is ${p.readiness}/100${p.risk.rampPct !== null && p.risk.rampPct > 30 ? `, your mileage just jumped ${Math.round(p.risk.rampPct)}%` : ""}${p.risk.recovery.hrvDeltaPct !== null && p.risk.recovery.hrvDeltaPct <= -12 ? `, and your HRV is ${Math.abs(p.risk.recovery.hrvDeltaPct)}% below baseline` : ""}. Fitness is built when your body absorbs training, and right now it's not absorbing — it's accumulating damage. The workout you skip today is the one that lets next week's workouts count. General muscle soreness both legs equally = fine to jog easy. Anything localized = rest.`;
       }
-      if (p.risk.zone === "caution" || (sev !== null && sev >= 3)) {
-        return `Run, but make it honest-easy: 30–40 min at a pace where full sentences are comfortable, no strides, flat ground. Your readiness is ${p.readiness}/100 — you're carrying some fatigue but nothing structural is flagged. The rule for soreness: if it fades in the first 10 minutes of easy running, keep going. If it sharpens or changes your stride, stop and walk home — no hero points. Recheck tomorrow; easy days are what make your HRV bounce back fastest.`;
+      if (p.readiness < 65 || (sev !== null && sev >= 3)) {
+        return `Run, but make it honest-easy: 30–40 min at a pace where full sentences are comfortable, no strides, flat ground. Your readiness is ${p.readiness}/100 — you're carrying some fatigue. (Readiness is a load and recovery signal; it can't see tissue, so it's never the thing that clears a specific pain.) The rule for soreness: if it fades in the first 10 minutes of easy running, keep going. If it sharpens or changes your stride, stop and walk home — no hero points. Recheck tomorrow; easy days are what make your HRV bounce back fastest.`;
       }
       return `You're good to go — ${readinessLine(p)}, recovery signals at baseline. Normal post-workout soreness (both legs, dull, loosens up as you warm) is just adaptation talking. Do today's session as planned${p.plan.days.find((d) => d.isToday)?.type ? ` — that's "${p.plan.days.find((d) => d.isToday)!.type}"` : ""}. If anything feels sharp or one-sided mid-run, that's your cue to shut it down and tell me.`;
     },
@@ -178,23 +228,65 @@ const INTENTS: Intent[] = [
     score: (q) => hit(q, [/shin/], 3),
     answer: ({ p }) => {
       const hist = p.injuries.find((i) => /shin/i.test(i.body_part));
-      return `Shin pain is the one I take most seriously in runners your age — it lives on a spectrum from shin splints (annoying, manageable) to a stress fracture (season over). The difference: shin splints hurt in a diffuse strip along the inner shin, warm up as you run, and hit both legs; a stress reaction hurts at ONE point you can cover with a fingertip, gets worse as you run, and hurts hopping on one leg. ${hist ? `You've had shin trouble before (${hist.date.slice(0, 7)}), which makes your bones' stress history worse, not better — lower threshold for caution. ` : ""}Your load data ${p.risk.rampPct !== null && p.risk.rampPct > 30 ? `is a red flag here: mileage up ${Math.round(p.risk.rampPct)}% this week, and shin injuries are ramp injuries` : `looks ${p.risk.zone === "ready" ? "stable, which is in your favor" : "elevated, which fits the pattern"}`}. Do now: the one-finger test. Diffuse ache → cut volume ~30% for a week, run on soft surfaces, and do eccentric calf drops (3×12 daily — best shin insurance there is). One precise point or hop pain → stop running and get it looked at this week. Seriously.`;
+      return `Shin pain is the one I take most seriously in runners your age, and it's the one where I'm least willing to guess — the difference between the version that's a nuisance and the version that ends a season isn't something either of us can settle from a chat window.
+
+${hist ? `You've had shin trouble before (${hist.date.slice(0, 7)}), which lowers the threshold rather than raising it — a bone that's been stressed once has a history. ` : ""}What your load says: ${p.risk.rampPct !== null && p.risk.rampPct > 30 ? `mileage is up ${Math.round(p.risk.rampPct)}% this week, and that kind of jump is the classic setup for shin problems.` : `mileage has been steady week to week. That's worth knowing, but it doesn't make shin pain less serious — bone injuries happen at flat mileage too, so don't let a calm ramp talk either of us out of taking this seriously.`}
+
+Today: don't run on it. That costs you very little this far out from anything that matters.
+
+Tell your athletic trainer and a parent this week, and go faster than that if the pain sits at one specific spot you could cover with a fingertip, is on one leg only, gets worse as a run goes on rather than warming up, or wakes you at night or hurts when you're just sitting. Pain at rest and night pain are the two that move this to the front of the queue.
+
+When you tell them, say when it started, whether it's one spot or a strip, and whether it eases or builds over the first ten minutes. That's most of what they need to decide whether it wants an X-ray.`;
     },
   },
   {
     id: "knee",
     score: (q) => hit(q, [/knee/], 3),
-    answer: ({ p }) => `Runner's knee (pain around or under the kneecap) is usually a load + strength problem, not damage — it shows up when volume climbs faster than your hips can stabilize. Yours: ${p.risk.rampPct !== null && p.risk.rampPct > 20 ? `mileage is up ${Math.round(p.risk.rampPct)}% this week, which fits the classic cause` : `your ramp is controlled (${p.risk.rampPct ?? 0}%), so look at downhills, worn shoes, or all your runs being on the same cambered road`}. The plan: keep running if it's a dull ache that doesn't worsen mid-run, but cut downhills and add two things that fix most cases in 2–3 weeks — single-leg step-downs (2×10 each side, slow) and glute bridges. Sharp pain, swelling, clicking with pain, or pain going DOWN stairs that's getting worse → athletic trainer. Don't stretch the front of the knee and call it treatment; it's a strength issue.`,
+    answer: ({ p, q }) => {
+      // Knee pain in a 10-16 year old that is actually referred from the hip —
+      // SCFE presents this way often enough that it's the reason "my knee hurts"
+      // gets a hip exam. Thigh or groin involvement, or a limp, routes out.
+      if (/\bgroin\b|\bthigh\b|limp|walk(ing)? (funny|weird)|gave (out|way)/.test(q)) {
+        return SYMPTOM_ESCALATION;
+      }
+      return `Pain around or under the kneecap most often tracks with load and hip strength — it tends to show up when volume climbs faster than the hips can stabilise. Yours: ${p.risk.rampPct !== null && p.risk.rampPct > 20 ? `mileage is up ${Math.round(p.risk.rampPct)}% this week, which fits that pattern` : `your ramp is controlled (${p.risk.rampPct ?? 0}%), so downhills, worn shoes, or every run on the same cambered road are worth looking at`}. Two things worth starting either way: single-leg step-downs (2×10 each side, slow) and glute bridges. Cut downhills while you do.
+
+Don't run on it today, and tell your athletic trainer this week. Go sooner for sharp pain, swelling, the knee catching or giving way, pain going down stairs that's getting worse, or any pain that's actually in your thigh or groin rather than the knee itself — that last one gets checked properly at your age even when the knee is where you feel it.`;
+    },
   },
   {
     id: "achilles-calf",
     score: (q) => hit(q, [/achilles/, /\bheel\b/, /calf|calves/], 3),
-    answer: ({ p }) => `Achilles and calf issues are speed-and-hills injuries — they flare when intensity or hill volume jumps, and they hate being ignored because tendon heals slower than muscle. The test: morning stiffness that loosens with walking = early tendinopathy, very fixable now; pain that's worse DURING running or a tender lump on the tendon = needs real attention. What works (evidence is strong): eccentric heel drops — stand on a step, rise on two feet, lower slowly on one, 3×12 each side, every day for weeks, even once it feels better. Meanwhile: no hill repeats, no spikes${p.races.upcoming[0] ? ` (flats are fine for ${p.races.upcoming[0].name})` : ""}, keep easy volume if pain stays ≤3/10 and doesn't worsen run-to-run. Your current load ratio is ${p.risk.acwr ?? "—"} — ${p.risk.acwr !== null && p.risk.acwr > 1.3 ? "trim intensity this week regardless; tendons are always the first to complain when the ratio spikes" : "stable, so this is likely mechanical rather than overload"}.`,
+    answer: ({ p, q }) => {
+      // Two things that are not tendon and must not get a tendon protocol: a
+      // calf that goes hard and numb at a repeatable distance (compartment
+      // syndrome), and heel pain at the back of the heel in a still-growing
+      // athlete, where the apophysis is the weak link rather than the tendon.
+      if (/numb|rock hard|can'?t feel|goes hard|tight and numb/.test(q)) return SYMPTOM_ESCALATION;
+      const growthPlate = /\bheel\b/.test(q) && (p.athlete.grade === null || p.athlete.grade <= 10);
+      return `Achilles and calf trouble tends to be a speed-and-hills pattern — it flares when intensity or hill volume jumps, and tendon is slower to settle than muscle, so it doesn't reward waiting. Worth noticing which one you have: stiffness that's worst in the morning and eases as you walk behaves differently from pain that builds DURING a run or sits on a tender lump on the tendon itself — the second needs someone to look at it.
+
+${growthPlate ? `One thing specific to your age: if the sore spot is at the BACK of the heel rather than on the cord above it, that's often the growth plate rather than the tendon, and the tendon exercises below are aimed at the wrong tissue. Say "pain at the back of my heel" to your trainer and let them sort out which it is before you start a loading programme.` : `If the sore spot is on the cord itself, eccentric heel drops have good evidence behind them — stand on a step, rise on two feet, lower slowly on one, 3×12 each side, daily, continuing after it feels better. Start those once someone has confirmed that's what you're dealing with.`}
+
+Meanwhile: no hill repeats, no spikes${p.races.upcoming[0] ? ` (flats are fine for ${p.races.upcoming[0].name})` : ""}. Your load ratio is ${p.risk.acwr ?? "—"}${p.risk.acwr !== null && p.risk.acwr > 1.3 ? " — trim intensity this week regardless; tendons complain first when the ratio spikes." : "."} Tell your athletic trainer this week, and today, don't run on it.`;
+    },
   },
   {
     id: "hip-itb",
     score: (q) => hit(q, [/it ?band|itb/, /\bhip\b/, /outside.*(knee|leg)/], 3),
-    answer: ({ p }) => `Outside-of-knee or hip pain that shows up at the same distance every run is the IT band signature — it's not "tightness," it's your lateral hip strength failing at that fatigue point, and foam rolling the band itself won't fix it. What does: side planks (3×30s each), single-leg glute bridges, and lateral band walks, daily, plus temporarily running below the distance where it bites (if it starts at 6k, run 5k). Avoid cambered roads and tight track bends for a couple of weeks — vary direction if you're on the track. Your week is ${p.risk.weekKm} km${p.risk.rampPct !== null && p.risk.rampPct > 20 ? `, up ${Math.round(p.risk.rampPct)}% — that ramp is likely the trigger, so hold volume flat while you strengthen` : " at a steady ramp, so focus on the strength piece"}. This one resolves in 2–4 weeks if you respect the distance limit; it drags for months if you keep testing it.`,
+    answer: ({ p, q }) => {
+      // Hip or groin pain with a limp, or pain referred to the thigh or knee, is
+      // slipped capital femoral epiphysis or a femoral neck stress fracture until
+      // someone excludes them — both present exactly this way at this age, and
+      // both are worse for waiting. That has to be checked before any advice
+      // about lateral hip strength.
+      if (/\bgroin\b|limp|walk(ing)? (funny|weird)|can'?t (put weight|bear weight|walk)|gave (out|way)|thigh/.test(q)) {
+        return SYMPTOM_ESCALATION;
+      }
+      return `Outside-of-knee or hip pain that shows up at the same distance every run is a pattern worth taking seriously — it usually tracks with lateral hip strength giving out at a fatigue point rather than with "tightness," and foam rolling the band itself doesn't change it. What tends to help: side planks (3×30s each), single-leg glute bridges, and lateral band walks, daily, plus temporarily running below the distance where it bites (if it starts at 6k, run 5k). Avoid cambered roads and tight track bends for a couple of weeks — vary direction if you're on the track. Your week is ${p.risk.weekKm} km${p.risk.rampPct !== null && p.risk.rampPct > 20 ? `, up ${Math.round(p.risk.rampPct)}% — hold volume flat while you strengthen` : " at a steady ramp, so focus on the strength piece"}.
+
+Tell your athletic trainer this week either way, and sooner if the pain is in the groin rather than the outside of the hip, if you're limping, if it hurts at rest or at night, or if it isn't moving in the right direction — those are different problems with the same address, and they don't respond to side planks.`;
+    },
   },
 
   /* ---------- get faster: events ---------- */
@@ -296,13 +388,23 @@ const INTENTS: Intent[] = [
   /* ---------- fuel & conditions ---------- */
   {
     id: "nutrition",
-    score: (q) => hit(q, [/eat|food|nutrition|diet|fuel|iron|protein|hydrat|drink|water/], 2),
+    // \beat\b is load-bearing: unanchored /eat/ matched br-EAT-hing, sw-eat-ing,
+    // h-eat- and gr-eat-. Because `nutrition` sits earlier in this array than
+    // `breathing` and classify() keeps the first max, it SHADOWED `breathing`
+    // for its own keyword — so "my breathing gets tight when i run" returned a
+    // fuelling lecture, and the only mention of exercise-induced asthma in the
+    // codebase was unreachable.
+    score: (q) => hit(q, [/\beat\b|\beating\b|food|nutrition|diet|fuel|iron|protein|hydrat|drink|water/], 2),
     answer: ({ p }) => `Fueling for a distance runner your age, in priority order: (1) ENOUGH — this is the big one: ${FACTS.redsBone} (that's the IOC's RED-S consensus), and under-eating is the fastest road to injury and stalled times. You're burning ${Math.round((p.risk.weekKm * 62) / 7)}+ extra calories a day at your volume, so eating MORE is the goal — weight-loss talk has no place in a teenager's training. (2) Carbs around training — before (toast, banana) and within an hour after with some protein (chocolate milk is genuinely elite recovery food). (3) Iron — distance runners, especially female athletes, drain it; fatigue that sleep doesn't fix + rising RHR + falling times = ask for a ferritin test. Red meat, spinach, fortified cereal, vitamin C alongside. (4) Hydration is an all-day habit, not a practice-time event: pale-yellow urine is the check, and add electrolytes on hot days or before ${p.races.upcoming[0]?.name ?? "race day"}. Supplements you don't need; breakfast you do.`,
   },
   {
     id: "heat",
     score: (q) => hit(q, [/hot|heat|humid|summer|sun|weather/], 2),
-    answer: ({ p }) => `Heat is a real physiological load — your heart works 10–20 bpm harder at the same pace, so PACE LIES IN HEAT; effort is the truth. Adjust: slow easy runs 15–30s/km in real heat and let HR be the guide, shift runs to morning, pre-hydrate with electrolytes not just water, and give yourself 10–14 days to acclimate to a heat wave (it's real adaptation, like altitude). The good news: heat training is a legit fitness stimulus — blood plasma expands and cool-weather racing feels easier after. Warning signs that mean STOP, walk, find shade: chills or goosebumps in the heat, confusion, wobbling. That's heat illness, not toughness territory. Your watch HR data flows into RunGuard, so hot-day runs won't unfairly ding your load scores — the effort is what's measured.`,
+    answer: ({ p }) => `Heat is a real physiological load — your heart works 10–20 bpm harder at the same pace, so PACE LIES IN HEAT; effort is the truth. Adjust: slow easy runs 15–30s/km in real heat and let HR be the guide, shift runs to morning, pre-hydrate with electrolytes not just water, and give yourself 10–14 days to acclimate to a heat wave (it's real adaptation, like altitude). The good news: heat training is a legit fitness stimulus — blood plasma expands and cool-weather racing feels easier after.
+
+EMERGENCY, and this one is not a judgement call: if someone gets confused, stops making sense, stumbles or goes wobbly, stops sweating, or collapses in the heat — that is treated as heat stroke until a doctor says otherwise. Get an adult and call 911, and while you wait, get them into cold water — a tub, a stock tank, a kiddie pool, hose and ice packs on the neck, armpits and groin. Cool FIRST, transport second: dropping core temperature within the first 30 minutes is what decides the outcome, and moving them to shade to wait is the thing that loses that window. Do not send them home alone and do not let them "walk it off."
+
+Your watch HR data flows into RunGuard, so hot-day runs won't unfairly ding your load scores — the effort is what's measured.`,
   },
 
   /* ---------- head game ---------- */
@@ -326,7 +428,7 @@ const INTENTS: Intent[] = [
   {
     id: "strength-cross",
     score: (q) => hit(q, [/strength|weights|gym|core|lift|cross ?train|bike|swim|elliptical/], 2),
-    answer: ({ p }) => `Yes — and here's what actually matters for a runner (not a bodybuilding plan): 2×/week, 20–30 min, focused on single-leg strength and stiffness where running injuries live. The short list with the biggest evidence: eccentric calf drops (shin/achilles armor), single-leg step-downs and glute bridges (knee/hip control), side planks (IT band insurance), and 6×10s hill sprints as "strength in disguise." Heavy-ish and slow beats endless reps of nothing, and to kill the myth directly: ${FACTS.strengthSafe}. Core work: planks and dead bugs, not 200 crunches. CROSS-TRAINING (bike, swim, elliptical) is how you add aerobic volume when your legs can't absorb more impact — ${p.risk.zone !== "ready" ? `and with your risk at ${p.risk.score}/100 right now, swapping one run for a 40-min bike this week keeps the engine building while your tissue catches up` : "useful for down-weeks or niggle management, though at your current risk level your legs can handle the real thing"}. Your plan already threads supplemental work into the week — it's on each training card.`,
+    answer: ({ p }) => `Yes — and here's what actually matters for a runner (not a bodybuilding plan): 2×/week, 20–30 min, focused on single-leg strength and stiffness where running injuries live. The short list with the biggest evidence: eccentric calf drops (shin/achilles armor), single-leg step-downs and glute bridges (knee/hip control), side planks (IT band insurance), and 6×10s hill sprints as "strength in disguise." Heavy-ish and slow beats endless reps of nothing, and to kill the myth directly: ${FACTS.strengthSafe}. Core work: planks and dead bugs, not 200 crunches. CROSS-TRAINING (bike, swim, elliptical) is how you add aerobic volume when your legs can't absorb more impact — ${p.readiness < 65 ? "and while your readiness is down, swapping one run for a 40-min bike keeps the engine building while your legs catch up" : "useful for down-weeks or niggle management, though right now your legs can handle the real thing"}. Your plan already threads supplemental work into the week — it's on each training card.`,
   },
   {
     id: "comeback",
@@ -342,8 +444,12 @@ const INTENTS: Intent[] = [
   },
   {
     id: "side-stitch",
-    score: (q) => hit(q, [/\bstitch\b|side (pain|cramp|ache)|\bcramp/], 2),
-    answer: () => `Side stitches are a diaphragm/ligament irritation thing — annoying, harmless, and beatable. In the moment: exhale HARD when the foot on the opposite side of the stitch lands (right-side stitch → exhale on left foot), press two fingers into the spot and breathe deep into your belly, and if it's brutal, 20 seconds of walking with deep breaths resets it faster than gutting through. Prevention is mostly timing: no big food or fruit juice within ~2 hours of hard running, warm up progressively instead of going 0-to-workout, and train belly breathing on easy runs (belly rises before chest). They also fade with fitness — most runners basically outgrow them as volume builds. If it's not a classic under-the-ribs stitch but recurring gut trouble on runs, that's a fueling-timing problem — tell me what and when you eat pre-run and we'll fix the schedule.`,
+    // Bare /cramp/ used to catch "my leg cramped up so bad i had to stop" and
+    // answer it with "annoying, harmless" — that phrasing is also how
+    // sickle-cell-trait exertional collapse and exertional rhabdomyolysis
+    // present. Narrowed to the trunk, where a stitch actually happens.
+    score: (q) => hit(q, [/\bstitch\b|side (pain|cramp|ache)|(side|rib|abdominal|stomach|torso) cramp/], 2),
+    answer: () => `Side stitches are a diaphragm/ligament irritation thing — genuinely common, and beatable. In the moment: exhale HARD when the foot on the opposite side of the stitch lands (right-side stitch → exhale on left foot), press two fingers into the spot and breathe deep into your belly, and if it's brutal, 20 seconds of walking with deep breaths resets it faster than gutting through. Prevention is mostly timing: no big food or fruit juice within ~2 hours of hard running, warm up progressively instead of going 0-to-workout, and train belly breathing on easy runs (belly rises before chest). They also fade with fitness — most runners basically outgrow them as volume builds. If it's not a classic under-the-ribs stitch but recurring gut trouble on runs, that's a fueling-timing problem — tell me what and when you eat pre-run and we'll fix the schedule.`,
   },
 
   /* ---------- taper ---------- */
@@ -378,7 +484,8 @@ const INTENTS: Intent[] = [
     score: (q) => hit(q, [/risk|injur|why.*(score|flag|red|yellow)|acwr|dangerous/], 2),
     answer: ({ p }) => {
       const drivers = p.risk.insights.slice(0, 3).join(" ");
-      return `Your injury risk is ${p.risk.score}/100 (${p.risk.zoneLabel}). What's driving it: ${drivers} The score blends your acute:chronic workload ratio (the strongest predictor in the research — above 1.5, injury odds roughly double), mileage ramp rate, training monotony, and your recovery biology (resting HR, HRV, sleep) from Apple Health. It updates after every sync, so you can literally watch a smart easy week bring it down. The point of the number isn't to scare you — it's that the injuries that end seasons announce themselves in this data 1–2 weeks early, and you're one of the few athletes who can see the announcement.`;
+      const spiked = p.recentRuns.find((r) => r.spike);
+      return `RunGuard doesn't give you an injury-risk number any more, and that's deliberate — the ones apps show (including the one this used to show) don't predict injury well enough to be worth acting on. The workload ratio in particular was tested in a study of 5,205 runners and showed no association with getting hurt. So instead of a score, here's what your data actually says: ${drivers}${spiked ? ` Also worth noting — your ${spiked.km} km run was ${spiked.spike!.pctAbove}% longer than anything else in the month before it, and that single-session jump is the one load pattern the research does support.` : ""} Readiness (${p.readiness}/100) is the number to watch day to day, and it leans mostly on what you tell us in your check-in, because self-report turns out to track how you're coping better than any wrist sensor does. The point isn't to scare you — it's that the injuries that end seasons usually announce themselves a week or two early, and the earliest place they show up is what you notice about your own body.`;
     },
   },
 
@@ -397,7 +504,10 @@ const INTENTS: Intent[] = [
   /* ---------- treadmill / weather ---------- */
   {
     id: "treadmill-weather",
-    score: (q) => hit(q, [/treadmill|rain|snow|ice|storm|cold weather|freezing|indoor|wind/], 2),
+    // Anchored. Unanchored /ice/ matched pract-ICE-, adv-ice-, tw-ice-, ju-ice-,
+    // and /rain/ matched t-RAIN-ing and st-rain- — so "i made myself throw up
+    // after practice" and "im training a lot right now" both landed here.
+    score: (q) => hit(q, [/treadmill|\brain\b|snow|\bice\b|storm|cold weather|freezing|indoor|wind/], 2),
     answer: ({ p }) => `Bad weather isn't a rest day by default — it's a "train smart" day. Treadmill running is 100% legitimate: set 1% incline to mimic outdoor effort, and it's the safe call for ice or lightning. Cold: layer, cover hands and ears, and warm up indoors first — cold muscles strain easier. Wind: effort over pace, and if it's a loop, save the tailwind for the way home. Rain alone is just wet — dress light, it won't hurt you. The only weather I'd actually pull you inside for is lightning, ice underfoot, or genuine heat illness territory. ${p.plan.days.find((d) => d.isToday)?.type ? `Today's "${p.plan.days.find((d) => d.isToday)!.type}" works fine on a treadmill if you need it.` : ""}`,
   },
   /* ---------- stretching / foam rolling ---------- */
@@ -431,16 +541,67 @@ const INTENTS: Intent[] = [
     answer: () => `Straight answer for a high schooler: caffeine is a proven performance aid for adults, but race day is never the day to experiment, and energy drinks/pre-workouts are a bad idea at your age — the doses are high, unregulated, and mess with the sleep that's actually building your fitness. If you already drink coffee normally, keep your normal amount; don't add a big new dose before a race hoping for magic — you'll more likely get jittery, a racing gut, and wrecked sleep. The performance gains you want are sitting in sleep, fueling, and consistent training, not in a can. If you're reaching for caffeine to get through practice, that's a recovery flag worth looking at.`,
   },
   /* ---------- SAFETY: weight / body image ---------- */
+  /* Scored rather than intercepted before classify(), deliberately. A
+     pre-scoring intercept would flip every case where a real intent currently
+     outscores this one — "how many calories should i eat before a race" would
+     get the eating-disorder referral instead of race-morning food. The copy
+     lives in safety.ts so there is one version of it. */
   {
     id: "weight-body",
-    score: (q) => hit(q, [/lose weight|weight (loss|to run)|too (fat|heavy)|body ?fat|skinnier|lighter.*faster|diet to|cutting weight|race weight|calorie (deficit|counting)/], 4),
-    answer: () => `I want to be really straight with you here because it matters: chasing a lower weight is one of the most dangerous mistakes a young runner can make, and the science is clear — under-fueling is a leading cause of stress fractures, stalled times, hormone problems, and injuries that end careers (that's the IOC's RED-S consensus). Runners get faster by getting STRONGER and better fueled, not lighter — your body needs enough food to build the fitness you're training for. If thoughts about weight or food are taking up real space in your head, please talk to your coach, a parent, or your doctor — that's not weakness, it's exactly what the best athletes do. My job is to make you fast and healthy for years, and that road runs through eating enough. What can I help you actually get faster on?`,
+    // The fuelling exclusion is narrow and load-bearing: "how many calories
+    // should i eat before a race" matches two weight patterns and would
+    // otherwise outscore `race-morning` 8 to 4, replacing race-morning food
+    // advice with an eating-disorder referral. Restriction language still wins
+    // over the exclusion — "eating less before a race" is not a fuelling
+    // question.
+    score: (q) => {
+      const restriction = hit(q, [
+        /\b(lose|loose|losing|drop|cut|shed)\b/,
+        /\beat(ing)? less\b/,
+        /\bskipp?(ed|ing)\b/,
+        /\bguilty\b/,
+        /\bdeficit\b/,
+        /\bfeel light(er)?\b/,
+      ]);
+      if (hit(q, FUELLING_CONTEXT) > 0 && restriction === 0) return 0;
+      // Restriction language has to WIN the tie against race-morning, which also
+      // scores 4 and sits earlier in this array. "eat less before a race so i
+      // feel light" is not a fuelling question.
+      return hit(q, WEIGHT_PATTERNS, 4) + (restriction > 0 ? 4 : 0);
+    },
+    answer: () => WEIGHT_REPLY,
   },
   /* ---------- menstrual (careful) ---------- */
   {
     id: "menstrual",
-    score: (q) => hit(q, [/period|menstrual|missed.*period|cycle.*(run|train)|amenorr/], 3),
-    answer: () => `Good and important question. Training with your period is fine — energy dips around it are normal, so listen to your body on the hard days and don't panic about a slower workout that week. The thing that genuinely matters for a runner: a period that becomes irregular or stops is NOT a normal "fit athlete" sign — it's usually a signal you're not eating enough for your training, and it directly weakens bones and raises stress-fracture risk (part of RED-S / the female athlete triad in the research). If that's happening, it's worth a real conversation with a parent and a doctor — it's common, it's fixable, and catching it early protects your bones and your career. Fueling enough is the fix far more often than "training less."`,
+    score: (q) => hit(q, MENSTRUAL_PATTERNS, 3),
+    answer: () => MENSTRUAL_REPLY,
+  },
+  /* ---------- SAFETY: cardiac — the today tier ---------- */
+  /* Weighted above the other symptom intents so it wins on genuine phrasings,
+     but still scored, so "my chest feels tight when i run in the cold" can lose
+     to `breathing` and `illness-sick`. That is cold-air bronchospasm, the most
+     common chest complaint in high-school cross country, and sending that
+     athlete to urgent care would be a regression. */
+  {
+    id: "cardiac",
+    // Fainting and syncope are never excluded — those go to the cardiac reply
+    // regardless of what else the message mentions. Only the chest-tightness
+    // patterns yield to a cold-air or asthma context, which is what lets
+    // `breathing` answer "my chest feels tight when i run in the cold" with the
+    // exercise-induced asthma explanation it already has.
+    score: (q) => {
+      const syncope = hit(q, [
+        /\bfaint(ed|ing)?\b/,
+        /\b(passed|blacked) out\b/,
+        /\bvision (went|goes) (black|dark|gray|grey)\b/,
+        /\bsaw stars\b/,
+      ]);
+      if (syncope > 0) return hit(q, CARDIAC_PATTERNS, 4);
+      if (hit(q, CARDIAC_EXCLUSIONS) > 0) return 0;
+      return hit(q, CARDIAC_PATTERNS, 4);
+    },
+    answer: () => CARDIAC_REPLY,
   },
   /* ---------- altitude / travel ---------- */
   {
@@ -476,10 +637,58 @@ function previousUserMessage(athleteId: number): string | null {
 const ACK = /^(ok(ay)?|thanks|thank you|thx|got it|cool|nice|sounds good|will do|makes sense|k+|👍|great)\b/i;
 const FOLLOWUP = /^(why|how (long|come|much|often|do i)|what (do|about|else|now|next)|and\b|so\b|then\b|really|are you sure|explain|elaborate|tell me more|more|but\b|ok(ay)? (so|but|what|how|and))/i;
 
-function ruleAnswer(q: string, p: CoreProfile): string {
+/**
+ * Is this message leaning on the previous one for its meaning, with nothing of
+ * its own to say? The route uses this to decide whether a message following a
+ * safety reply should get that reply again rather than reaching intent scoring
+ * — "why?" after a crisis disclosure otherwise scores on `mental` and returns
+ * race-nerves advice.
+ *
+ * The score check is load-bearing, not belt-and-braces. FOLLOWUP contains
+ * `how do i`, so without it "how do i pace a 5k" reads as a follow-up and gets
+ * the previous safety reply instead of an answer. A message that stands on its
+ * own is a new topic; one that scores nothing — "how do i tell my mom" — is
+ * genuinely still leaning on the last turn.
+ */
+export function isFollowUp(q: string): boolean {
+  const lower = q.toLowerCase().trim();
+  const words = lower.split(/\s+/).length;
+  if (!(ACK.test(lower) || FOLLOWUP.test(lower) || words <= 4)) return false;
+  return classify(lower).score < 2;
+}
+
+/**
+ * Symptom-shaped: a body part plus something wrong with it, or a red flag that
+ * needs no body part at all.
+ *
+ * This exists so the router can FAIL CLOSED. A dozen presentations scored zero
+ * across all 39 intents and landed on the warm clarifier below, which then
+ * offered to talk about pacing — among them "my groin has been aching for two
+ * weeks", "I can't put weight on my leg", "my vision went dark on the last rep",
+ * "my pee was brown" and "I hit my head in a fall". Each of those has a
+ * time-critical answer and none of them had one.
+ */
+const BODY_PART =
+  /\b(shin|calf|calves|achilles|heel|foot|feet|toe|ankle|knee|thigh|quad|hamstring|groin|hip|glute|back|spine|rib|shoulder|neck|arch|tibia|femur|leg|legs|kneecap)\b/;
+const SYMPTOM_WORD =
+  /\b(hurt|hurts|hurting|pain|painful|ache|aching|aches|sore(?!ness is normal)|swollen|swelling|numb|numbness|tingl|burning|sharp|stabbing|throbbing|stiff|weak|giving out|gave out|gave way|can'?t walk|can'?t run|limp|limping)\b/;
+const HARD_RED_FLAG =
+  /\bcan'?t (put weight|bear weight|walk|stand)\b|\bgave (out|way)\b|\bwalk(ing)? (funny|weird)\b|\blimp(ing)?\b|\bbrown (pee|urine)\b|\b(pee|urine) (is|was|looked?) (brown|dark|like coke|cola)\b|\bhit my head\b|\bhead injury\b|\bconcussion\b|\bwakes? me (up )?at night\b|\bhurts? at rest\b|\bnight pain\b/;
+
+export function isSymptomShaped(lower: string): boolean {
+  if (HARD_RED_FLAG.test(lower)) return true;
+  return BODY_PART.test(lower) && SYMPTOM_WORD.test(lower);
+}
+
+export function ruleAnswer(q: string, p: CoreProfile): string {
   const lower = q.toLowerCase().trim();
   const words = lower.split(/\s+/).length;
   const { intent, score } = classify(lower);
+
+  // Fail closed on hard red flags BEFORE intent scoring. "my leg gave out" and
+  // "i can't put weight on it" have no useful non-escalation answer, and left to
+  // the scorer they land on whichever intent happens to share a substring.
+  if (HARD_RED_FLAG.test(lower)) return SYMPTOM_ESCALATION;
 
   // Strong direct match wins immediately.
   if (intent && score >= 2) return intent.answer({ p, q: lower });
@@ -503,6 +712,11 @@ function ruleAnswer(q: string, p: CoreProfile): string {
   // Weak-but-present match.
   if (intent && score > 0) return intent.answer({ p, q: lower });
 
+  // Nothing matched. If it describes a body part with something wrong, the warm
+  // clarifier below is the wrong answer — it reads as competent and offers to
+  // discuss pacing. Escalate instead.
+  if (isSymptomShaped(lower)) return SYMPTOM_ESCALATION;
+
   // Smart fallback: reason with any number they gave, else warm clarifier.
   const numMatch = lower.match(/(\d{2,3})\s*(mile|mi|km|k)\b/);
   if (numMatch) {
@@ -516,18 +730,18 @@ function ruleAnswer(q: string, p: CoreProfile): string {
   return `Good question — let me make sure I give you the right answer. Right now you're at ${readinessLine(p)}, fitness ${p.fitness.score}/100${race ? `, with ${race}` : ""}. I can go deep on any of these: today's run or a specific pain, your race plan and pacing, getting faster in the 800/mile/5K, sleep and recovery, fueling, or why your numbers look the way they do. What's the real thing you want to figure out? I'm reading your actual data, so I'll make it about you — not runners in general.`;
 }
 
-/* ---------- Claude path (when ANTHROPIC_API_KEY is set) ---------- */
+/* ---------- prompt material for the local coach model ---------- */
 
-function dataContext(p: CoreProfile): string {
+export function dataContext(p: CoreProfile): string {
   const r = p.risk;
   return [
     `Athlete: ${p.athlete.name}, grade ${p.athlete.grade}, ${p.athlete.school}. Events: ${p.athlete.events.join(", ")}.`,
-    `Readiness ${p.readiness}/100. Injury risk ${r.score}/100 (${r.zoneLabel}). ACWR ${r.acwr ?? "n/a"}, week ${r.weekKm} km (ramp ${r.rampPct ?? 0}%), monotony ${r.monotony ?? "n/a"}, days since rest ${r.daysSinceRest}.`,
+    `Readiness ${p.readiness}/100 (shown to the athlete; mostly self-report). Internal-only diagnostics, NOT shown and not to be quoted as a risk score: legacy risk ${r.score}, ACWR ${r.acwr ?? "n/a"}, week ${r.weekKm} km (ramp ${r.rampPct ?? 0}%), monotony ${r.monotony ?? "n/a"}, days since rest ${r.daysSinceRest}.`,
     `Recovery: resting HR ${r.recovery.restingHr ?? "n/a"} (baseline ${r.recovery.restingHrBaseline ?? "n/a"}, Δ${r.recovery.restingHrDelta ?? 0}), HRV ${r.recovery.hrv ?? "n/a"} ms (${r.recovery.hrvDeltaPct ?? 0}% vs baseline), sleep ${r.recovery.sleepAvg ?? "n/a"}h avg, sleep debt ${p.patterns.sleepDebtH ?? 0}h, VO2max ${p.fitness.vo2max ?? "n/a"}.`,
     `Fitness ${p.fitness.score}/100 (${p.fitness.trend}), tier ${p.fitness.tier}, freshness ${p.fitness.freshness}. Patterns: monotony ${p.patterns.monotony}, high-effort streak ${p.patterns.highEffortStreak}, overreaching ${p.patterns.overreaching}, illness flag ${p.illness}.`,
     `Predictions: 800m ${p.predictions["800m"].label}, Mile ${p.predictions["Mile"].label}, 5K ${p.predictions["5K"].label}, XC ${p.predictions["XC 5K"].label}. PRs: ${p.prs.map((x) => `${x.event} ${x.label}`).join(", ")}.`,
     `Goals: ${p.goals.map((g) => `${g.event} ${g.targetLabel} (${g.onTrack ? "on track" : "chasing"})`).join(", ") || "none set"}.`,
-    p.races.upcoming[0] ? `Next race: ${p.races.upcoming[0].name} (${p.races.upcoming[0].event}) in ${p.races.upcoming[0].daysUntil} days, readiness ${p.races.upcoming[0].readiness}/100.${p.plan.taperMode ? " Taper mode active." : ""}` : "No upcoming race.",
+    p.races.upcoming[0] ? `Next race: ${p.races.upcoming[0].name} (${p.races.upcoming[0].event}) in ${p.races.upcoming[0].daysUntil} days.${p.plan.taperMode ? " Taper mode active." : ""}` : "No upcoming race.",
     `Today's plan: ${p.plan.days.find((d) => d.isToday)?.type ?? "rest"}. Injury history: ${p.injuries.map((i) => `${i.body_part} (${i.date.slice(0, 7)})`).join(", ") || "none"}.`,
     p.todayCheckin
       ? `Today's check-in: soreness ${p.todaySoreness.length ? p.todaySoreness.map((s) => `${s.part} ${s.severity}/10`).join(", ") : "none reported"}, energy ${p.todayCheckin.energy ?? "—"}/10.`
@@ -535,7 +749,7 @@ function dataContext(p: CoreProfile): string {
   ].join("\n");
 }
 
-const COACH_SYSTEM = `You are RunGuard AI, the training brain inside RunGuard — and you are this athlete's coach, not a generic assistant. You know exercise science cold: ACWR research (sweet spot 0.8–1.3, risk doubling past 1.5), 80/20 polarized training, supercompensation (stress + rest = growth), taper science, teen sleep needs (8–10h; <8h roughly doubles injury risk), RED-S/under-fueling risks, and injury red-flag screening (focal bone pain, hop test, one-sided sharp pain → refer to athletic trainer, no diagnosis).
+export const COACH_SYSTEM = `You are RunGuard AI, the training brain inside RunGuard — and you are this athlete's coach, not a generic assistant. You know exercise science cold: ACWR research (sweet spot 0.8–1.3, risk doubling past 1.5), 80/20 polarized training, supercompensation (stress + rest = growth), taper science, teen sleep needs (8–10h; <8h roughly doubles injury risk), RED-S/under-fueling risks, and injury red-flag screening (focal bone pain, hop test, one-sided sharp pain → refer to athletic trainer, no diagnosis).
 
 Voice: a sharp, warm coach who has seen a thousand high school seasons. Direct, specific, encouraging without being soft. 3-6 sentences usually; short paragraphs, no bullet lists unless asked. ALWAYS ground answers in the athlete's actual data provided below — quote their real numbers. Prefer process over outcome. Never body-shame or discuss weight loss with a minor; if under-fueling signs appear, flag them kindly and suggest talking to a trusted adult. For pain that is sharp, localized, one-sided, or worsening: stop-running advice + see the athletic trainer, always. You may reference their coach ("loop in your coach").
 ${KNOWLEDGE_FOR_PROMPT}
@@ -549,36 +763,20 @@ Never invent numbers — only use the data below. If a value is n/a, don't cite 
 Athlete data (live, from their synced wearables and check-ins):
 `;
 
+/**
+ * The chat front door. Kept async for its existing callers.
+ *
+ * The hosted-Claude dispatcher that used to live here was deleted deliberately.
+ * It POSTed `COACH_SYSTEM + dataContext(p)` — a minor's resting HR, HRV, sleep,
+ * soreness, injury history and school — to api.anthropic.com whenever
+ * ANTHROPIC_API_KEY was set, and DEPLOY.md advertised that key as "optional,
+ * turns on the smart AI coach". No athlete data leaves this machine now.
+ *
+ * `COACH_SYSTEM` and `dataContext` above are kept on purpose: they are a working
+ * inline-everything coaching prompt, which is the starting point for the local
+ * model rather than something to rewrite.
+ */
 export async function answer(q: string, p: CoreProfile): Promise<string> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (key) {
-    try {
-      const history = chatHistory(p.athlete.id, 10)
-        .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.text }));
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": key,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
-          max_tokens: 500,
-          temperature: 0.6,
-          system: COACH_SYSTEM + dataContext(p),
-          messages: [...history, { role: "user", content: q }],
-        }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { content: { type: string; text?: string }[] };
-        const text = data.content?.find((c) => c.type === "text")?.text;
-        if (text) return text;
-      }
-    } catch {
-      // fall through to the built-in coach
-    }
-  }
   return ruleAnswer(q, p);
 }
 

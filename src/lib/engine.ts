@@ -1,3 +1,5 @@
+import { localDay } from "./day";
+import { HR_MAX_DEFAULT } from "./hrmax";
 /**
  * RunGuard's full athlete engine — everything computed on top of raw Apple Health /
  * Strava data: load metrics (TRIMP, HR zones), pattern detection, fitness &
@@ -17,7 +19,8 @@ import {
 import { computeRisk, RiskSnapshot, DailyPoint, sessionLoad } from "./risk";
 
 const DAY_MS = 86400000;
-const HR_MAX = 200; // assumed for high-schoolers
+// Fallback only. Real values come per-athlete from risk.hrMax (src/lib/hrmax.ts).
+const HR_MAX = HR_MAX_DEFAULT;
 export const EVENTS = ["800m", "Mile", "5K", "XC 5K"] as const;
 export type EventName = (typeof EVENTS)[number];
 export const EVENT_DIST: Record<EventName, number> = {
@@ -57,8 +60,8 @@ function clamp(n: number, lo: number, hi: number): number {
 
 export type ZoneMinutes = { z1: number; z2: number; z3: number; z4: number; z5: number };
 
-export function hrZone(avgHr: number): keyof ZoneMinutes {
-  const pct = avgHr / HR_MAX;
+export function hrZone(avgHr: number, hrMax: number = HR_MAX): keyof ZoneMinutes {
+  const pct = avgHr / hrMax;
   if (pct < 0.7) return "z1";
   if (pct < 0.8) return "z2";
   if (pct < 0.87) return "z3";
@@ -67,9 +70,9 @@ export function hrZone(avgHr: number): keyof ZoneMinutes {
 }
 
 /** Banister TRIMP for one session. */
-export function trimp(a: ActivityRow, restingHr = 55): number {
+export function trimp(a: ActivityRow, restingHr = 55, hrMax: number = HR_MAX): number {
   if (!a.avg_hr || a.duration_s <= 0) return 0;
-  const dHr = clamp((a.avg_hr - restingHr) / (HR_MAX - restingHr), 0, 1);
+  const dHr = clamp((a.avg_hr - restingHr) / (hrMax - restingHr), 0, 1);
   return (a.duration_s / 60) * dHr * 0.64 * Math.exp(1.92 * dHr);
 }
 
@@ -85,12 +88,13 @@ export type LoadMetrics = {
 
 export function loadMetrics(acts: ActivityRow[], risk: RiskSnapshot & { series: DailyPoint[] }, restingHr: number): LoadMetrics {
   const cutoff = Date.now() - 7 * DAY_MS;
+  const hrMax = risk.hrMax.value; // same per-athlete value the load model used
   const weekActs = acts.filter((a) => new Date(a.start_time).getTime() > cutoff);
   const weekZones: ZoneMinutes = { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0 };
   let weekTrimp = 0;
   for (const a of weekActs) {
-    weekTrimp += trimp(a, restingHr);
-    if (a.avg_hr) weekZones[hrZone(a.avg_hr)] += a.duration_s / 60;
+    weekTrimp += trimp(a, restingHr, hrMax);
+    if (a.avg_hr) weekZones[hrZone(a.avg_hr, hrMax)] += a.duration_s / 60;
   }
   return {
     weekKm: risk.weekKm,
@@ -213,7 +217,7 @@ export function computeFitness(
     const from = chunk[0].date;
     const to = chunk[chunk.length - 1].date;
     const weekActs = acts.filter(
-      (a) => a.start_time.slice(0, 10) >= from && a.start_time.slice(0, 10) <= to && a.distance_m > 2000
+      (a) => localDay(new Date(a.start_time)) >= from && localDay(new Date(a.start_time)) <= to && a.distance_m > 2000
     );
     const dist = weekActs.reduce((s, a) => s + a.distance_m, 0);
     const time = weekActs.reduce((s, a) => s + a.duration_s, 0);
@@ -325,13 +329,66 @@ const SUPPLEMENTAL = [
   null,
 ];
 
+/**
+ * How much to ease this week's volume, and why.
+ *
+ * The previous version read the internal risk zone and silently multiplied
+ * volume by 0.7 or 0.9. That was the worst remaining form of the problem the
+ * score removal was meant to fix: a metric dropped for lack of evidence still
+ * altering an athlete's training, invisibly, with no one able to see the reason
+ * or disagree with it. A displayed number can at least be argued with.
+ *
+ * What is left is driven only by signals that earned their place — a genuine
+ * single-session spike, and what the athlete reported — and every adjustment
+ * carries a reason string that is shown next to the plan (in second person —
+ * it renders inside the athlete's own app). If it cannot be
+ * explained in a sentence, it does not get to change the training.
+ */
+export type PlanAdjustment = { scale: number; reason: string | null };
+
+export function planAdjustment(
+  risk: RiskSnapshot,
+  recentSpike: { km: number; pctAbove: number } | null,
+  energyTrend: { days: number } | null
+): PlanAdjustment {
+  const reasons: string[] = [];
+  let scale = 1.0;
+
+  if (recentSpike) {
+    scale -= 0.1;
+    reasons.push(
+      `your ${recentSpike.km} km run was ${recentSpike.pctAbove}% past your recent longest`
+    );
+  }
+  const self = risk.selfReport;
+  if (self.persistentPart && self.persistentDays >= 3) {
+    scale -= 0.1;
+    reasons.push(
+      `you've reported ${self.persistentPart} soreness on ${self.persistentDays} of the last 7 days`
+    );
+  }
+  if (energyTrend) {
+    scale -= 0.05;
+    reasons.push(`your reported energy has fallen ${energyTrend.days} check-ins running`);
+  }
+
+  scale = clamp(scale, 0.75, 1.0);
+  return {
+    scale,
+    reason: reasons.length
+      ? `Volume eased ${Math.round((1 - scale) * 100)}% because ${reasons.join(", and ")}.`
+      : null,
+  };
+}
+
 export function weeklyPlan(
   risk: RiskSnapshot,
   predictions: Predictions,
   nextRace: RaceRow | null,
   statuses: Map<string, string>,
-  now: Date = new Date()
-): { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null } {
+  now: Date = new Date(),
+  adjustment: PlanAdjustment = { scale: 1, reason: null }
+): { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null; adjustment: PlanAdjustment } {
   const pace5k = predictions["5K"].timeS / 5; // s/km
   const easy = fmtPaceKm(pace5k * 1.3);
   const tempo = fmtPaceKm(pace5k * 1.06);
@@ -340,7 +397,7 @@ export function weeklyPlan(
 
   const monday = new Date(now);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); // this week's Monday
-  const todayIso = now.toISOString().slice(0, 10);
+  const todayIso = localDay(now);
 
   const raceDate = nextRace ? new Date(nextRace.date + "T12:00:00") : null;
   const daysToRace = raceDate
@@ -349,7 +406,7 @@ export function weeklyPlan(
   const taperMode = daysToRace !== null && daysToRace >= 0 && daysToRace <= 6;
 
   const base = risk.weekKm > 10 ? risk.weekKm : 30;
-  const scale = risk.zone === "high" ? 0.7 : risk.zone === "caution" ? 0.9 : 1.0;
+  const scale = adjustment.scale;
 
   const template: Omit<PlanDay, "date" | "day" | "status" | "isToday" | "isTaper">[] = [
     { type: "Easy run", distanceKm: round(base * 0.14 * scale), targetPace: easy, why: "Flush the weekend's long run and start the week aerobic.", details: "Fully conversational. Heart rate under 150. If it feels fast, it is.", supplemental: SUPPLEMENTAL[0] },
@@ -373,7 +430,7 @@ export function weeklyPlan(
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const iso = d.toISOString().slice(0, 10);
+    const iso = localDay(d);
     const dtr = raceDate ? Math.ceil((raceDate.getTime() - d.getTime()) / DAY_MS) : null;
     const inTaper = taperMode && dtr !== null && dtr >= 0 && dtr <= 6;
     const t = inTaper ? taperTemplate(dtr as number) : template[i];
@@ -387,43 +444,107 @@ export function weeklyPlan(
     });
   }
 
-  return { days, taperMode, taperCountdown: taperMode ? daysToRace : null };
+  return { days, taperMode, taperCountdown: taperMode ? daysToRace : null, adjustment };
 }
 
 /* ---------------- pre-practice flag, readiness, insight ---------------- */
 
-export type PrePractice = { flag: "go" | "modify" | "sit_out"; reason: string };
+/**
+ * An observation for the coach, NOT an instruction.
+ *
+ * "sit out" was a specific directive tied to a health condition, delivered to a
+ * layperson about a minor, with no way for them to review the basis for it —
+ * which is the wrong side of the line between a wellness feature and a clinical
+ * decision. The states now describe what the data looks like and hand the
+ * judgement to the humans, who are the ones qualified to make it.
+ */
+export type PrePractice = { flag: "clear" | "watch" | "unusual"; reason: string };
 export type SorenessEntry = { part: string; severity: number };
 
 export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, soreness: SorenessEntry[]): PrePractice {
   const sorted = [...soreness].sort((a, b) => b.severity - a.severity);
   const worst = sorted[0] ?? null;
   const extra = soreness.length > 1 ? ` (${soreness.length} areas flagged)` : "";
-  if (illness) return { flag: "sit_out", reason: "Illness pattern: HRV drop + elevated resting HR. Keep them away from hard work today." };
-  if (risk.zone === "high") return { flag: "sit_out", reason: "Injury risk is high — replace today's session with rest or 20 min recovery jog." };
-  if (worst && worst.severity >= 7) return { flag: "sit_out", reason: `Reported soreness ${worst.severity}/10 in the ${worst.part}${extra} — assess before any running.` };
-  if (risk.zone === "caution" || (worst && worst.severity >= 4)) {
-    return { flag: "modify", reason: "Elevated risk or soreness — cut volume ~30% and skip intensity today." };
-  }
-  return { flag: "go", reason: "All signals green. Run the plan as written." };
+  if (illness)
+    return {
+      flag: "unusual",
+      reason:
+        "Resting heart rate is up and HRV is down together — the pattern that often precedes illness. Worth asking how they feel before training.",
+    };
+  if (worst && worst.severity >= 7)
+    return {
+      flag: "unusual",
+      reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra}. That is high enough to be worth a conversation, and an athletic trainer or clinician if it persists.`,
+    };
+  if (worst && worst.severity >= 4)
+    return {
+      flag: "watch",
+      reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra} — worth checking in on before hard work.`,
+    };
+  return { flag: "clear", reason: "Nothing in today's check-in or recovery data stands out." };
 }
 
+/** How much of readiness comes from what the athlete says vs. what sensors say. */
+const SUBJECTIVE_WEIGHT = 0.55;
+
+/**
+ * How ready is this athlete to train today?
+ *
+ * Built primarily from the athlete's own check-in. Saw, Main & Gastin (2016,
+ * BJSM, 56 studies) found subjective self-report tracks training response with
+ * superior sensitivity and consistency to objective measures, and that the two
+ * generally do not correlate — so the check-in leads and the wearable data
+ * supports it, not the other way round.
+ *
+ * Deliberately NOT `100 − injury risk`, which is what this used to be. That
+ * double-counted training load and inherited the load-ratio assumptions the
+ * evidence does not support. `risk` is still passed in, but only for its
+ * recovery snapshot — resting HR, HRV and sleep, each already a 5-day median
+ * against the athlete's own 28-day baseline, so no single bad night moves this.
+ */
 export function readinessScore(risk: RiskSnapshot, checkin: CheckinRow | null, soreness: SorenessEntry[] = []): number {
-  let r = 100 - risk.score;
-  if (soreness.length) {
-    const sorted = soreness.map((s) => s.severity).sort((a, b) => b - a);
-    const primary = sorted[0] * 2.5; // worst part — same weight as a single-part check-in always had
-    const secondary = Math.min(10, sorted.slice(1).reduce((s, x) => s + x, 0)); // other sore parts, capped
-    r -= Math.min(35, primary + secondary);
+  // ---- what the athlete reported ----
+  let subjective: number | null = null;
+  if (checkin || soreness.length) {
+    let s = 100;
+    if (soreness.length) {
+      const sorted = soreness.map((x) => x.severity).sort((a, b) => b - a);
+      const primary = sorted[0] * 5; // 10/10 in one place is most of the story
+      const secondary = Math.min(15, sorted.slice(1).reduce((a, b) => a + b, 0) * 1.5);
+      s -= Math.min(60, primary + secondary);
+    }
+    if (checkin?.energy != null) s += (checkin.energy - 6) * 5; // 6/10 is neutral
+    if (checkin?.academic_stress) s -= 8; // school stress is training stress
+    subjective = clamp(s, 0, 100);
   }
-  if (checkin?.energy != null) r += (checkin.energy - 5) * 1.5;
-  if (checkin?.academic_stress) r -= 5;
-  return Math.round(clamp(r, 0, 100));
+
+  // ---- what the sensors reported, as trends against personal baselines ----
+  const r = risk.recovery;
+  let objective = 100;
+  if (r.hrvDeltaPct !== null && r.hrvDeltaPct < 0) {
+    objective -= Math.min(30, Math.abs(r.hrvDeltaPct) * 1.2);
+  }
+  if (r.restingHrDelta !== null && r.restingHrDelta > 0) {
+    objective -= Math.min(25, r.restingHrDelta * 4);
+  }
+  if (r.sleepAvg !== null && r.sleepAvg < 7) {
+    objective -= Math.min(25, (7 - r.sleepAvg) * 6);
+  }
+  objective = clamp(objective, 0, 100);
+
+  // With no check-in there is nothing subjective to weight, so this falls back
+  // to the sensors alone rather than treating silence as "fine".
+  const combined =
+    subjective === null
+      ? objective
+      : SUBJECTIVE_WEIGHT * subjective + (1 - SUBJECTIVE_WEIGHT) * objective;
+
+  return Math.round(clamp(combined, 0, 100));
 }
 
 export function aiInsight(risk: RiskSnapshot, fitness: Fitness, patterns: Patterns): string {
   const rec = risk.recovery;
-  if (risk.zone === "high") return "Your load is in the danger zone — today is the day that decides whether next month is training or rehab.";
+  if (patterns.overreaching) return "Your training has been stacking up without much let-up lately. An easy day now is cheaper than a forced week off later.";
   if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct >= 10) return `Your HRV is up ${rec.hrvDeltaPct}% this week — good time to push hard.`;
   if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct <= -12) return `HRV is ${Math.abs(rec.hrvDeltaPct)}% below baseline — make today genuinely easy and it rebounds faster.`;
   if (fitness.peakThisWeek) return "You hit a new fitness peak this week — the training is working.";
@@ -450,8 +571,7 @@ export function buildNotifications(args: {
   const out: Notification[] = [];
   const { risk, fitness, patterns, illness, nextRace, daysToRace, predictions, prs, lastActivityDaysAgo } = args;
 
-  if (risk.zone === "high") out.push({ type: "injury", text: "You could get injured tomorrow — your risk score is in the red. Back off today.", severity: "critical" });
-  if (risk.acwr !== null && risk.acwr > 1.3) out.push({ type: "acwr", text: `Your ACWR is spiking (${risk.acwr.toFixed(2)}), consider an easy day tomorrow.`, severity: "warning" });
+  if (patterns.overreaching) out.push({ type: "load", text: "You've had a long stretch of hard days without much recovery. Worth an easy one.", severity: "warning" });
   if (nextRace && daysToRace !== null && daysToRace <= 3 && daysToRace >= 0) out.push({ type: "race", text: `Race in ${daysToRace} day${daysToRace === 1 ? "" : "s"} — here's your taper plan in the Training tab.`, severity: "info" });
   if (fitness.peakThisWeek) out.push({ type: "fitness", text: "You hit a new training fitness peak this week.", severity: "info" });
   if (risk.recovery.restingHrDelta !== null && risk.recovery.restingHrDelta >= 5) out.push({ type: "rhr", text: "Your resting HR is elevated, check your recovery today.", severity: "warning" });

@@ -4,11 +4,11 @@ import { buildProfile } from "@/lib/profile";
 import { getAthlete } from "@/lib/db";
 import { currentTeamId } from "@/lib/session";
 import { coachWhy } from "@/lib/chat";
-import RiskBadge from "@/components/RiskBadge";
 import Avatar from "@/components/Avatar";
 import { AcwrChart, LoadChart, WeeklyKmChart } from "@/components/charts";
-import { RecoverySnapshot } from "@/lib/risk";
+import { RecoverySnapshot, type RiskSnapshot, type EnergyTrend } from "@/lib/risk";
 import IntensityCalendar from "@/components/IntensityCalendar";
+import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "@/components/athlete/AthleteModel";
 import InjuryManager from "@/components/InjuryManager";
@@ -43,20 +43,25 @@ export default async function AthletePage({
   const teamId = await currentTeamId();
   const target = getAthlete(Number(id));
   if (!target) notFound();
-  if (teamId && target.team_id && target.team_id !== teamId) notFound();
+  // Strict: `&& target.team_id` short-circuited for team-less athletes.
+  if (teamId == null || target.team_id !== teamId) notFound();
 
   const p = buildProfile(Number(id));
   if (!p) notFound();
 
   const first = p.athlete.name.split(" ")[0];
   const flagColor =
-    p.risk.zone === "high"
+    p.prePractice.flag === "unusual"
       ? "var(--status-critical)"
-      : p.risk.zone === "caution"
+      : p.prePractice.flag === "watch"
         ? "var(--status-warning)"
         : "var(--status-good)";
   const flagLabel =
-    p.risk.zone === "high" ? "High risk" : p.risk.zone === "caution" ? "Elevated" : "All clear";
+    p.prePractice.flag === "unusual"
+      ? "Worth a look"
+      : p.prePractice.flag === "watch"
+        ? "Check in with them"
+        : "Nothing standing out";
 
   return (
     <div className="space-y-6">
@@ -74,19 +79,7 @@ export default async function AthletePage({
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Gauge
-            value={p.risk.score}
-            color={
-              p.risk.zone === "high"
-                ? "var(--status-critical)"
-                : p.risk.zone === "caution"
-                  ? "var(--status-warning)"
-                  : "var(--status-good)"
-            }
-            size={76}
-            label="risk"
-          />
-          <RiskBadge zone={p.risk.zone} size="lg" />
+          <Gauge value={p.readiness} color={flagColor} size={76} label="readiness" />
         </div>
       </div>
 
@@ -166,7 +159,7 @@ function CoachView({
       <div className="grid lg:grid-cols-[1fr_1.1fr] gap-4 items-stretch">
         <AthleteModel
           readiness={p.readiness}
-          zone={p.risk.zone}
+          zone={p.readiness < 40 ? "high" : p.readiness < 65 ? "caution" : "ready"}
           hotspots={[
             ...p.injuries.filter((i) => !i.resolved_at).map((i) => ({ part: i.body_part, kind: "injury" as const })),
             ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),
@@ -181,17 +174,37 @@ function CoachView({
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <CStat label="Workload ratio" value={p.risk.acwr?.toFixed(2) ?? "—"} />
-        <CStat label="This week" value={`${p.risk.weekKm} km`} />
-        <CStat label="Ramp" value={p.risk.rampPct !== null ? `${p.risk.rampPct > 0 ? "+" : ""}${p.risk.rampPct}%` : "—"} />
-        <CStat label="Week TRIMP" value={String(p.load.weekTrimp)} />
-        <CStat label="Days since rest" value={String(p.risk.daysSinceRest)} />
+        <CStat
+          label="Workload ratio"
+          value={p.risk.acwr?.toFixed(2) ?? "—"}
+          info="Their last 7 days of training weighted against their 28-day base, both smoothed so one big day can't swing it. 0.8–1.3 is the safe zone; above 1.5 is the classic spike-before-injury pattern. Blank until there's enough history for a real base."
+        />
+        <CStat
+          label="This week"
+          value={`${p.risk.weekKm} km`}
+          info="Distance run in the last 7 days — a rolling window, not since Monday."
+        />
+        <CStat
+          label="Ramp"
+          value={p.risk.rampPct !== null ? `${p.risk.rampPct > 0 ? "+" : ""}${p.risk.rampPct}%` : "—"}
+          info="Week-over-week change in distance: the last 7 days against the 7 before. Shown for context only — in a cohort of 5,205 runners, week-to-week ratios like this had no association with injury. Blank if the previous week was under 3 km."
+        />
+        <CStat
+          label="Week TRIMP"
+          value={String(p.load.weekTrimp)}
+          info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard their heart was working. Catches the intensity that distance alone misses. Runs synced without heart-rate data count as zero."
+        />
+        <CStat
+          label="Days since rest"
+          value={String(p.risk.daysSinceRest)}
+          info="Consecutive training days counting back from today; only a near-zero day breaks the streak. Adaptation happens in recovery, so long unbroken runs of training days are worth noticing."
+        />
       </div>
 
       <RecoveryPanel recovery={p.risk.recovery} />
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Injury risk ratio (60 days)" note="Shaded band = safe zone 0.8–1.3 · dashed = danger 1.5">
+        <Panel title="Workload ratio (60 days)" note="context only — this ratio showed no link to injury in a 5,205-runner study">
           <AcwrChart data={p.series.slice(-60)} />
         </Panel>
         <Panel title="Training load (60 days)">
@@ -210,11 +223,31 @@ function CoachView({
 
       {/* fitness & load detail */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <CStat label="Fitness score" value={p.risk.hasActivityHistory ? `${p.fitness.score}` : "—"} />
-        <CStat label="Tier" value={p.risk.hasActivityHistory ? p.fitness.tier : "Not enough data"} />
-        <CStat label="Trend" value={p.fitness.trend} />
-        <CStat label="Freshness" value={`${p.fitness.freshness}`} />
-        <CStat label="VO₂max" value={p.fitness.vo2max !== null ? `${p.fitness.vo2max}` : "—"} />
+        <CStat
+          label="Fitness score"
+          value={p.risk.hasActivityHistory ? `${p.fitness.score}` : "—"}
+          info="0–100, from their most recent week with real running in it: 55% Apple's VO₂max reading, 45% distance-weighted pace (about 7:00/km scores 0, 3:20/km scores 100). With no VO₂max on file it's pace alone."
+        />
+        <CStat
+          label="Tier"
+          value={p.risk.hasActivityHistory ? p.fitness.tier : "Not enough data"}
+          info="A band on the fitness score: Developing under 40, Intermediate 40–57, Advanced 58–74, Elite 75 and up."
+        />
+        <CStat
+          label="Trend"
+          value={p.fitness.trend}
+          info="This week's fitness score against the average of the previous four weeks. More than 2 points up is improving, more than 2 down is declining, anything in between is a plateau."
+        />
+        <CStat
+          label="Freshness"
+          value={`${p.fitness.freshness}`}
+          info="How far the last 7 days sit below their 28-day base — high after a taper or an easy week, low mid-block. Not the same as fitness: an athlete can be very fit and very flat."
+        />
+        <CStat
+          label="VO₂max"
+          value={p.fitness.vo2max !== null ? `${p.fitness.vo2max}` : "—"}
+          info="Apple's Cardio Fitness estimate, read straight from Health — RunGuard doesn't calculate it. It's one of the two inputs to the fitness score."
+        />
       </div>
 
       {/* pattern detection */}
@@ -232,27 +265,22 @@ function CoachView({
       </Panel>
 
       {/* self-reported check-in */}
-      <Panel title="Athlete self-report" note={p.todayCheckin ? "logged today" : "no check-in today"}>
-        {p.todayCheckin ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
-            <PatternRow
-              label="Soreness"
-              value={
-                p.todaySoreness.length
-                  ? p.todaySoreness.map((s) => `${s.part} ${s.severity}/10`).join(", ")
-                  : "—"
-              }
-              warn={p.todaySoreness.some((s) => s.severity >= 5)}
-            />
-            <PatternRow label="Energy" value={p.todayCheckin.energy !== null ? `${p.todayCheckin.energy}/10` : "—"} warn={(p.todayCheckin.energy ?? 10) <= 4} />
-            <PatternRow label="Session RPE" value={p.todayCheckin.rpe !== null ? `${p.todayCheckin.rpe}/10` : "—"} warn={false} />
-            <PatternRow label="Academic stress" value={p.todayCheckin.academic_stress ? "YES" : "no"} warn={Boolean(p.todayCheckin.academic_stress)} />
-          </div>
-        ) : (
-          <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
-            Nothing logged today — their most recent mood and soreness trends are in the app view under Profile.
-          </p>
-        )}
+      <Panel
+        title="Athlete self-report"
+        note={
+          p.todayCheckin
+            ? "logged today"
+            : p.risk.selfReport.daysSinceReport !== null
+              ? `last check-in ${p.risk.selfReport.daysSinceReport}d ago`
+              : "never checked in"
+        }
+      >
+        <SelfReportPanel
+          self={p.risk.selfReport}
+          todayCheckin={p.todayCheckin}
+          todaySoreness={p.todaySoreness}
+          energyTrend={p.energyTrend}
+        />
       </Panel>
 
       {/* races & predictions */}
@@ -264,13 +292,7 @@ function CoachView({
                 {p.races.upcoming[0].name} · {p.races.upcoming[0].event}
               </p>
               {p.risk.hasActivityHistory ? (
-                <p>
-                  Race readiness:{" "}
-                  <span className="font-bold tabular-nums" style={{ color: p.races.upcoming[0].readiness >= 70 ? "var(--status-good)" : p.races.upcoming[0].readiness >= 40 ? "var(--status-warning)" : "var(--status-critical)" }}>
-                    {p.races.upcoming[0].readiness}/100
-                  </span>{" "}
-                  · predicted {p.races.upcoming[0].predicted}
-                </p>
+                <p>Predicted {p.races.upcoming[0].predicted}</p>
               ) : (
                 <p style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a readiness/prediction estimate.</p>
               )}
@@ -328,10 +350,105 @@ function PatternRow({ label, value, warn }: { label: string; value: string; warn
   );
 }
 
-function CStat({ label, value }: { label: string; value: string }) {
+/**
+ * The self-report panel. Deliberately shows the 7-day pattern *before* today's
+ * numbers, and shows it even when nothing was logged today — a shin that has
+ * been sore all week matters whether or not the athlete opened the app this
+ * morning. None of this moves the risk score (check-ins are optional, so
+ * scoring them would penalise honest reporters); it sits beside it.
+ */
+function SelfReportPanel({
+  self,
+  todayCheckin,
+  todaySoreness,
+  energyTrend,
+}: {
+  self: RiskSnapshot["selfReport"];
+  todayCheckin: { energy: number | null; rpe: number | null; academic_stress: number | null } | null;
+  todaySoreness: { part: string; severity: number }[];
+  energyTrend: EnergyTrend | null;
+}) {
+  const persistent = self.persistentPart && self.persistentDays >= 3;
+
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
-      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>{label}</div>
+    <div className="space-y-3">
+      {energyTrend && (
+        <div
+          className="rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed"
+          style={{
+            borderColor: "color-mix(in oklab, var(--status-warning) 45%, transparent)",
+            background: "color-mix(in oklab, var(--status-warning) 8%, var(--surface))",
+            color: "var(--ink-2)",
+          }}
+        >
+          <span className="font-semibold" style={{ color: "var(--ink)" }}>
+            Reported energy has fallen {energyTrend.days} check-ins running
+          </span>
+          , {energyTrend.from}/10 down to {energyTrend.to}/10. Not a number to act on by itself — a
+          pattern worth asking about.
+        </div>
+      )}
+      {persistent && (
+        <div
+          className="rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed"
+          style={{
+            borderColor: "color-mix(in oklab, var(--status-warning) 45%, transparent)",
+            background: "color-mix(in oklab, var(--status-warning) 8%, var(--surface))",
+            color: "var(--ink-2)",
+          }}
+        >
+          <span className="font-semibold" style={{ color: "var(--ink)" }}>
+            {self.persistentPart} — sore {self.persistentDays} of the last 7 days
+          </span>
+          , peaking at {self.persistentPeak}/10
+          {self.escalating ? ", and getting worse rather than settling" : ""}. Soreness that keeps
+          returning to one area is worth assessing regardless of what the load numbers say.
+        </div>
+      )}
+
+      {!self.hasData && (
+        <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+          No check-ins on record — nothing is known about how this athlete actually feels. The score
+          above is built from training and recovery data alone.
+        </p>
+      )}
+
+      {todayCheckin ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+          <PatternRow
+            label="Soreness today"
+            value={
+              todaySoreness.length
+                ? todaySoreness.map((s) => `${s.part} ${s.severity}/10`).join(", ")
+                : "none reported"
+            }
+            warn={todaySoreness.some((s) => s.severity >= 5)}
+          />
+          <PatternRow label="Energy" value={todayCheckin.energy !== null ? `${todayCheckin.energy}/10` : "—"} warn={(todayCheckin.energy ?? 10) <= 4} />
+          <PatternRow label="Session RPE" value={todayCheckin.rpe !== null ? `${todayCheckin.rpe}/10` : "—"} warn={false} />
+          <PatternRow label="Academic stress" value={todayCheckin.academic_stress ? "YES" : "no"} warn={Boolean(todayCheckin.academic_stress)} />
+        </div>
+      ) : (
+        self.hasData && (
+          <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+            {self.daysSinceReport === 1
+              ? "No check-in today — yesterday was their last."
+              : `No check-in today; their last was ${self.daysSinceReport} days ago.`}{" "}
+            Nothing logged is not the same as nothing wrong.
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+
+function CStat({ label, value, info }: { label: string; value: string; info?: string }) {
+  return (
+    <div className="rounded-2xl border p-4 relative" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
+      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
+        {label}
+        {info && <InfoDot text={info} label={label} />}
+      </div>
       <div className="text-2xl font-bold mt-1 tabular-nums">{value}</div>
     </div>
   );

@@ -1,9 +1,9 @@
+import { localDayOffset } from "@/lib/day";
 import Link from "next/link";
-import { listAthletes, athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete } from "@/lib/db";
-import { computeRisk } from "@/lib/risk";
+import { athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory } from "@/lib/db";
+import { computeRisk, sessionSpike, type RiskSnapshot, type SessionSpike } from "@/lib/risk";
 import { computeFitness } from "@/lib/engine";
 import { currentTeamId } from "@/lib/session";
-import RiskBadge from "@/components/RiskBadge";
 import Avatar from "@/components/Avatar";
 import { LoadSpark } from "@/components/charts";
 import InviteCard from "./InviteCard";
@@ -13,19 +13,43 @@ export const dynamic = "force-dynamic";
 export default async function Dashboard() {
   const teamId = await currentTeamId();
   const team = teamId ? getTeam(teamId) : null;
-  const since = new Date(Date.now() - 130 * 86400000).toISOString();
-  const roster = teamId ? athletesForTeam(teamId) : listAthletes();
+  const nowMs = Date.now();
+  const since = new Date(nowMs - 130 * 86400000).toISOString();
+  const soreSince = localDayOffset(13, new Date(nowMs));
+  // Fail closed rather than falling back to every athlete in the database.
+  const roster = teamId ? athletesForTeam(teamId) : [];
   const athletes = roster.map((a) => {
     const acts = activitiesForAthlete(a.id, since);
     const metrics = metricsForAthlete(a.id, since);
-    const risk = computeRisk(acts, metrics);
+    // the roster is the coach's triage screen — it has to see what athletes
+    // reported, not just what their watches recorded
+    const sore = sorenessHistory(a.id, soreSince).map((s) => ({
+      date: s.date,
+      body_part: s.body_part,
+      severity: s.severity,
+    }));
+    const risk = computeRisk(acts, metrics, new Date(nowMs), sore, a);
     const fitness = computeFitness(risk, metrics, acts);
-    return { a, risk, fitness };
+    // most recent run that was markedly longer than anything before it
+    const spikeRun = [...acts]
+      .sort((x, y) => y.start_time.localeCompare(x.start_time))
+      .slice(0, 7)
+      .map((x) => ({ at: x.start_time, spike: sessionSpike(x, acts) }))
+      .find((x) => x.spike !== null);
+    return { a, risk, fitness, spike: spikeRun?.spike ?? null };
   });
-  athletes.sort((x, y) => y.risk.score - x.risk.score);
+  // Alphabetical, deliberately. Ranking minors by an injury-risk number teaches
+  // them to inflate their check-ins to avoid being at the top of it — which
+  // corrupts self-report, the most sensitive signal in the whole system.
+  athletes.sort((x, y) => x.a.name.localeCompare(y.a.name));
 
-  const atRisk = athletes.filter((x) => x.risk.zone === "high").length;
-  const caution = athletes.filter((x) => x.risk.zone === "caution").length;
+  const spikes = athletes.filter((x) => x.spike !== null).length;
+  const sore = athletes.filter(
+    (x) => x.risk.selfReport.persistentPart && x.risk.selfReport.persistentDays >= 3
+  ).length;
+  const quiet = athletes.filter(
+    (x) => !x.risk.selfReport.hasData || (x.risk.selfReport.daysSinceReport ?? 0) >= 5
+  ).length;
   const teamKm = athletes.reduce((s, x) => s + x.risk.weekKm, 0);
   const teamPrevKm = athletes.reduce((s, x) => s + x.risk.prevWeekKm, 0);
   const teamDelta = teamPrevKm > 0 ? Math.round(((teamKm - teamPrevKm) / teamPrevKm) * 100) : 0;
@@ -71,16 +95,16 @@ export default async function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
-            label: "High risk today",
-            value: String(atRisk),
-            accent: atRisk > 0 ? "var(--status-critical)" : "var(--status-good)",
-            sub: atRisk > 0 ? "Talk to them before warmup" : "Nobody flagged",
+            label: "Long-run spikes",
+            value: String(spikes),
+            accent: spikes > 0 ? "var(--status-warning)" : "var(--status-good)",
+            sub: spikes > 0 ? "A run well past their usual" : "None this week",
           },
           {
-            label: "Caution",
-            value: String(caution),
-            accent: caution > 0 ? "var(--status-warning)" : "var(--status-good)",
-            sub: "Watch load this week",
+            label: "Soreness patterns",
+            value: String(sore),
+            accent: sore > 0 ? "var(--status-warning)" : "var(--status-good)",
+            sub: sore > 0 ? "Same spot, several days" : "Nothing recurring",
           },
           {
             label: "Team distance (7d)",
@@ -89,10 +113,10 @@ export default async function Dashboard() {
             sub: `${teamDelta >= 0 ? "+" : ""}${teamDelta}% vs last week`,
           },
           {
-            label: "Ready to train",
-            value: String(athletes.length - atRisk - caution),
-            accent: "var(--status-good)",
-            sub: "In the safe zone",
+            label: "Not checking in",
+            value: String(quiet),
+            accent: quiet > 0 ? "var(--ink-muted)" : "var(--status-good)",
+            sub: quiet > 0 ? "No recent self-report" : "Everyone reporting",
           },
         ].map((t, i) => (
           <div key={t.label} className="enter" style={{ ["--i" as string]: i }}>
@@ -113,27 +137,24 @@ export default async function Dashboard() {
               style={{ color: "var(--ink-muted)" }}
             >
               <th className="px-4 py-3 font-medium">Athlete</th>
-              <th className="px-3 py-3 font-medium">Status</th>
-              <th className="px-3 py-3 font-medium text-right">Ratio</th>
+              <th className="px-3 py-3 font-medium">Needs a look</th>
               <th className="px-3 py-3 font-medium text-right">7-day km</th>
-              <th className="px-3 py-3 font-medium text-right">Ramp</th>
               <th className="px-3 py-3 font-medium hidden md:table-cell w-36">Last 4 weeks</th>
               <th className="px-3 py-3" />
             </tr>
           </thead>
           <tbody>
-            {athletes.map(({ a, risk, fitness }) => (
+            {athletes.map(({ a, risk, fitness, spike }) => (
+
               <tr
                 key={a.id}
                 className="border-t transition-colors hover:bg-black/[0.03]"
                 style={{
                   borderColor: "var(--hairline)",
                   boxShadow: `inset 3px 0 0 ${
-                    risk.zone === "high"
-                      ? "var(--status-critical)"
-                      : risk.zone === "caution"
-                        ? "var(--status-warning)"
-                        : "transparent"
+                    spike || (risk.selfReport.persistentPart && risk.selfReport.persistentDays >= 3)
+                      ? "var(--status-warning)"
+                      : "transparent"
                   }`,
                 }}
               >
@@ -149,26 +170,10 @@ export default async function Dashboard() {
                   </Link>
                 </td>
                 <td className="px-3 py-3">
-                  <RiskBadge zone={risk.zone} score={risk.score} />
-                </td>
-                <td
-                  className="px-3 py-3 text-right tabular-nums"
-                  style={{
-                    color:
-                      risk.acwr !== null && (risk.acwr > 1.5 || risk.acwr > 1.3)
-                        ? risk.acwr > 1.5
-                          ? "var(--status-critical)"
-                          : "var(--status-warning)"
-                        : "var(--ink-2)",
-                  }}
-                >
-                  {risk.acwr ?? "—"}
+                  <RosterFlags self={risk.selfReport} spike={spike} />
                 </td>
                 <td className="px-3 py-3 text-right tabular-nums" style={{ color: "var(--ink-2)" }}>
                   {risk.weekKm}
-                </td>
-                <td className="px-3 py-3 text-right tabular-nums" style={{ color: "var(--ink-2)" }}>
-                  {risk.rampPct !== null ? `${risk.rampPct > 0 ? "+" : ""}${risk.rampPct}%` : "—"}
                 </td>
                 <td className="px-3 py-1 hidden md:table-cell">
                   <LoadSpark data={risk.series} />
@@ -192,6 +197,70 @@ export default async function Dashboard() {
         Ratio = acute:chronic workload (7-day vs 28-day training load). Sweet spot 0.8–1.3.
         Scores update automatically as athletes&apos; watches sync.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Everything on this row a coach could act on today — and nothing they can't.
+ *
+ * There is no score here by design. A ranked injury number taught athletes to
+ * inflate their check-ins to stay off the top of it, which corrupted the most
+ * sensitive signal in the system. These are specific, named, and tied either to
+ * a session that already happened or to a pattern in what the athlete reported.
+ *
+ * A blank cell means nothing needs attention — not that the athlete is fine.
+ * That distinction is why "no check-in" is itself one of the states.
+ */
+function RosterFlags({
+  self,
+  spike,
+}: {
+  self: RiskSnapshot["selfReport"];
+  spike: SessionSpike | null;
+}) {
+  const persistent = self.persistentPart && self.persistentDays >= 3;
+  const acute = !persistent && self.todayMax >= 6;
+  const stale = self.hasData && (self.daysSinceReport ?? 0) >= 5;
+
+  const rows: { text: string; color: string; title?: string }[] = [];
+
+  if (spike) {
+    rows.push({
+      text: `\u26a0 ${spike.km} km run · ${spike.pctAbove}% over usual`,
+      color: spike.level === "large" ? "var(--status-critical)" : "var(--status-warning)",
+      title: `Longest run in the 30 days before it was ${spike.longestKm} km`,
+    });
+  }
+  if (persistent) {
+    rows.push({
+      text: `\u26a0 ${self.persistentPart} · ${self.persistentDays}/7d${self.escalating ? " \u2191" : ""}`,
+      color: "var(--status-warning)",
+      title: `Reported sore on ${self.persistentDays} of the last 7 days, peak ${self.persistentPeak}/10`,
+    });
+  } else if (acute) {
+    rows.push({
+      text: `\u26a0 ${self.todayPart} · ${self.todayMax}/10 today`,
+      color: "var(--status-critical)",
+    });
+  }
+  if (!self.hasData) {
+    rows.push({ text: "no check-ins", color: "var(--ink-muted)" });
+  } else if (stale) {
+    rows.push({ text: `no check-in · ${self.daysSinceReport}d`, color: "var(--ink-muted)" });
+  }
+
+  if (!rows.length) {
+    return <span className="text-sm" style={{ color: "var(--ink-muted)" }}>—</span>;
+  }
+
+  return (
+    <div className="space-y-0.5">
+      {rows.map((r, i) => (
+        <div key={i} className="text-[11px] font-medium" style={{ color: r.color }} title={r.title}>
+          {r.text}
+        </div>
+      ))}
     </div>
   );
 }

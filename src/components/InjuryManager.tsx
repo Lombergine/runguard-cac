@@ -1,5 +1,6 @@
 "use client";
 
+import { localDay } from "@/lib/day";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -37,7 +38,7 @@ const PARTS: { k: string; label: string; lateral: boolean }[] = [
 const fmt = (d: string) =>
   new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 
 export default function InjuryManager({
   athleteId,

@@ -1,9 +1,16 @@
 import { redirect } from "next/navigation";
 import { authorizeUrl, stravaConfigured } from "@/lib/strava";
+import { resolveAthlete } from "@/lib/apiAuth";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const athleteId = Number(url.searchParams.get("athlete"));
+  // This endpoint had NO auth check of any kind. Any unauthenticated visitor
+  // could hit ?athlete=N, complete the Strava OAuth flow, and the callback would
+  // write THEIR Strava tokens onto athlete N's row and sync their history in.
+  if (!(await resolveAthlete(request, Number.isInteger(athleteId) ? athleteId : null))) {
+    return Response.json({ error: "Not authorized" }, { status: 401 });
+  }
   if (!stravaConfigured()) {
     return Response.json(
       {

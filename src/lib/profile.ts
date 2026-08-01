@@ -1,3 +1,4 @@
+import { localDay, localDayOffset } from "./day";
 import {
   getDb,
   getAthlete,
@@ -7,6 +8,7 @@ import {
   metricsForAthlete,
   checkinsForAthlete,
   sorenessForCheckin,
+  sorenessHistory,
   raceResultsForAthlete,
   injuriesForAthlete,
   goalsForAthlete,
@@ -16,7 +18,16 @@ import {
   CheckinRow,
   RaceRow,
 } from "./db";
-import { computeRisk, dailySeries, DailyPoint, RiskSnapshot } from "./risk";
+import {
+  computeRisk,
+  dailySeries,
+  sessionSpike,
+  detectEnergyDecline,
+  DailyPoint,
+  RiskSnapshot,
+  SessionSpike,
+  EnergyTrend,
+} from "./risk";
 import { paceTrend, personalStats, athleteInsights } from "./athleteView";
 import {
   loadMetrics,
@@ -25,6 +36,7 @@ import {
   predictRaces,
   pacingStrategy,
   weeklyPlan,
+  planAdjustment,
   prePracticeFlag,
   readinessScore,
   SorenessEntry,
@@ -44,6 +56,7 @@ import {
   Fitness,
   Predictions,
   PlanDay,
+  PlanAdjustment,
   PrePractice,
   Notification,
   Badge,
@@ -68,12 +81,11 @@ export type CoreProfile = {
   fitness: Fitness;
   predictions: Predictions;
   prs: PRRecord[];
-  plan: { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null };
+  plan: { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null; adjustment: PlanAdjustment };
   prePractice: PrePractice;
   illness: boolean;
   notifications: Notification[];
   badges: Badge[];
-  comparison: Comparison;
   sleep30: SleepDay[];
   mental30: MentalDay[];
   paceSeason: { week: string; pace: number | null }[];
@@ -82,8 +94,12 @@ export type CoreProfile = {
   insights: string[];
   todayCheckin: CheckinRow | null;
   todaySoreness: SorenessEntry[];
+  /** recent runs, newest first, with any single-session spike attached */
+  recentRuns: { id: number; date: string; km: number; durationS: number; spike: SessionSpike | null }[];
+  /** a run of consecutive check-ins with falling energy, or null */
+  energyTrend: EnergyTrend | null;
   races: {
-    upcoming: (RaceRow & { daysUntil: number; readiness: number; pacing: string[]; predicted: string; canEdit: boolean })[];
+    upcoming: (RaceRow & { daysUntil: number; pacing: string[]; predicted: string; canEdit: boolean })[];
     history: {
       id: number;
       event: string;
@@ -129,7 +145,13 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   const goals = goalsForAthlete(athlete.id);
   const races = upcomingRaces({ athleteId: athlete.id, teamId: athlete.team_id });
 
-  const risk = computeRisk(acts, metrics, now);
+  // last 14 days of soreness reports — the risk engine reads the trend, not just today
+  const soreReports = sorenessHistory(
+    athlete.id,
+    localDayOffset(13, now)
+  ).map((s) => ({ date: s.date, body_part: s.body_part, severity: s.severity }));
+
+  const risk = computeRisk(acts, metrics, now, soreReports, athlete);
   const restingHr = risk.recovery.restingHrBaseline ?? 55;
   const load = loadMetrics(acts, risk, restingHr);
   const patterns = detectPatterns(risk, metrics);
@@ -138,7 +160,7 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   const prsMap = personalRecords(results);
   const illness = illnessFlag(risk);
 
-  const todayIso = now.toISOString().slice(0, 10);
+  const todayIso = localDay(now);
   const todayCheckin = checkins.find((c) => c.date === todayIso) ?? null;
   const todaySoreness: SorenessEntry[] = sorenessForCheckin(athlete.id, todayIso).map((s) => ({
     part: s.body_part,
@@ -155,7 +177,32 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
       .prepare("SELECT date, status FROM workout_status WHERE athlete_id = ?")
       .all(athlete.id) as { date: string; status: string }[]).map((r) => [r.date, r.status])
   );
-  const plan = weeklyPlan(risk, predictions, nextRace, statuses, now);
+  // Recent runs, newest first, each rated against the athlete's own longest run
+  // in the 30 days before it. This is the one load pattern the running evidence
+  // supports, and it is reported against the session rather than the athlete.
+  const recentRuns = [...acts]
+    .filter((a) => a.distance_m > 0)
+    .sort((a, b) => b.start_time.localeCompare(a.start_time))
+    .slice(0, 12)
+    .map((a) => ({
+      id: a.id,
+      date: localDay(new Date(a.start_time)),
+      km: Math.round((a.distance_m / 1000) * 10) / 10,
+      durationS: a.duration_s,
+      spike: sessionSpike(a, acts),
+    }));
+
+  const energyTrend: EnergyTrend | null = detectEnergyDecline(
+    checkins.map((c) => ({ date: c.date, energy: c.energy })),
+    now
+  );
+
+  // Plan volume responds only to signals that earned their place, and every
+  // adjustment carries a reason the coach can read and disagree with.
+  const recentSpike =
+    recentRuns.find((r) => r.spike && r.date >= localDayOffset(7, now))?.spike ?? null;
+  const adjustment = planAdjustment(risk, recentSpike, energyTrend);
+  const plan = weeklyPlan(risk, predictions, nextRace, statuses, now, adjustment);
 
   const lastActivityDaysAgo = risk.lastActivity
     ? Math.floor((now.getTime() - new Date(risk.lastActivity).getTime()) / DAY_MS)
@@ -175,22 +222,10 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
 
   const badges = computeBadges(risk.series, results, injuries, now);
 
-  // peers = rest of team. Solo athletes (no team) have no peers — the whole app
-  // still works, we just skip peer comparison.
-  const roster = athlete.team_id ? athletesForTeam(athlete.team_id) : [athlete];
-  const peers = roster
-    .filter((p) => p.id !== athlete.id)
-    .map((p) => {
-      const pacts = activitiesForAthlete(p.id, new Date(now.getTime() - 60 * DAY_MS).toISOString());
-      const pmetrics = metricsForAthlete(p.id, new Date(now.getTime() - 60 * DAY_MS).toISOString());
-      const prisk = computeRisk(pacts, pmetrics, now);
-      const pfit = computeFitness(prisk, pmetrics, pacts);
-      return { weekKm: prisk.weekKm, pred5kS: predictRaces(pfit.vo2max, pfit.score)["5K"].timeS };
-    });
-  const comparison = compareToPeers(
-    { weekKm: risk.weekKm, pred5kS: predictions["5K"].timeS },
-    peers
-  );
+  // Peer percentiles removed: ranking teenagers against each other on volume and
+  // predicted times is social-comparison pressure in a sport that already carries
+  // elevated disordered-eating risk, and it penalises later-maturing athletes for
+  // being biologically younger.
 
   const weeks: { week: string; km: number }[] = [];
   for (let w = 11; w >= 0; w--) {
@@ -239,12 +274,6 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     };
   });
 
-  const raceReadiness = (d: number): number => {
-    let s = readinessScore(risk, todayCheckin, todaySoreness);
-    s = Math.round(s * 0.6 + fitness.freshness * 0.4);
-    if (d > 7) s = Math.min(s + 5, 100);
-    return s;
-  };
 
   const goalRows = goals
     .filter((g) => g.event !== "weekly_km")
@@ -263,9 +292,18 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     goals.find((g) => g.event === "weekly_km")?.target ??
     Math.max(Math.round(risk.weekKm * 1.05), 20);
 
+  // The coach dashboard renders these VERBATIM, in quotes. Safety-intercepted
+  // messages are excluded — an athlete who has just been told to talk to a
+  // parent and a doctor should not then find that disclosure quoted on their
+  // coach's screen.
+  //
+  // The `engine IS NULL` half is mandatory, not defensive: in SQLite
+  // `NULL NOT LIKE 'safety:%'` evaluates to NULL rather than true, so without it
+  // every pre-migration row would be excluded and this panel would silently
+  // empty out.
   const chatQs = (getDb()
     .prepare(
-      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 5"
+      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT 5"
     )
     .all(athlete.id) as { text: string }[]).map((r) => r.text);
 
@@ -299,7 +337,6 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     illness,
     notifications,
     badges,
-    comparison,
     sleep30: sleepTrend(metrics),
     mental30: mentalTrend(checkins),
     paceSeason: paceTrend(risk.series, acts),
@@ -308,6 +345,8 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     insights: athleteInsights(risk),
     todayCheckin,
     todaySoreness,
+    recentRuns,
+    energyTrend,
     races: {
       upcoming: races.map((r) => {
         const d = Math.ceil((new Date(r.date + "T12:00:00").getTime() - now.getTime()) / DAY_MS);
@@ -315,7 +354,6 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
         return {
           ...r,
           daysUntil: d,
-          readiness: raceReadiness(d),
           pacing: pacingStrategy(ev, predictions[ev].timeS),
           predicted: predictions[ev].label,
           canEdit: r.created_by_athlete_id === athlete.id,

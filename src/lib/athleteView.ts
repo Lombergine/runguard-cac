@@ -1,3 +1,4 @@
+import { localDay } from "./day";
 import { ActivityRow } from "./db";
 import { RiskSnapshot, DailyPoint } from "./risk";
 
@@ -31,7 +32,7 @@ export function paceTrend(series: DailyPoint[], activities: ActivityRow[]): Pace
   const byDay = new Map<string, { dist: number; time: number }>();
   for (const a of activities) {
     if (a.distance_m < 2000 || a.duration_s <= 0) continue;
-    const d = a.start_time.slice(0, 10);
+    const d = localDay(new Date(a.start_time));
     const cur = byDay.get(d) || { dist: 0, time: 0 };
     cur.dist += a.distance_m;
     cur.time += a.duration_s;
@@ -159,7 +160,14 @@ export function athleteInsights(risk: RiskSnapshot): string[] {
   return out;
 }
 
-/** Rule-based next-3-days plan, tuned by risk zone. */
+/**
+ * DEAD CODE — exported but never called; nothing imports it.
+ *
+ * Left in place rather than deleted because it is not mine to remove, but note
+ * it prescribes training from the internal risk zone and tells athletes to
+ * "re-check your score", which no longer exists. If it is ever wired up it
+ * needs rewriting against the spike warning and check-in signals first.
+ */
 export function recommendedWorkouts(risk: RiskSnapshot): Workout[] {
   const dayName = (offset: number) =>
     new Date(Date.now() + offset * 86400000).toLocaleDateString("en-US", {

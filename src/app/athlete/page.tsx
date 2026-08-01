@@ -4,7 +4,6 @@ import { getDb, AthleteRow } from "@/lib/db";
 import { athleteTokenFromCookie } from "@/lib/session";
 import { buildProfile } from "@/lib/profile";
 import Avatar from "@/components/Avatar";
-import RiskBadge from "@/components/RiskBadge";
 import {
   HomeTab,
   TrainingTab,
@@ -68,7 +67,6 @@ export default async function AthletePortal({
               <Avatar name={p.athlete.name} hue={p.athlete.hue} size={26} />
               <span className="hidden sm:inline">{p.athlete.name.split(" ")[0]}</span>
             </Link>
-            <RiskBadge zone={p.risk.zone} />
             <form action="/api/athlete-logout" method="post">
               <button className="text-sm hover:opacity-70 cursor-pointer" style={{ color: "var(--ink-muted)" }}>
                 Log out
