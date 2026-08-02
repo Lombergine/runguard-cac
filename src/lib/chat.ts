@@ -10,7 +10,8 @@
  */
 import { getSql } from "./db";
 import { CoreProfile } from "./profile";
-import { fmtTime, EventName, EVENTS } from "./engine";
+import { fmtTime, fmtPaceMi, EventName, EVENTS } from "./engine";
+import { miNum } from "./units";
 import { FACTS, KNOWLEDGE_FOR_PROMPT } from "./knowledge";
 
 export async function logChat(
@@ -51,7 +52,7 @@ export function coachWhy(p: CoreProfile): string {
     causes.push(`their acute:chronic load ratio is ${r.acwr.toFixed(2)}, above the 0.8–1.3 zone tissue can absorb`);
   }
   if (r.rampPct !== null && r.rampPct > 30) {
-    causes.push(`weekly mileage jumped ${Math.round(r.rampPct)}% (${r.prevWeekKm} → ${r.weekKm} km) — bone and tendon adapt weeks slower than the heart and lungs`);
+    causes.push(`weekly mileage jumped ${Math.round(r.rampPct)}% (${miNum(r.prevWeekKm)} → ${miNum(r.weekKm)} mi) — bone and tendon adapt weeks slower than the heart and lungs`);
   }
   if (p.illness) {
     causes.push(`resting HR is up ${rec.restingHrDelta} bpm while HRV is down ${Math.abs(rec.hrvDeltaPct ?? 0)}% — the classic pattern of a body fighting illness or deep fatigue`);
@@ -104,7 +105,7 @@ function firstName(p: CoreProfile): string {
 }
 
 function readinessLine(p: CoreProfile): string {
-  return `readiness ${p.readiness}/100, load ratio ${p.risk.acwr ?? "building"}, ${p.risk.weekKm} km this week`;
+  return `readiness ${p.readiness}/100, load ratio ${p.risk.acwr ?? "building"}, ${miNum(p.risk.weekKm)} mi this week`;
 }
 
 function nextRaceLine(p: CoreProfile): string | null {
@@ -175,7 +176,7 @@ const INTENTS: Intent[] = [
       if (target.type === "Rest") {
         return `${label} (${target.day}) is a REST day — and that's not a day off from training, it's part of it. ${target.why} If you're twitchy, a 15-min walk or easy mobility is fine, but resist the urge to "just add a few miles" — the rest is what turns this week's work into next week's fitness.`;
       }
-      return `${label} (${target.day}): ${target.type}${target.distanceKm ? ` — ${target.distanceKm} km` : ""}${target.targetPace ? ` @ ${target.targetPace}` : ""}. ${target.details} The point: ${target.why}${target.supplemental ? ` If you've got extra time, add: ${target.supplemental}.` : ""} ${p.readiness < 55 ? `Heads up though — your readiness is ${p.readiness}/100 today, so if it's a hard session and your legs feel flat, it's smart to shift the intensity down; ask me and I'll help you adjust.` : `Your readiness (${p.readiness}/100) says you're clear to run it as written.`} Mark it done/modified/skipped on the Training tab so I keep your numbers honest.`;
+      return `${label} (${target.day}): ${target.type}${target.distanceKm ? ` — ${miNum(target.distanceKm)} mi` : ""}${target.targetPace ? ` @ ${target.targetPace}` : ""}. ${target.details} The point: ${target.why}${target.supplemental ? ` If you've got extra time, add: ${target.supplemental}.` : ""} ${p.readiness < 55 ? `Heads up though — your readiness is ${p.readiness}/100 today, so if it's a hard session and your legs feel flat, it's smart to shift the intensity down; ask me and I'll help you adjust.` : `Your readiness (${p.readiness}/100) says you're clear to run it as written.`} Mark it done/modified/skipped on the Training tab so I keep your numbers honest.`;
     },
   },
 
@@ -201,7 +202,7 @@ const INTENTS: Intent[] = [
   {
     id: "hip-itb",
     score: (q) => hit(q, [/it ?band|itb/, /\bhip\b/, /outside.*(knee|leg)/], 3),
-    answer: ({ p }) => `Outside-of-knee or hip pain that shows up at the same distance every run is the IT band signature — it's not "tightness," it's your lateral hip strength failing at that fatigue point, and foam rolling the band itself won't fix it. What does: side planks (3×30s each), single-leg glute bridges, and lateral band walks, daily, plus temporarily running below the distance where it bites (if it starts at 6k, run 5k). Avoid cambered roads and tight track bends for a couple of weeks — vary direction if you're on the track. Your week is ${p.risk.weekKm} km${p.risk.rampPct !== null && p.risk.rampPct > 20 ? `, up ${Math.round(p.risk.rampPct)}% — that ramp is likely the trigger, so hold volume flat while you strengthen` : " at a steady ramp, so focus on the strength piece"}. This one resolves in 2–4 weeks if you respect the distance limit; it drags for months if you keep testing it.`,
+    answer: ({ p }) => `Outside-of-knee or hip pain that shows up at the same distance every run is the IT band signature — it's not "tightness," it's your lateral hip strength failing at that fatigue point, and foam rolling the band itself won't fix it. What does: side planks (3×30s each), single-leg glute bridges, and lateral band walks, daily, plus temporarily running below the distance where it bites (if it starts at 4 mi, run 3 mi). Avoid cambered roads and tight track bends for a couple of weeks — vary direction if you're on the track. Your week is ${miNum(p.risk.weekKm)} mi${p.risk.rampPct !== null && p.risk.rampPct > 20 ? `, up ${Math.round(p.risk.rampPct)}% — that ramp is likely the trigger, so hold volume flat while you strengthen` : " at a steady ramp, so focus on the strength piece"}. This one resolves in 2–4 weeks if you respect the distance limit; it drags for months if you keep testing it.`,
   },
 
   /* ---------- get faster: events ---------- */
@@ -211,7 +212,7 @@ const INTENTS: Intent[] = [
     answer: ({ p }) => {
       const pred = p.predictions["800m"];
       const pr = p.prs.find((x) => x.event === "800m");
-      return `Your engine says ${pred.label} right now${pr?.timeS ? ` (PR ${pr.label})` : ""}. The 800 is 60–70% aerobic — most high schoolers think it's a long sprint and train it backwards. Three levers, in order of payoff for you: (1) Aerobic base — your ${p.risk.weekKm} km/week IS your 800 training; the last 200m is run on it. (2) Specific speed once a week: 6×200 at goal pace with full 3-min recoveries, focused on staying RELAXED at speed — jaw loose, shoulders down. Speed you can only hold while straining isn't race speed. (3) Race model: go out in ${fmtTime(pred.timeS / 2 - 1)}, hit 400 within a second of that, stay tall through 600 when everything screams, and commit at the 200 pole — the race is decided by who slows down least, not who kicks hardest. Add hill sprints (6×10s) after one easy run a week; they build the power that makes lane-1 speed feel cheap.`;
+      return `Your engine says ${pred.label} right now${pr?.timeS ? ` (PR ${pr.label})` : ""}. The 800 is 60–70% aerobic — most high schoolers think it's a long sprint and train it backwards. Three levers, in order of payoff for you: (1) Aerobic base — your ${miNum(p.risk.weekKm)} mi/week IS your 800 training; the last 200m is run on it. (2) Specific speed once a week: 6×200 at goal pace with full 3-min recoveries, focused on staying RELAXED at speed — jaw loose, shoulders down. Speed you can only hold while straining isn't race speed. (3) Race model: go out in ${fmtTime(pred.timeS / 2 - 1)}, hit 400 within a second of that, stay tall through 600 when everything screams, and commit at the 200 pole — the race is decided by who slows down least, not who kicks hardest. Add hill sprints (6×10s) after one easy run a week; they build the power that makes lane-1 speed feel cheap.`;
     },
   },
   {
@@ -222,7 +223,7 @@ const INTENTS: Intent[] = [
       const target = 300; // sub-5:00 mile in seconds
       const gap = pred.timeS - target;
       const goal = p.goals.find((g) => g.event === "Mile");
-      return `Predicted mile right now: ${pred.label}${goal ? ` against your ${goal.targetLabel} goal` : ""}. ${gap <= 0 ? `You're already fit enough to break 5:00 — now it's execution. Even 400s (~${fmtTime(target / 4)}), no hero first lap, and pick a race with bodies to run with; a paced race is worth 3–4 seconds versus a solo one.` : gap <= 8 ? `You're ${Math.round(gap)}s off breaking 5:00 — that's one good block, not a dream. The math: hold your volume, add one threshold session (4–5×4 min at ${p.predictions["5K"] ? fmtTime((p.predictions["5K"].timeS / 5) * 1.05) + "/km" : "comfortably hard"}) and one speed session (8×400 at goal mile pace, 90s rest) per week, and race it every chance you get.` : `The gap to 5:00 is ${Math.round(gap)}s, which is a season of honest work, not a month. Build the aerobic base first — every extra consistent week at ${p.risk.weekKm}+ km moves the mile more than any workout.`} Lap discipline is the whole secret: the kid who runs ${fmtTime(pred.timeS / 4)}-${fmtTime(pred.timeS / 4)}-${fmtTime(pred.timeS / 4 + 2)}-${fmtTime(pred.timeS / 4 - 2)} beats the kid who opens 5 seconds too fast. Every time.`;
+      return `Predicted mile right now: ${pred.label}${goal ? ` against your ${goal.targetLabel} goal` : ""}. ${gap <= 0 ? `You're already fit enough to break 5:00 — now it's execution. Even 400s (~${fmtTime(target / 4)}), no hero first lap, and pick a race with bodies to run with; a paced race is worth 3–4 seconds versus a solo one.` : gap <= 8 ? `You're ${Math.round(gap)}s off breaking 5:00 — that's one good block, not a dream. The math: hold your volume, add one threshold session (4–5×4 min at ${p.predictions["5K"] ? fmtPaceMi((p.predictions["5K"].timeS / 5) * 1.05) : "comfortably hard"}) and one speed session (8×400 at goal mile pace, 90s rest) per week, and race it every chance you get.` : `The gap to 5:00 is ${Math.round(gap)}s, which is a season of honest work, not a month. Build the aerobic base first — every extra consistent week at ${miNum(p.risk.weekKm)}+ mi moves the mile more than any workout.`} Lap discipline is the whole secret: the kid who runs ${fmtTime(pred.timeS / 4)}-${fmtTime(pred.timeS / 4)}-${fmtTime(pred.timeS / 4 + 2)}-${fmtTime(pred.timeS / 4 - 2)} beats the kid who opens 5 seconds too fast. Every time.`;
     },
   },
   {
@@ -230,7 +231,7 @@ const INTENTS: Intent[] = [
     score: (q) => hit(q, [/5k|5 k|xc|cross country|three mile|5000/], 2) + hit(q, [/faster|improve|better|drop/]),
     answer: ({ p }) => {
       const pred = p.predictions["5K"];
-      return `Your predicted 5K is ${pred.label} (${fmtTime(pred.timeS / 5)}/km). The 5K is ~90% aerobic, so the recipe is unglamorous: volume, threshold, patience. What moves it for you specifically: (1) protect the long run — it's ${Math.round(p.risk.weekKm * 0.26)} km in your current week and it's the single biggest lever; (2) one real threshold day (5×4 min at ~${fmtTime((pred.timeS / 5) * 1.05)}/km — "comfortably hard," you could speak short sentences); (3) strides twice a week so 5K pace feels like a gear, not a strain. ${p.fitness.trend === "improving" ? `Your fitness trend is already climbing — don't change what's working, just stack weeks.` : p.fitness.trend === "plateau" ? `You're plateaued, which usually means the easy days are too hard and the hard days too soft — polarize: easier easy, harder threshold.` : `Fitness dipped recently — that's usually fatigue masking fitness, not lost fitness. Absorb, then push.`} In races: even splits, and make one decisive move at 2-to-go instead of surging every 400.`;
+      return `Your predicted 5K is ${pred.label} (${fmtPaceMi(pred.timeS / 5)}). The 5K is ~90% aerobic, so the recipe is unglamorous: volume, threshold, patience. What moves it for you specifically: (1) protect the long run — it's ${miNum(p.risk.weekKm * 0.26)} mi in your current week and it's the single biggest lever; (2) one real threshold day (5×4 min at ~${fmtPaceMi((pred.timeS / 5) * 1.05)} — "comfortably hard," you could speak short sentences); (3) strides twice a week so 5K pace feels like a gear, not a strain. ${p.fitness.trend === "improving" ? `Your fitness trend is already climbing — don't change what's working, just stack weeks.` : p.fitness.trend === "plateau" ? `You're plateaued, which usually means the easy days are too hard and the hard days too soft — polarize: easier easy, harder threshold.` : `Fitness dipped recently — that's usually fatigue masking fitness, not lost fitness. Absorb, then push.`} In races: even splits, and make one decisive move at 2-to-go instead of surging every 400.`;
     },
   },
 
@@ -257,7 +258,7 @@ const INTENTS: Intent[] = [
         return `For ${race.name} (${race.event}), your fitness says ${race.predicted}. The plan: ${race.pacing.join(" ")} The physiology behind it: every second you go out too fast costs you two on the back half — it's not a fair trade, it's a loan shark. Negative or even splits win at every level of this sport, and your predicted time itself comes from the VDOT/Riegel model (race times predict equivalent performances across distances — Daniels), fed by your real VO₂max and paces.`;
       }
       const pred = p.predictions["5K"];
-      return `General pacing law: even or slightly negative splits, always. For a 5K at your current fitness (${pred.label}), that's ${fmtTime(pred.timeS / 5)}/km held steady, first km deliberately 3–5s slower than it feels like it should be, then work the field in the middle, then empty it from 800 out. Banked time is borrowed time — going out fast doesn't save seconds, it borrows them at brutal interest.`;
+      return `General pacing law: even or slightly negative splits, always. For a 5K at your current fitness (${pred.label}), that's ${fmtPaceMi(pred.timeS / 5)} held steady, first mile deliberately 5–8s slower than it feels like it should be, then work the field in the middle, then empty it from 800 out. Banked time is borrowed time — going out fast doesn't save seconds, it borrows them at brutal interest.`;
     },
   },
 
@@ -279,7 +280,7 @@ const INTENTS: Intent[] = [
   {
     id: "how-much-mileage",
     score: (q) => hit(q, [/mileage|volume|per week|a week|weekly/], 4) + hit(q, [/how (much|many|far)|miles|km|run more/], 2),
-    answer: ({ p }) => `You're at ${p.risk.weekKm} km this week against a ${p.weeklyTargetKm} km target, with a 4-week base around ${Math.round(p.risk.chronic / Math.max(p.risk.acute, 1) * p.risk.weekKm) || p.risk.weekKm} km. The honest answer on "how much": more volume makes you faster at everything from 800m up, BUT only volume you absorb without breaking. Here's the science that should run your build: ${FACTS.acwrSpike} — so keep weekly jumps under ~10%, take a down-week every 4th week (cut ~25%), and never raise volume and intensity in the same week. And ${FACTS.fitProtects}, so the base you build now is what lets you handle the big weeks later. ${p.risk.rampPct !== null && p.risk.rampPct > 15 ? `You're up ${Math.round(p.risk.rampPct)}% right now, so the answer this week is: hold, don't add.` : `Your ramp is controlled right now, so if you want to build, add ~${Math.max(2, Math.round(p.risk.weekKm * 0.08))} km to next week's easy days — never to the workouts.`} The 100-mile week you survive beats the 60-mile week that breaks you — consistency over 12 weeks beats heroics over 2, every single time.`,
+    answer: ({ p }) => `You're at ${miNum(p.risk.weekKm)} mi this week against a ${miNum(p.weeklyTargetKm)} mi target, with a 4-week base around ${miNum((p.risk.chronic / Math.max(p.risk.acute, 1) * p.risk.weekKm) || p.risk.weekKm)} mi. The honest answer on "how much": more volume makes you faster at everything from 800m up, BUT only volume you absorb without breaking. Here's the science that should run your build: ${FACTS.acwrSpike} — so keep weekly jumps under ~10%, take a down-week every 4th week (cut ~25%), and never raise volume and intensity in the same week. And ${FACTS.fitProtects}, so the base you build now is what lets you handle the big weeks later. ${p.risk.rampPct !== null && p.risk.rampPct > 15 ? `You're up ${Math.round(p.risk.rampPct)}% right now, so the answer this week is: hold, don't add.` : `Your ramp is controlled right now, so if you want to build, add ~${Math.max(1, miNum(p.risk.weekKm * 0.08))} mi to next week's easy days — never to the workouts.`} The 100-mile week you survive beats the 60-mile week that breaks you — consistency over 12 weeks beats heroics over 2, every single time.`,
   },
 
   /* ---------- recovery science ---------- */
@@ -309,7 +310,7 @@ const INTENTS: Intent[] = [
   {
     id: "heat",
     score: (q) => hit(q, [/hot|heat|humid|summer|sun|weather/], 2),
-    answer: ({ p }) => `Heat is a real physiological load — your heart works 10–20 bpm harder at the same pace, so PACE LIES IN HEAT; effort is the truth. Adjust: slow easy runs 15–30s/km in real heat and let HR be the guide, shift runs to morning, pre-hydrate with electrolytes not just water, and give yourself 10–14 days to acclimate to a heat wave (it's real adaptation, like altitude). The good news: heat training is a legit fitness stimulus — blood plasma expands and cool-weather racing feels easier after. Warning signs that mean STOP, walk, find shade: chills or goosebumps in the heat, confusion, wobbling. That's heat illness, not toughness territory. Your watch HR data flows into RunGuard, so hot-day runs won't unfairly ding your load scores — the effort is what's measured.`,
+    answer: ({ p }) => `Heat is a real physiological load — your heart works 10–20 bpm harder at the same pace, so PACE LIES IN HEAT; effort is the truth. Adjust: slow easy runs 25–50s/mi in real heat and let HR be the guide, shift runs to morning, pre-hydrate with electrolytes not just water, and give yourself 10–14 days to acclimate to a heat wave (it's real adaptation, like altitude). The good news: heat training is a legit fitness stimulus — blood plasma expands and cool-weather racing feels easier after. Warning signs that mean STOP, walk, find shade: chills or goosebumps in the heat, confusion, wobbling. That's heat illness, not toughness territory. Your watch HR data flows into RunGuard, so hot-day runs won't unfairly ding your load scores — the effort is what's measured.`,
   },
 
   /* ---------- head game ---------- */
@@ -327,7 +328,7 @@ const INTENTS: Intent[] = [
     score: (q) => hit(q, [/easy (day|run|pace)|why.*(easy|slow)|tempo|threshold|interval|long run|workout.*(mean|why|point)/], 2),
     answer: ({ p }) => {
       const pace5k = p.predictions["5K"].timeS / 5;
-      return `The system behind your week, decoded: EASY RUNS (~${fmtTime(pace5k * 1.3)}/km for you) build capillaries, mitochondria, and bone durability — they work BECAUSE they're easy; run them too fast and you get neither recovery nor stimulus, which is the #1 mistake in high school running. THRESHOLD/TEMPO (~${fmtTime(pace5k * 1.05)}/km, "comfortably hard") raises the pace you can hold without drowning in lactate — the biggest lever for 5K/XC. INTERVALS (~${fmtTime(pace5k * 0.96)}/km with recoveries) teach race pace and top-end power in doses you can absorb. LONG RUN = the aerobic foundation everything sits on. The elite ratio — and it holds from Olympians to high schoolers — is roughly 80% easy / 20% hard: ${FACTS.polarized} (Seiler; Stöggl 2014). ${p.patterns.monotony !== null && p.patterns.monotony > 2 ? `Your monotony score (${p.patterns.monotony}) says your days blur together — making the easy days truly easy is your single fastest path to improvement right now.` : `Your plan already polarizes properly — trust the slow days; they're where the speed comes from.`}`;
+      return `The system behind your week, decoded: EASY RUNS (~${fmtPaceMi(pace5k * 1.3)} for you) build capillaries, mitochondria, and bone durability — they work BECAUSE they're easy; run them too fast and you get neither recovery nor stimulus, which is the #1 mistake in high school running. THRESHOLD/TEMPO (~${fmtPaceMi(pace5k * 1.05)}, "comfortably hard") raises the pace you can hold without drowning in lactate — the biggest lever for 5K/XC. INTERVALS (~${fmtPaceMi(pace5k * 0.96)} with recoveries) teach race pace and top-end power in doses you can absorb. LONG RUN = the aerobic foundation everything sits on. The elite ratio — and it holds from Olympians to high schoolers — is roughly 80% easy / 20% hard: ${FACTS.polarized} (Seiler; Stöggl 2014). ${p.patterns.monotony !== null && p.patterns.monotony > 2 ? `Your monotony score (${p.patterns.monotony}) says your days blur together — making the easy days truly easy is your single fastest path to improvement right now.` : `Your plan already polarizes properly — trust the slow days; they're where the speed comes from.`}`;
     },
   },
   {
@@ -386,7 +387,7 @@ const INTENTS: Intent[] = [
     answer: ({ p }) => {
       const drivers = p.risk.insights.slice(0, 3).join(" ");
       const spiked = p.recentRuns.find((r) => r.spike);
-      return `RunGuard doesn't give you an injury-risk number any more, and that's deliberate — the ones apps show (including the one this used to show) don't predict injury well enough to be worth acting on. The workload ratio in particular was tested in a study of 5,205 runners and showed no association with getting hurt. So instead of a score, here's what your data actually says: ${drivers}${spiked ? ` Also worth noting — your ${spiked.km} km run was ${spiked.spike!.pctAbove}% longer than anything else in the month before it, and that single-session jump is the one load pattern the research does support.` : ""} Readiness (${p.readiness}/100) is the number to watch day to day, and it leans mostly on what you tell us in your check-in, because self-report turns out to track how you're coping better than any wrist sensor does. The point isn't to scare you — it's that the injuries that end seasons usually announce themselves a week or two early, and the earliest place they show up is what you notice about your own body.`;
+      return `RunGuard doesn't give you an injury-risk number any more, and that's deliberate — the ones apps show (including the one this used to show) don't predict injury well enough to be worth acting on. The workload ratio in particular was tested in a study of 5,205 runners and showed no association with getting hurt. So instead of a score, here's what your data actually says: ${drivers}${spiked ? ` Also worth noting — your ${miNum(spiked.km)} mi run was ${spiked.spike!.pctAbove}% longer than anything else in the month before it, and that single-session jump is the one load pattern the research does support.` : ""} Readiness (${p.readiness}/100) is the number to watch day to day, and it leans mostly on what you tell us in your check-in, because self-report turns out to track how you're coping better than any wrist sensor does. The point isn't to scare you — it's that the injuries that end seasons usually announce themselves a week or two early, and the earliest place they show up is what you notice about your own body.`;
     },
   },
 
@@ -400,7 +401,7 @@ const INTENTS: Intent[] = [
   {
     id: "shoes",
     score: (q) => hit(q, [/shoe|spikes|racing flat|super ?shoe|carbon|rotation|new kicks|footwear/], 2),
-    answer: () => `Shoe basics that actually matter: (1) replace trainers around 500–800 km — worn midsoles are a quiet cause of shin and knee pain, so if a nagging ache started when your shoes got old, that's your answer. (2) Rotate two pairs if you can; it lets the foam recover and spreads the stress. (3) Racing flats or spikes only for workouts and races, not daily runs — they're less protective. (4) Don't chase "super shoes" as a teenager; a well-fit daily trainer that feels good beats a marketing story. Fit rule: thumbnail of space at the toe, locked heel, comfortable out of the box — a shoe you have to "break in" is the wrong shoe.`,
+    answer: () => `Shoe basics that actually matter: (1) replace trainers around 300–500 mi — worn midsoles are a quiet cause of shin and knee pain, so if a nagging ache started when your shoes got old, that's your answer. (2) Rotate two pairs if you can; it lets the foam recover and spreads the stress. (3) Racing flats or spikes only for workouts and races, not daily runs — they're less protective. (4) Don't chase "super shoes" as a teenager; a well-fit daily trainer that feels good beats a marketing story. Fit rule: thumbnail of space at the toe, locked heel, comfortable out of the box — a shoe you have to "break in" is the wrong shoe.`,
   },
   /* ---------- treadmill / weather ---------- */
   {
@@ -518,7 +519,7 @@ async function ruleAnswer(q: string, p: CoreProfile): Promise<string> {
     const val = parseInt(numMatch[1]);
     const km = /mi|mile/.test(numMatch[2]) ? Math.round(val * 1.609) : val;
     const vs = km > p.risk.weekKm * 1.15 ? "well above" : km < p.risk.weekKm * 0.85 ? "below" : "right around";
-    return `You mentioned ${val} ${numMatch[2]} — that's ${vs} your current ${p.risk.weekKm} km/week. Whether it's "too much" is about the jump, not the number: big weekly increases (past ~10%) are what drive injuries, and your load ratio right now is ${p.risk.acwr ?? "still building"}. If you want to build toward it, add a couple km to your easy days each week and let your body catch up. Want me to map a safe path from where you are to there?`;
+    return `You mentioned ${val} ${numMatch[2]} — that's ${vs} your current ${miNum(p.risk.weekKm)} mi/week. Whether it's "too much" is about the jump, not the number: big weekly increases (past ~10%) are what drive injuries, and your load ratio right now is ${p.risk.acwr ?? "still building"}. If you want to build toward it, add a couple miles to your easy days each week and let your body catch up. Want me to map a safe path from where you are to there?`;
   }
 
   const race = nextRaceLine(p);
@@ -531,7 +532,7 @@ function dataContext(p: CoreProfile): string {
   const r = p.risk;
   return [
     `Athlete: ${p.athlete.name}, grade ${p.athlete.grade}, ${p.athlete.school}. Events: ${p.athlete.events.join(", ")}.`,
-    `Readiness ${p.readiness}/100 (shown to the athlete; mostly self-report). Internal-only diagnostics, NOT shown and not to be quoted as a risk score: legacy risk ${r.score}, ACWR ${r.acwr ?? "n/a"}, week ${r.weekKm} km (ramp ${r.rampPct ?? 0}%), monotony ${r.monotony ?? "n/a"}, days since rest ${r.daysSinceRest}.`,
+    `Readiness ${p.readiness}/100 (shown to the athlete; mostly self-report). Internal-only diagnostics, NOT shown and not to be quoted as a risk score: legacy risk ${r.score}, ACWR ${r.acwr ?? "n/a"}, week ${miNum(r.weekKm)} mi (ramp ${r.rampPct ?? 0}%), monotony ${r.monotony ?? "n/a"}, days since rest ${r.daysSinceRest}.`,
     `Recovery: resting HR ${r.recovery.restingHr ?? "n/a"} (baseline ${r.recovery.restingHrBaseline ?? "n/a"}, Δ${r.recovery.restingHrDelta ?? 0}), HRV ${r.recovery.hrv ?? "n/a"} ms (${r.recovery.hrvDeltaPct ?? 0}% vs baseline), sleep ${r.recovery.sleepAvg ?? "n/a"}h avg, sleep debt ${p.patterns.sleepDebtH ?? 0}h, VO2max ${p.fitness.vo2max ?? "n/a"}.`,
     `Fitness ${p.fitness.score}/100 (${p.fitness.trend}), tier ${p.fitness.tier}, freshness ${p.fitness.freshness}. Patterns: monotony ${p.patterns.monotony}, high-effort streak ${p.patterns.highEffortStreak}, overreaching ${p.patterns.overreaching}, illness flag ${p.illness}.`,
     `Predictions: 800m ${p.predictions["800m"].label}, Mile ${p.predictions["Mile"].label}, 5K ${p.predictions["5K"].label}, XC ${p.predictions["XC 5K"].label}. PRs: ${p.prs.map((x) => `${x.event} ${x.label}`).join(", ")}.`,
@@ -546,13 +547,13 @@ function dataContext(p: CoreProfile): string {
 
 const COACH_SYSTEM = `You are RunGuard AI, the training brain inside RunGuard — and you are this athlete's coach, not a generic assistant. You know exercise science cold: ACWR research (sweet spot 0.8–1.3, risk doubling past 1.5), 80/20 polarized training, supercompensation (stress + rest = growth), taper science, teen sleep needs (8–10h; <8h roughly doubles injury risk), RED-S/under-fueling risks, and injury red-flag screening (focal bone pain, hop test, one-sided sharp pain → refer to athletic trainer, no diagnosis).
 
-Voice: a sharp, warm coach who has seen a thousand high school seasons. Direct, specific, encouraging without being soft. 3-6 sentences usually; short paragraphs, no bullet lists unless asked. ALWAYS ground answers in the athlete's actual data provided below — quote their real numbers. Prefer process over outcome. Never body-shame or discuss weight loss with a minor; if under-fueling signs appear, flag them kindly and suggest talking to a trusted adult. For pain that is sharp, localized, one-sided, or worsening: stop-running advice + see the athletic trainer, always. You may reference their coach ("loop in your coach").
+Voice: a sharp, warm coach who has seen a thousand high school seasons. Direct, specific, encouraging without being soft. 3-6 sentences usually; short paragraphs, no bullet lists unless asked. ALWAYS ground answers in the athlete's actual data provided below — quote their real numbers. ALWAYS use miles and min/mile pace — never kilometres. The data below is already in miles. Prefer process over outcome. Never body-shame or discuss weight loss with a minor; if under-fueling signs appear, flag them kindly and suggest talking to a trusted adult. For pain that is sharp, localized, one-sided, or worsening: stop-running advice + see the athletic trainer, always. You may reference their coach ("loop in your coach").
 ${KNOWLEDGE_FOR_PROMPT}
 STYLE EXAMPLES (match this voice — specific, warm, data-grounded, never a lecture):
 Q: "should I run today my legs are dead"
 A: "Your readiness is 41 and your HRV's sitting 14% under baseline, so your legs aren't lying — that's real fatigue, not laziness. Do the easy 30 min on the plan but keep it truly easy, no strides. If it's sharp or one-sided anywhere, that's a different conversation — tell me where."
 Q: "how do I get faster"
-A: "For your 5K (predicted 18:40), the fastest lever isn't more hard days — it's protecting the easy ones. Your monotony's at 2.1, which means everything's blurring into medium. Make your easy days genuinely easy and your one threshold day genuinely hard, and hold your ~50k. That polarization is exactly how the fast kids train."
+A: "For your 5K (predicted 18:40), the fastest lever isn't more hard days — it's protecting the easy ones. Your monotony's at 2.1, which means everything's blurring into medium. Make your easy days genuinely easy and your one threshold day genuinely hard, and hold your ~30 mi. That polarization is exactly how the fast kids train."
 Never invent numbers — only use the data below. If a value is n/a, don't cite it.
 
 Athlete data (live, from their synced wearables and check-ins):

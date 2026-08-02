@@ -1,6 +1,7 @@
 import { localDay } from "./day";
 import { ActivityRow } from "./db";
 import { RiskSnapshot, DailyPoint } from "./risk";
+import { KM_PER_MI, miNum } from "./units";
 
 export type PacePoint = {
   week: string; // label
@@ -21,9 +22,10 @@ export type Workout = {
 };
 
 export function fmtPace(secPerKm: number): string {
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
-  return `${m}:${String(s).padStart(2, "0")}/km`;
+  const secPerMi = secPerKm * KM_PER_MI;
+  const m = Math.floor(secPerMi / 60);
+  const s = Math.round(secPerMi % 60);
+  return `${m}:${String(s).padStart(2, "0")}/mi`;
 }
 
 /** Distance-weighted average pace per week over the last 12 weeks. */
@@ -121,7 +123,7 @@ export function athleteInsights(risk: RiskSnapshot): string[] {
 
   if (rampPct !== null && rampPct > 30) {
     out.push(
-      `Your mileage jumped ${Math.round(rampPct)}% this week (${prevWeekKm} → ${weekKm} km). Anything past ~10% per week starts stacking risk — hold here for a week before adding more.`
+      `Your mileage jumped ${Math.round(rampPct)}% this week (${miNum(prevWeekKm)} → ${miNum(weekKm)} mi). Anything past ~10% per week starts stacking risk — hold here for a week before adding more.`
     );
   }
 

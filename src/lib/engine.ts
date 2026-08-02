@@ -1,5 +1,6 @@
 import { localDay } from "./day";
 import { HR_MAX_DEFAULT } from "./hrmax";
+import { miNum } from "./units";
 /**
  * RunGuard's full athlete engine — everything computed on top of raw Apple Health /
  * Strava data: load metrics (TRIMP, HR zones), pattern detection, fitness &
@@ -45,6 +46,14 @@ export function fmtTime(totalS: number): string {
 
 export function fmtPaceKm(secPerKm: number): string {
   return `${fmtTime(secPerKm)}/km`;
+}
+
+/** km→mile pace conversion factor (1 mile = 1.609344 km). */
+const KM_PER_MI = 1.609344;
+
+/** Seconds-per-km → "7:03/mi" (RunGuard displays imperial pace). */
+export function fmtPaceMi(secPerKm: number): string {
+  return `${fmtTime(secPerKm * KM_PER_MI)}/mi`;
 }
 
 function round(n: number, p = 1): number {
@@ -297,8 +306,8 @@ export function pacingStrategy(event: EventName, predictedS: number): string[] {
   }
   const perKm = predictedS / (d / 1000);
   return [
-    `Target ${fmtPaceKm(perKm)} — that's ${fmtTime(predictedS)} at the line.`,
-    `First km no faster than ${fmtPaceKm(perKm + 5)}; negative-split the back half.`,
+    `Target ${fmtPaceMi(perKm)} — that's ${fmtTime(predictedS)} at the line.`,
+    `First mile no faster than ${fmtPaceMi(perKm + 5)}; negative-split the back half.`,
     `Attack the last 800m if you're still in control at 2 to go.`,
   ];
 }
@@ -357,7 +366,7 @@ export function planAdjustment(
   if (recentSpike) {
     scale -= 0.1;
     reasons.push(
-      `your ${recentSpike.km} km run was ${recentSpike.pctAbove}% past your recent longest`
+      `your ${miNum(recentSpike.km)} mi run was ${recentSpike.pctAbove}% past your recent longest`
     );
   }
   const self = risk.selfReport;
@@ -390,10 +399,10 @@ export function weeklyPlan(
   adjustment: PlanAdjustment = { scale: 1, reason: null }
 ): { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null; adjustment: PlanAdjustment } {
   const pace5k = predictions["5K"].timeS / 5; // s/km
-  const easy = fmtPaceKm(pace5k * 1.3);
-  const tempo = fmtPaceKm(pace5k * 1.06);
-  const interval = fmtPaceKm(pace5k * 0.96);
-  const longP = fmtPaceKm(pace5k * 1.24);
+  const easy = fmtPaceMi(pace5k * 1.3);
+  const tempo = fmtPaceMi(pace5k * 1.06);
+  const interval = fmtPaceMi(pace5k * 0.96);
+  const longP = fmtPaceMi(pace5k * 1.24);
 
   const monday = new Date(now);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); // this week's Monday
@@ -624,7 +633,7 @@ export function computeBadges(
   const injuryFree = !injuries.some((i) => new Date(i.date).getTime() > seasonStart);
 
   return [
-    { id: "hundred", label: "100-Mile Month", earned: best30 >= 161, detail: `Best 30 days: ${Math.round(best30)} km` },
+    { id: "hundred", label: "100-Mile Month", earned: best30 >= 161, detail: `Best 30 days: ${miNum(best30, 0)} mi` },
     { id: "streak7", label: "7-Day Streak", earned: bestStreak >= 7, detail: `Longest streak: ${bestStreak} days` },
     { id: "pr", label: "New PR", earned: recentPr, detail: recentPr ? "PR set in the last 45 days" : "Race a PR to earn it" },
     { id: "healthy", label: "Injury-Free Season", earned: injuryFree, detail: injuryFree ? "No injuries logged this season" : "Injury logged this season" },

@@ -141,6 +141,7 @@ export type ActivityRow = {
   elevation_gain_m: number | null;
   calories: number | null;
   cadence: number | null;
+  route: string | null;
 };
 
 export type MetricRow = {
@@ -320,6 +321,13 @@ export async function activitiesForAthlete(
     select * from activities
     where athlete_id = ${athleteId} and start_time >= ${sinceIso}
     order by start_time`) as unknown as ActivityRow[];
+}
+
+/** A single activity by id (caller must check ownership against athlete_id). */
+export async function getActivityById(id: number): Promise<ActivityRow | undefined> {
+  return first(await getSql()`select * from activities where id = ${id}`) as
+    | ActivityRow
+    | undefined;
 }
 
 /* ---------------- races ---------------- */

@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { InsufficientData, hasEnoughData } from "./EmptyState";
 import { NOT_ENOUGH_ACWR_HISTORY } from "@/lib/risk";
+import { miNum, KM_PER_MI } from "@/lib/units";
 
 const INK_MUTED = "#94897b";
 const GRID = "#ece6da";
@@ -161,7 +162,7 @@ export function LoadChart({ data }: { data: SeriesPoint[] }) {
                   label={fmtDay(p.date)}
                   rows={[
                     ["Day load", Math.round(p.load) + ""],
-                    ["Distance", p.km.toFixed(1) + " km"],
+                    ["Distance", miNum(p.km).toFixed(1) + " mi"],
                     ["Acute (7d avg)", Math.round(p.acute) + ""],
                     ["Chronic (28d avg)", Math.round(p.chronic) + ""],
                   ]}
@@ -240,7 +241,7 @@ export function WeeklyKmChart({
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null;
             const p = payload[0].payload as { week: string; km: number };
-            return <TooltipBox label={p.week} rows={[["Distance", p.km.toFixed(1) + " km"]]} />;
+            return <TooltipBox label={p.week} rows={[["Distance", miNum(p.km).toFixed(1) + " mi"]]} />;
           }}
         />
         <defs>
@@ -296,7 +297,7 @@ export function PaceChart({ data }: { data: { week: string; pace: number | null 
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null;
             const p = payload[0].payload as { week: string; pace: number };
-            return <TooltipBox label={p.week} rows={[["Avg pace", fmt(p.pace) + "/km"]]} />;
+            return <TooltipBox label={p.week} rows={[["Avg pace", fmt(p.pace * KM_PER_MI) + "/mi"]]} />;
           }}
         />
         <Line

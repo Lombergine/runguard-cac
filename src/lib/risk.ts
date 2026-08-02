@@ -1,6 +1,7 @@
 import { localDay } from "./day";
 import { HR_MAX_DEFAULT, resolveHrMax, type HrMaxResolution, type HrMaxAthlete } from "./hrmax";
 import { ActivityRow, MetricRow } from "./db";
+import { miNum } from "./units";
 
 /**
  * RunGuard risk engine.
@@ -523,7 +524,7 @@ export function computeRisk(
   if (rampPct !== null && rampPct > 30) {
     score += Math.min(25, (rampPct - 30) * 0.7);
     insights.push(
-      `Weekly mileage jumped ${Math.round(rampPct)}% (${round(prevWeekKm)} km → ${round(weekKm)} km). Jumps over ~30% sharply raise injury risk.`
+      `Weekly mileage jumped ${Math.round(rampPct)}% (${miNum(prevWeekKm)} mi → ${miNum(weekKm)} mi). Jumps over ~30% sharply raise injury risk.`
     );
   } else if (rampPct !== null && rampPct < -40 && prevWeekKm > 15) {
     insights.push(

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buildProfile } from "@/lib/profile";
 import { getAthlete } from "@/lib/db";
+import { miNum } from "@/lib/units";
 import { currentTeamId } from "@/lib/session";
 import { coachWhy } from "@/lib/chat";
 import Avatar from "@/components/Avatar";
@@ -180,13 +181,13 @@ function CoachView({
         />
         <CStat
           label="This week"
-          value={`${p.risk.weekKm} km`}
+          value={`${miNum(p.risk.weekKm)} mi`}
           info="Distance run in the last 7 days — a rolling window, not since Monday."
         />
         <CStat
           label="Ramp"
           value={p.risk.rampPct !== null ? `${p.risk.rampPct > 0 ? "+" : ""}${p.risk.rampPct}%` : "—"}
-          info="Week-over-week change in distance: the last 7 days against the 7 before. Shown for context only — in a cohort of 5,205 runners, week-to-week ratios like this had no association with injury. Blank if the previous week was under 3 km."
+          info="Week-over-week change in distance: the last 7 days against the 7 before. Shown for context only — in a cohort of 5,205 runners, week-to-week ratios like this had no association with injury. Blank if the previous week was under 2 mi."
         />
         <CStat
           label="Week TRIMP"
@@ -225,7 +226,7 @@ function CoachView({
         <CStat
           label="Fitness score"
           value={p.risk.hasActivityHistory ? `${p.fitness.score}` : "—"}
-          info="0–100, from their most recent week with real running in it: 55% Apple's VO₂max reading, 45% distance-weighted pace (about 7:00/km scores 0, 3:20/km scores 100). With no VO₂max on file it's pace alone."
+          info="0–100, from their most recent week with real running in it: 55% Apple's VO₂max reading, 45% distance-weighted pace (about 11:15/mi scores 0, 5:20/mi scores 100). With no VO₂max on file it's pace alone."
         />
         <CStat
           label="Tier"

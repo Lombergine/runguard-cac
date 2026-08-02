@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { miNum } from "@/lib/units";
 
 export type CalendarDay = { date: string; load: number; km: number };
 
@@ -102,7 +103,7 @@ export default function IntensityCalendar({ days }: { days: CalendarDay[] }) {
             {MONTHS[month]} {year}
           </div>
           <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
-            {monthDays} training days · {Math.round(monthKm)} km
+            {monthDays} training days · {miNum(monthKm, 0)} mi
           </div>
         </div>
         <button
@@ -199,7 +200,7 @@ export default function IntensityCalendar({ days }: { days: CalendarDay[] }) {
                   })}
                   :
                 </span>{" "}
-                {LEVEL_LABEL[hoverLevel]} · {hoverData.km.toFixed(1)} km · load{" "}
+                {LEVEL_LABEL[hoverLevel]} · {miNum(hoverData.km).toFixed(1)} mi · load{" "}
                 {Math.round(hoverData.load)}
               </>
             ) : (

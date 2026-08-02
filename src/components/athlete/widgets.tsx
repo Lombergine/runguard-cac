@@ -548,14 +548,14 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [event, setEvent] = useState(events[0]);
-  const [distanceKm, setDistanceKm] = useState("");
+  const [distanceMi, setDistanceMi] = useState("");
   const [location, setLocation] = useState("");
   const [msg, setMsg] = useState("");
   const router = useRouter();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const distanceM = parseFloat(distanceKm) * 1000;
+    const distanceM = parseFloat(distanceMi) * 1609.344;
     const missing: string[] = [];
     if (!name.trim()) missing.push("race name");
     if (!date) missing.push("date");
@@ -578,7 +578,7 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
       setMsg("Added ✓");
       setName("");
       setDate("");
-      setDistanceKm("");
+      setDistanceMi("");
       setLocation("");
       router.refresh();
     } else {
@@ -595,7 +595,7 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
           <option key={ev}>{ev}</option>
         ))}
       </select>
-      <input value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)} placeholder="Distance (km)" className="w-28 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input value={distanceMi} onChange={(e) => setDistanceMi(e.target.value)} placeholder="Distance (mi)" className="w-28 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location (optional)" className="w-40 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <button className="rounded-xl px-4 py-2 text-sm font-semibold text-black cursor-pointer" style={{ background: "var(--brand)" }}>
         Add race
