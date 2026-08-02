@@ -1,5 +1,5 @@
 import { resolveAthlete } from "@/lib/apiAuth";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -11,11 +11,8 @@ export async function POST(request: Request) {
   if (!event || target === null) {
     return Response.json({ error: "Need event and target" }, { status: 400 });
   }
-  getDb()
-    .prepare(
-      `INSERT INTO goals (athlete_id, event, target) VALUES (?, ?, ?)
-       ON CONFLICT(athlete_id, event) DO UPDATE SET target = excluded.target`
-    )
-    .run(athlete.id, event, target);
+  await getSql()`
+    insert into goals (athlete_id, event, target) values (${athlete.id}, ${event}, ${target})
+    on conflict (athlete_id, event) do update set target = excluded.target`;
   return Response.json({ ok: true });
 }

@@ -16,7 +16,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (typeof body.distanceM === "number" && body.distanceM > 0) patch.distance_m = body.distanceM;
   if (typeof body.location === "string") patch.location = body.location.slice(0, 120);
 
-  const ok = updateRace(raceId, athlete.id, patch);
+  const ok = await updateRace(raceId, athlete.id, patch);
   if (!ok) return Response.json({ error: "Not found or not yours to edit" }, { status: 403 });
   return Response.json({ ok: true });
 }
@@ -29,7 +29,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
   if (!Number.isInteger(raceId)) return Response.json({ error: "Invalid race id" }, { status: 400 });
 
-  const ok = deleteRace(raceId, athlete.id);
+  const ok = await deleteRace(raceId, athlete.id);
   if (!ok) return Response.json({ error: "Not found or not yours to delete" }, { status: 403 });
   return Response.json({ ok: true });
 }

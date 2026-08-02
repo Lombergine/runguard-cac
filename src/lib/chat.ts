@@ -8,23 +8,30 @@
  * ANTHROPIC_API_KEY is set, Claude answers with the same knowledge and the
  * athlete's live data as context; otherwise this engine handles it.
  */
-import { getDb } from "./db";
+import { getSql } from "./db";
 import { CoreProfile } from "./profile";
 import { fmtTime, EventName, EVENTS } from "./engine";
 import { FACTS, KNOWLEDGE_FOR_PROMPT } from "./knowledge";
 
-export function logChat(athleteId: number, role: "user" | "assistant", text: string): void {
-  getDb()
-    .prepare("INSERT INTO chat_messages (athlete_id, role, text) VALUES (?, ?, ?)")
-    .run(athleteId, role, text);
+export async function logChat(
+  athleteId: number,
+  role: "user" | "assistant",
+  text: string
+): Promise<void> {
+  await getSql()`insert into chat_messages (athlete_id, role, text) values (${athleteId}, ${role}, ${text})`;
 }
 
-export function chatHistory(athleteId: number, limit = 30): { role: string; text: string }[] {
-  return (getDb()
-    .prepare(
-      "SELECT role, text FROM chat_messages WHERE athlete_id = ? ORDER BY id DESC LIMIT ?"
-    )
-    .all(athleteId, limit) as { role: string; text: string }[]).reverse();
+export async function chatHistory(
+  athleteId: number,
+  limit = 30
+): Promise<{ role: string; text: string }[]> {
+  const rows = (await getSql()`
+    select role, text from chat_messages
+    where athlete_id = ${athleteId} order by id desc limit ${limit}`) as unknown as {
+    role: string;
+    text: string;
+  }[];
+  return rows.reverse();
 }
 
 /* ------------------------------------------------------------------ */
@@ -467,17 +474,18 @@ function classify(lower: string): { intent: Intent | null; score: number } {
 }
 
 /** The user message just before the current one (for follow-up continuity). */
-function previousUserMessage(athleteId: number): string | null {
-  const rows = getDb()
-    .prepare("SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 2")
-    .all(athleteId) as { text: string }[];
+async function previousUserMessage(athleteId: number): Promise<string | null> {
+  const rows = (await getSql()`
+    select text from chat_messages
+    where athlete_id = ${athleteId} and role = 'user'
+    order by id desc limit 2`) as unknown as { text: string }[];
   return rows[1]?.text ?? null; // rows[0] is the current message
 }
 
 const ACK = /^(ok(ay)?|thanks|thank you|thx|got it|cool|nice|sounds good|will do|makes sense|k+|👍|great)\b/i;
 const FOLLOWUP = /^(why|how (long|come|much|often|do i)|what (do|about|else|now|next)|and\b|so\b|then\b|really|are you sure|explain|elaborate|tell me more|more|but\b|ok(ay)? (so|but|what|how|and))/i;
 
-function ruleAnswer(q: string, p: CoreProfile): string {
+async function ruleAnswer(q: string, p: CoreProfile): Promise<string> {
   const lower = q.toLowerCase().trim();
   const words = lower.split(/\s+/).length;
   const { intent, score } = classify(lower);
@@ -492,7 +500,7 @@ function ruleAnswer(q: string, p: CoreProfile): string {
 
   // Thin follow-up ("how long?", "why?", "what do I do") — continue the last topic.
   if ((FOLLOWUP.test(lower) || words <= 4) && score < 2) {
-    const prev = previousUserMessage(p.athlete.id);
+    const prev = await previousUserMessage(p.athlete.id);
     if (prev) {
       const prevMatch = classify(prev.toLowerCase());
       if (prevMatch.intent && prevMatch.score > 0) {
@@ -554,8 +562,10 @@ export async function answer(q: string, p: CoreProfile): Promise<string> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (key) {
     try {
-      const history = chatHistory(p.athlete.id, 10)
-        .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.text }));
+      const history = (await chatHistory(p.athlete.id, 10)).map((m) => ({
+        role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+        content: m.text,
+      }));
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {

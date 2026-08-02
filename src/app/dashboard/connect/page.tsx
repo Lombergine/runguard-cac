@@ -13,7 +13,7 @@ export default async function ConnectPage({
 }) {
   const sp = await searchParams;
   const teamId = await currentTeamId();
-  const athletes = teamId ? athletesForTeam(teamId) : listAthletes();
+  const athletes = teamId ? await athletesForTeam(teamId) : await listAthletes();
   const configured = stravaConfigured();
 
   return (

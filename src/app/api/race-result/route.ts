@@ -1,6 +1,6 @@
 import { localDay } from "@/lib/day";
 import { resolveAthlete } from "@/lib/apiAuth";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -15,19 +15,11 @@ export async function POST(request: Request) {
   if (!event || timeS === null) {
     return Response.json({ error: "Need event and timeS (seconds)" }, { status: 400 });
   }
-  getDb()
-    .prepare(
-      `INSERT INTO race_results (athlete_id, event, date, time_s, place, feel, conditions)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      athlete.id,
-      event,
-      date,
-      timeS,
-      typeof body.place === "number" ? body.place : null,
-      ["great", "ok", "rough"].includes(body.feel) ? body.feel : null,
-      typeof body.conditions === "string" ? body.conditions.slice(0, 120) : null
-    );
+  const place = typeof body.place === "number" ? body.place : null;
+  const feel = ["great", "ok", "rough"].includes(body.feel) ? body.feel : null;
+  const conditions = typeof body.conditions === "string" ? body.conditions.slice(0, 120) : null;
+  await getSql()`
+    insert into race_results (athlete_id, event, date, time_s, place, feel, conditions)
+    values (${athlete.id}, ${event}, ${date}, ${timeS}, ${place}, ${feel}, ${conditions})`;
   return Response.json({ ok: true });
 }

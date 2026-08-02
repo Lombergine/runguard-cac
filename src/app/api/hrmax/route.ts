@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
 
   if (body.hrMax === null) {
-    setAthleteHrMax(athlete.id, null, null);
+    await setAthleteHrMax(athlete.id, null, null);
     return Response.json({ ok: true, cleared: true });
   }
 
@@ -27,6 +27,6 @@ export async function POST(request: Request) {
   }
 
   const source = body.source === "calibrated" ? "calibrated" : "manual";
-  setAthleteHrMax(athlete.id, value, source);
+  await setAthleteHrMax(athlete.id, value, source);
   return Response.json({ ok: true, hrMax: value, source });
 }

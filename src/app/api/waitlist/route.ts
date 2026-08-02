@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -7,8 +7,8 @@ export async function POST(request: Request) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return Response.json({ ok: false, error: "Enter a valid email." }, { status: 400 });
   }
-  getDb()
-    .prepare("INSERT OR IGNORE INTO waitlist (email, role) VALUES (?, ?)")
-    .run(email, role);
+  await getSql()`
+    insert into waitlist (email, role) values (${email}, ${role})
+    on conflict (email) do nothing`;
   return Response.json({ ok: true });
 }

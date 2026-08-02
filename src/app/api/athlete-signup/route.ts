@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   let teamId: number | null = null;
   let teamName: string | null = null;
   if (joinCode) {
-    const team = getTeamByCode(joinCode);
+    const team = await getTeamByCode(joinCode);
     if (!team) {
       return Response.json(
         { error: "That team code doesn't match any team. Leave it blank to join on your own." },
@@ -42,11 +42,11 @@ export async function POST(request: Request) {
     teamName = team.name;
   }
 
-  if (getAthleteByEmail(email)) {
+  if (await getAthleteByEmail(email)) {
     return Response.json({ error: "An account with that email already exists — log in instead." }, { status: 409 });
   }
 
-  const athlete = createAthleteAccount({
+  const athlete = await createAthleteAccount({
     name,
     email,
     password_hash: hashPassword(password),

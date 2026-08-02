@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   }
   // team-scope: coaches can only import for their own athletes
   const teamId = await currentTeamId();
-  const target = getAthlete(athleteId);
+  const target = await getAthlete(athleteId);
   if (!target || (teamId && target.team_id && target.team_id !== teamId)) {
     return Response.json({ error: "That athlete isn't on your team." }, { status: 403 });
   }
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     );
     let imported = 0;
     for (const w of workouts) {
-      const ok = insertActivity({
+      const ok = await insertActivity({
         athlete_id: athleteId,
         source: "apple_export",
         external_id: w.externalId,
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       if (ok) imported++;
     }
     for (const m of metrics) {
-      upsertMetric({
+      await upsertMetric({
         athlete_id: athleteId,
         date: m.date,
         resting_hr: m.restingHr,

@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   if (!email || !password) {
     return Response.json({ error: "Enter your email and password." }, { status: 400 });
   }
-  const team = getTeamByCoachEmail(email);
+  const team = await getTeamByCoachEmail(email);
   if (!team || !verifyPassword(password, team.coach_password_hash)) {
     return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
   }

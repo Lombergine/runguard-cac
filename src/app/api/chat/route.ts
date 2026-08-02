@@ -11,12 +11,12 @@ export async function POST(request: Request) {
   const q = typeof body.message === "string" ? body.message.trim().slice(0, 1000) : "";
   if (!q) return Response.json({ error: "Empty message" }, { status: 400 });
 
-  const profile = buildProfile(athlete.id);
+  const profile = await buildProfile(athlete.id);
   if (!profile) return Response.json({ error: "No athlete" }, { status: 404 });
 
-  logChat(athlete.id, "user", q);
+  await logChat(athlete.id, "user", q);
   const reply = await answer(q, profile);
-  logChat(athlete.id, "assistant", reply);
+  await logChat(athlete.id, "assistant", reply);
   return Response.json({ reply });
 }
 
@@ -24,5 +24,5 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const athlete = await resolveAthlete(request, Number(url.searchParams.get("athleteId")) || null);
   if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
-  return Response.json({ history: chatHistory(athlete.id) });
+  return Response.json({ history: await chatHistory(athlete.id) });
 }

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { exchangeCode, verifyState, syncAthlete } from "@/lib/strava";
 
 export async function GET(request: Request) {
@@ -13,17 +13,13 @@ export async function GET(request: Request) {
   }
 
   const tok = await exchangeCode(code);
-  getDb()
-    .prepare(
-      "UPDATE athletes SET strava_athlete_id=?, strava_access_token=?, strava_refresh_token=?, strava_expires_at=? WHERE id=?"
-    )
-    .run(
-      String(tok.athlete?.id ?? ""),
-      tok.access_token,
-      tok.refresh_token,
-      tok.expires_at,
-      athleteId
-    );
+  await getSql()`
+    update athletes set
+      strava_athlete_id = ${String(tok.athlete?.id ?? "")},
+      strava_access_token = ${tok.access_token},
+      strava_refresh_token = ${tok.refresh_token},
+      strava_expires_at = ${tok.expires_at}
+    where id = ${athleteId}`;
 
   // pull history right away so the dashboard fills in
   try {

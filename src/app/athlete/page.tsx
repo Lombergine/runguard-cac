@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getDb, AthleteRow } from "@/lib/db";
+import { getAthleteByToken } from "@/lib/db";
 import { athleteTokenFromCookie } from "@/lib/session";
 import { buildProfile } from "@/lib/profile";
 import Avatar from "@/components/Avatar";
@@ -24,11 +24,7 @@ export default async function AthletePortal({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const token = await athleteTokenFromCookie();
-  const athlete = token
-    ? (getDb()
-        .prepare("SELECT * FROM athletes WHERE device_token = ?")
-        .get(token) as AthleteRow | undefined)
-    : undefined;
+  const athlete = token ? await getAthleteByToken(token) : undefined;
   if (!athlete) redirect("/athlete/login");
 
   const { tab } = await searchParams;
@@ -36,7 +32,7 @@ export default async function AthletePortal({
     ? (tab as (typeof TABS)[number])
     : "Home";
 
-  const p = buildProfile(athlete.id);
+  const p = await buildProfile(athlete.id);
   if (!p) redirect("/athlete/login");
 
   const unread = p.notifications.length;

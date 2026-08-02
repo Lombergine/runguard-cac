@@ -4,15 +4,14 @@ import crypto from "crypto";
 /**
  * RunGuard data layer — Postgres (Supabase).
  *
- * The app connects over the standard Postgres connection string (DATABASE_URL);
- * that role bypasses RLS, so the server has full read/write while the public
- * anon API stays locked down. All query functions are async.
+ * The app connects over the standard Postgres connection (DATABASE_URL, or the
+ * DB_PASSWORD parts below); that role bypasses RLS, so the server has full
+ * read/write while the public anon API stays locked down. All query functions
+ * are async.
  *
- * The schema itself is managed in Supabase (see supabase/schema.sql) — the app
- * does not create tables at runtime.
+ * The schema itself is managed in Supabase — the app does not create tables at
+ * runtime.
  */
-
-const DATABASE_URL = process.env.DATABASE_URL;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -49,7 +48,6 @@ function makeClient(): ReturnType<typeof postgres> {
     // statements, so disable them; harmless on a direct connection too.
     prepare: false,
     ssl: local ? false : "require",
-    // Serverless-safe pool sizing (see note above).
     max: 1,
     idle_timeout: 20,
     connect_timeout: 10,
@@ -86,6 +84,7 @@ export function verifyPassword(pw: string, stored: string | null | undefined): b
   }
 }
 
+/* readable join code like "LELAND-7QK4" */
 export function makeJoinCode(teamName: string): string {
   const stem = (teamName.replace(/[^a-zA-Z]/g, "").slice(0, 6) || "TEAM").toUpperCase();
   const rand = crypto.randomBytes(3).toString("hex").toUpperCase().slice(0, 4);
@@ -113,6 +112,8 @@ export type AthleteRow = {
   team_id: number | null;
   email: string | null;
   password_hash: string | null;
+  hr_max: number | null;
+  hr_max_source: string | null;
 };
 
 export type TeamRow = {
@@ -140,7 +141,6 @@ export type ActivityRow = {
   elevation_gain_m: number | null;
   calories: number | null;
   cadence: number | null;
-  route: string | null;
 };
 
 export type MetricRow = {
@@ -168,6 +168,8 @@ export type RaceRow = {
   event: string;
   distance_m: number;
   location: string | null;
+  created_by_athlete_id: number | null; // null = coach/seed-created
+  team_id: number | null;
 };
 
 export type RaceResultRow = {
@@ -195,12 +197,22 @@ export type CheckinRow = {
   academic_stress: number | null;
 };
 
+export type CheckinSorenessRow = {
+  id: number;
+  checkin_id: number;
+  athlete_id: number;
+  date: string;
+  body_part: string;
+  severity: number;
+};
+
 export type InjuryRow = {
   id: number;
   athlete_id: number;
   date: string;
   body_part: string;
   note: string | null;
+  resolved_at: string | null;
 };
 
 export type GoalRow = { id: number; athlete_id: number; event: string; target: number };
@@ -212,30 +224,20 @@ export async function createTeam(t: {
   coach_name: string;
   coach_email: string;
   coach_password_hash: string;
-  auth_user_id?: string | null;
 }): Promise<TeamRow> {
   const sql = getSql();
   let code = makeJoinCode(t.name);
+  // guarantee uniqueness
   for (let i = 0; i < 5; i++) {
     const exists = await sql`select 1 from teams where join_code = ${code}`;
     if (!exists.length) break;
     code = makeJoinCode(t.name);
   }
   const rows = await sql`
-    insert into teams (name, join_code, coach_name, coach_email, coach_password_hash, auth_user_id)
-    values (${t.name}, ${code}, ${t.coach_name}, ${t.coach_email}, ${t.coach_password_hash}, ${t.auth_user_id ?? null})
+    insert into teams (name, join_code, coach_name, coach_email, coach_password_hash)
+    values (${t.name}, ${code}, ${t.coach_name}, ${t.coach_email}, ${t.coach_password_hash})
     returning *`;
   return rows[0] as unknown as TeamRow;
-}
-
-export async function getTeamByAuthUser(authUserId: string): Promise<TeamRow | undefined> {
-  return first(
-    await getSql()`select * from teams where auth_user_id = ${authUserId}`
-  ) as TeamRow | undefined;
-}
-
-export async function setTeamAuthUser(teamId: number, authUserId: string): Promise<void> {
-  await getSql()`update teams set auth_user_id = ${authUserId} where id = ${teamId}`;
 }
 
 export async function getTeam(id: number): Promise<TeamRow | undefined> {
@@ -272,6 +274,15 @@ export async function getAthleteByToken(token: string): Promise<AthleteRow | und
 
 export async function setAthleteTeam(athleteId: number, teamId: number | null): Promise<void> {
   await getSql()`update athletes set team_id = ${teamId} where id = ${athleteId}`;
+}
+
+/** Set (or clear) an athlete's max heart rate. Pass null/null to reset to automatic. */
+export async function setAthleteHrMax(
+  athleteId: number,
+  hrMax: number | null,
+  source: string | null
+): Promise<void> {
+  await getSql()`update athletes set hr_max = ${hrMax}, hr_max_source = ${source} where id = ${athleteId}`;
 }
 
 export async function createAthleteAccount(a: {
@@ -311,15 +322,66 @@ export async function activitiesForAthlete(
     order by start_time`) as unknown as ActivityRow[];
 }
 
-export async function upcomingRaces(): Promise<RaceRow[]> {
+/* ---------------- races ---------------- */
+
+export async function upcomingRaces(scope: {
+  athleteId: number;
+  teamId: number | null;
+}): Promise<RaceRow[]> {
   const today = new Date().toISOString().slice(0, 10);
-  return (await getSql()`select * from races where date >= ${today} order by date`) as unknown as RaceRow[];
+  return (await getSql()`
+    select * from races
+    where date >= ${today}
+      and (created_by_athlete_id = ${scope.athleteId}
+           or (created_by_athlete_id is null and team_id is not null and team_id = ${scope.teamId}))
+    order by date`) as unknown as RaceRow[];
+}
+
+export async function createRace(r: {
+  name: string;
+  date: string;
+  event: string;
+  distance_m: number;
+  location?: string | null;
+  created_by_athlete_id: number;
+  team_id: number | null;
+}): Promise<RaceRow> {
+  const rows = await getSql()`
+    insert into races (name, date, event, distance_m, location, created_by_athlete_id, team_id)
+    values (${r.name}, ${r.date}, ${r.event}, ${r.distance_m}, ${r.location ?? null}, ${r.created_by_athlete_id}, ${r.team_id})
+    returning *`;
+  return rows[0] as unknown as RaceRow;
+}
+
+export async function updateRace(
+  id: number,
+  athleteId: number,
+  patch: Partial<Pick<RaceRow, "name" | "date" | "event" | "distance_m" | "location">>
+): Promise<boolean> {
+  const sql = getSql();
+  const race = first(await sql`select * from races where id = ${id}`) as RaceRow | undefined;
+  if (!race || race.created_by_athlete_id !== athleteId) return false;
+  const keys = Object.keys(patch) as (keyof typeof patch)[];
+  if (!keys.length) return true;
+  // Update only the fields present in the patch.
+  await sql`update races set ${sql(patch as Record<string, unknown>, ...(keys as string[]))} where id = ${id}`;
+  return true;
+}
+
+export async function deleteRace(id: number, athleteId: number): Promise<boolean> {
+  const sql = getSql();
+  const race = first(await sql`select * from races where id = ${id}`) as RaceRow | undefined;
+  if (!race || race.created_by_athlete_id !== athleteId) return false;
+  await sql`delete from races where id = ${id}`;
+  return true;
 }
 
 export async function raceResultsForAthlete(athleteId: number): Promise<RaceResultRow[]> {
   return (await getSql()`
     select * from race_results where athlete_id = ${athleteId} order by date`) as unknown as RaceResultRow[];
 }
+
+/* ---------------- checkins ---------------- */
 
 export async function checkinsForAthlete(
   athleteId: number,
@@ -362,6 +424,59 @@ export async function upsertCheckin(c: {
       academic_stress = coalesce(excluded.academic_stress, checkins.academic_stress)`;
 }
 
+export async function sorenessForCheckin(
+  athleteId: number,
+  date: string
+): Promise<CheckinSorenessRow[]> {
+  return (await getSql()`
+    select * from checkin_soreness
+    where athlete_id = ${athleteId} and date = ${date}
+    order by severity desc`) as unknown as CheckinSorenessRow[];
+}
+
+/** All per-body-part soreness reports on/after a given day (YYYY-MM-DD), oldest first. */
+export async function sorenessHistory(
+  athleteId: number,
+  sinceDate: string
+): Promise<CheckinSorenessRow[]> {
+  return (await getSql()`
+    select * from checkin_soreness
+    where athlete_id = ${athleteId} and date >= ${sinceDate.slice(0, 10)}
+    order by date`) as unknown as CheckinSorenessRow[];
+}
+
+export async function upsertCheckinSoreness(s: {
+  athlete_id: number;
+  date: string;
+  body_part: string;
+  severity: number;
+}): Promise<void> {
+  const sql = getSql();
+  // Ensure the parent checkin row exists, then grab its id.
+  await upsertCheckin({ athlete_id: s.athlete_id, date: s.date });
+  const checkin = first(
+    await sql`select id from checkins where athlete_id = ${s.athlete_id} and date = ${s.date}`
+  ) as { id: number } | undefined;
+  if (!checkin) return;
+  await sql`
+    insert into checkin_soreness (checkin_id, athlete_id, date, body_part, severity)
+    values (${checkin.id}, ${s.athlete_id}, ${s.date}, ${s.body_part}, ${s.severity})
+    on conflict (athlete_id, date, body_part) do update set
+      severity = excluded.severity, checkin_id = excluded.checkin_id`;
+}
+
+export async function clearCheckinSoreness(s: {
+  athlete_id: number;
+  date: string;
+  body_part: string;
+}): Promise<void> {
+  await getSql()`
+    delete from checkin_soreness
+    where athlete_id = ${s.athlete_id} and date = ${s.date} and body_part = ${s.body_part}`;
+}
+
+/* ---------------- metrics ---------------- */
+
 export async function metricsForAthlete(
   athleteId: number,
   sinceIso: string
@@ -372,6 +487,7 @@ export async function metricsForAthlete(
     order by date`) as unknown as MetricRow[];
 }
 
+/** Insert or merge a day's recovery metrics — only overwrites fields that arrive non-null. */
 export async function upsertMetric(m: {
   athlete_id: number;
   date: string;
@@ -421,26 +537,11 @@ export async function insertActivity(a: {
   elevation_gain_m?: number | null;
   calories?: number | null;
   cadence?: number | null;
-  route?: string | null;
 }): Promise<boolean> {
   const res = await getSql()`
     insert into activities
-      (athlete_id, source, external_id, name, type, start_time, distance_m, duration_s, avg_hr, max_hr, elevation_gain_m, calories, cadence, route)
-    values (${a.athlete_id}, ${a.source}, ${a.external_id ?? null}, ${a.name ?? null}, ${a.type ?? "Run"}, ${a.start_time}, ${a.distance_m ?? 0}, ${a.duration_s ?? 0}, ${a.avg_hr ?? null}, ${a.max_hr ?? null}, ${a.elevation_gain_m ?? null}, ${a.calories ?? null}, ${a.cadence ?? null}, ${a.route ?? null})
+      (athlete_id, source, external_id, name, type, start_time, distance_m, duration_s, avg_hr, max_hr, elevation_gain_m, calories, cadence)
+    values (${a.athlete_id}, ${a.source}, ${a.external_id ?? null}, ${a.name ?? null}, ${a.type ?? "Run"}, ${a.start_time}, ${a.distance_m ?? 0}, ${a.duration_s ?? 0}, ${a.avg_hr ?? null}, ${a.max_hr ?? null}, ${a.elevation_gain_m ?? null}, ${a.calories ?? null}, ${a.cadence ?? null})
     on conflict (athlete_id, source, external_id) do nothing`;
   return res.count > 0;
-}
-
-/** Most recent activities for an athlete, newest first. */
-export async function recentActivities(athleteId: number, limit = 60): Promise<ActivityRow[]> {
-  return (await getSql()`
-    select * from activities
-    where athlete_id = ${athleteId}
-    order by start_time desc
-    limit ${limit}`) as unknown as ActivityRow[];
-}
-
-/** A single activity by id (caller must check ownership). */
-export async function activityById(id: number): Promise<ActivityRow | undefined> {
-  return first(await getSql()`select * from activities where id = ${id}`) as ActivityRow | undefined;
 }

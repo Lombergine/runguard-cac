@@ -12,31 +12,33 @@ export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
   const teamId = await currentTeamId();
-  const team = teamId ? getTeam(teamId) : null;
+  const team = teamId ? await getTeam(teamId) : null;
   const nowMs = Date.now();
   const since = new Date(nowMs - 130 * 86400000).toISOString();
   const soreSince = localDayOffset(13, new Date(nowMs));
-  const roster = teamId ? athletesForTeam(teamId) : listAthletes();
-  const athletes = roster.map((a) => {
-    const acts = activitiesForAthlete(a.id, since);
-    const metrics = metricsForAthlete(a.id, since);
-    // the roster is the coach's triage screen — it has to see what athletes
-    // reported, not just what their watches recorded
-    const sore = sorenessHistory(a.id, soreSince).map((s) => ({
-      date: s.date,
-      body_part: s.body_part,
-      severity: s.severity,
-    }));
-    const risk = computeRisk(acts, metrics, new Date(nowMs), sore, a);
-    const fitness = computeFitness(risk, metrics, acts);
-    // most recent run that was markedly longer than anything before it
-    const spikeRun = [...acts]
-      .sort((x, y) => y.start_time.localeCompare(x.start_time))
-      .slice(0, 7)
-      .map((x) => ({ at: x.start_time, spike: sessionSpike(x, acts) }))
-      .find((x) => x.spike !== null);
-    return { a, risk, fitness, spike: spikeRun?.spike ?? null };
-  });
+  const roster = teamId ? await athletesForTeam(teamId) : await listAthletes();
+  const athletes = await Promise.all(
+    roster.map(async (a) => {
+      const acts = await activitiesForAthlete(a.id, since);
+      const metrics = await metricsForAthlete(a.id, since);
+      // the roster is the coach's triage screen — it has to see what athletes
+      // reported, not just what their watches recorded
+      const sore = (await sorenessHistory(a.id, soreSince)).map((s) => ({
+        date: s.date,
+        body_part: s.body_part,
+        severity: s.severity,
+      }));
+      const risk = computeRisk(acts, metrics, new Date(nowMs), sore, a);
+      const fitness = computeFitness(risk, metrics, acts);
+      // most recent run that was markedly longer than anything before it
+      const spikeRun = [...acts]
+        .sort((x, y) => y.start_time.localeCompare(x.start_time))
+        .slice(0, 7)
+        .map((x) => ({ at: x.start_time, spike: sessionSpike(x, acts) }))
+        .find((x) => x.spike !== null);
+      return { a, risk, fitness, spike: spikeRun?.spike ?? null };
+    })
+  );
   // Alphabetical, deliberately. Ranking minors by an injury-risk number teaches
   // them to inflate their check-ins to avoid being at the top of it — which
   // corrupts self-report, the most sensitive signal in the whole system.

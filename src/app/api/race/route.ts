@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "That race date is in the past — pick an upcoming date." }, { status: 400 });
   }
 
-  const race = createRace({
+  const race = await createRace({
     name,
     date,
     event,

@@ -19,11 +19,11 @@ export async function POST(request: Request) {
   if (password.length < 8) {
     return Response.json({ error: "Use at least 8 characters for your password." }, { status: 400 });
   }
-  if (getTeamByCoachEmail(email)) {
+  if (await getTeamByCoachEmail(email)) {
     return Response.json({ error: "An account with that email already exists — log in instead." }, { status: 409 });
   }
 
-  const team = createTeam({
+  const team = await createTeam({
     name: teamName,
     coach_name: coachName,
     coach_email: email,
