@@ -1,244 +1,70 @@
-import { localDay } from "./day";
-import Database from "better-sqlite3";
-import fs from "fs";
-import path from "path";
+import postgres from "postgres";
 import crypto from "crypto";
 
-const DB_PATH =
-  process.env.DATABASE_PATH || path.join(process.cwd(), "data", "milemarker.db");
+/**
+ * RunGuard data layer — Postgres (Supabase).
+ *
+ * The app connects over the standard Postgres connection string (DATABASE_URL);
+ * that role bypasses RLS, so the server has full read/write while the public
+ * anon API stays locked down. All query functions are async.
+ *
+ * The schema itself is managed in Supabase (see supabase/schema.sql) — the app
+ * does not create tables at runtime.
+ */
+
+const DATABASE_URL = process.env.DATABASE_URL;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __mmdb: Database.Database | undefined;
+  var __rgsql: ReturnType<typeof postgres> | undefined;
 }
 
-function init(): Database.Database {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS teams (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      join_code TEXT NOT NULL UNIQUE,     -- athletes join with this
-      coach_name TEXT,
-      coach_email TEXT UNIQUE,
-      coach_password_hash TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS athletes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      grade INTEGER,
-      sex TEXT,
-      event_group TEXT,               -- 'distance' | 'mid' | 'sprint'
-      avatar_hue INTEGER DEFAULT 210,
-      device_token TEXT UNIQUE,       -- iOS app auth token
-      strava_athlete_id TEXT,
-      strava_access_token TEXT,
-      strava_refresh_token TEXT,
-      strava_expires_at INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS activities (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      source TEXT NOT NULL,           -- 'seed' | 'strava' | 'healthkit' | 'apple_export'
-      external_id TEXT,
-      name TEXT,
-      type TEXT DEFAULT 'Run',
-      start_time TEXT NOT NULL,       -- ISO datetime
-      distance_m REAL DEFAULT 0,
-      duration_s REAL DEFAULT 0,
-      avg_hr REAL,
-      max_hr REAL,
-      elevation_gain_m REAL,
-      created_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(athlete_id, source, external_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_activities_athlete_time
-      ON activities(athlete_id, start_time);
-
-    CREATE TABLE IF NOT EXISTS waitlist (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL UNIQUE,
-      role TEXT,                      -- 'coach' | 'athlete' | 'parent' | other
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS races (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      date TEXT NOT NULL,             -- YYYY-MM-DD
-      event TEXT NOT NULL,            -- '800m' | 'Mile' | '5K' | 'XC 5K'
-      distance_m REAL NOT NULL,
-      location TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS race_results (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      race_id INTEGER REFERENCES races(id),
-      event TEXT NOT NULL,
-      date TEXT NOT NULL,
-      time_s REAL NOT NULL,
-      place INTEGER,
-      feel TEXT,                      -- 'great' | 'ok' | 'rough'
-      splits TEXT,                    -- JSON array of split seconds
-      conditions TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS checkins (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      date TEXT NOT NULL,             -- YYYY-MM-DD
-      rpe REAL,                       -- 1-10 session effort
-      soreness_part TEXT,
-      soreness_severity REAL,         -- 1-10
-      energy REAL,                    -- 1-10
-      motivation REAL,                -- 1-10
-      academic_stress INTEGER,        -- 0/1
-      UNIQUE(athlete_id, date)
-    );
-
-    CREATE TABLE IF NOT EXISTS checkin_soreness (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      checkin_id INTEGER NOT NULL REFERENCES checkins(id) ON DELETE CASCADE,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      date TEXT NOT NULL,             -- YYYY-MM-DD
-      body_part TEXT NOT NULL,
-      severity REAL NOT NULL,         -- 0-10
-      UNIQUE(athlete_id, date, body_part)
-    );
-    CREATE INDEX IF NOT EXISTS idx_checkin_soreness_athlete_date
-      ON checkin_soreness(athlete_id, date);
-
-    CREATE TABLE IF NOT EXISTS injuries (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      date TEXT NOT NULL,
-      body_part TEXT NOT NULL,
-      note TEXT,
-      resolved_at TEXT              -- YYYY-MM-DD once healed; null = still active
-    );
-
-    CREATE TABLE IF NOT EXISTS goals (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      event TEXT NOT NULL,            -- '800m' | 'Mile' | '5K' | 'XC 5K' | 'weekly_km'
-      target REAL NOT NULL,           -- seconds for events, km for weekly_km
-      UNIQUE(athlete_id, event)
-    );
-
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      role TEXT NOT NULL,             -- 'user' | 'assistant'
-      text TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS workout_status (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      date TEXT NOT NULL,             -- YYYY-MM-DD of the planned workout
-      status TEXT NOT NULL,           -- 'done' | 'modified' | 'skipped'
-      UNIQUE(athlete_id, date)
-    );
-
-    CREATE TABLE IF NOT EXISTS health_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      date TEXT NOT NULL,             -- YYYY-MM-DD (local day)
-      resting_hr REAL,                -- bpm
-      hrv REAL,                       -- ms (SDNN)
-      sleep_hours REAL,               -- hours asleep
-      vo2max REAL,                    -- ml/kg/min
-      resp_rate REAL,                 -- breaths/min (optional)
-      source TEXT DEFAULT 'healthkit',
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(athlete_id, date)
-    );
-    CREATE INDEX IF NOT EXISTS idx_metrics_athlete_date
-      ON health_metrics(athlete_id, date);
-
-    -- One row per athlete per day: what the engine saw, kept even though none of
-    -- it is shown as a score any more.
-    --
-    -- The engine recomputes from scratch on every request, so without this the
-    -- state preceding an injury is unrecoverable. Paired with the injuries
-    -- table these rows are the only thing that could ever justify a real score:
-    -- a season of them, labelled by what actually happened to these athletes,
-    -- is what a future model would be fitted on instead of borrowed coefficients
-    -- from a cohort of middle-aged Danes.
-    CREATE TABLE IF NOT EXISTS risk_snapshots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      date TEXT NOT NULL,             -- YYYY-MM-DD the features describe
-      acwr REAL,
-      ramp_pct REAL,
-      monotony REAL,
-      days_since_rest INTEGER,
-      week_km REAL,
-      rhr_delta REAL,
-      hrv_delta_pct REAL,
-      sleep_avg REAL,
-      soreness_max REAL,
-      soreness_days_7 INTEGER,
-      energy REAL,
-      readiness INTEGER,
-      -- the one load pattern the running evidence supports
-      spike_pct_above REAL,           -- null = no spike that day
-      spike_km REAL,
-      hr_max REAL,
-      hr_max_source TEXT,
-      legacy_risk_score INTEGER,      -- kept for comparison, never displayed
-      created_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(athlete_id, date)
-    );
-    CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
-      ON risk_snapshots(athlete_id, date);
-  `);
-  // additive migrations for columns introduced after first release
-  const addColumn = (table: string, ddl: string) => {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
-    } catch {
-      // column already exists
-    }
-  };
-  addColumn("health_metrics", "spo2 REAL");            // %
-  addColumn("health_metrics", "wrist_temp REAL");      // deviation °C
-  addColumn("health_metrics", "sleep_deep REAL");      // hours
-  addColumn("health_metrics", "sleep_rem REAL");
-  addColumn("health_metrics", "sleep_light REAL");
-  addColumn("health_metrics", "sleep_awake REAL");
-  addColumn("activities", "calories REAL");            // active kcal
-  addColumn("activities", "cadence REAL");             // steps/min
-  // real-account columns on athletes
-  addColumn("athletes", "team_id INTEGER");
-  addColumn("athletes", "email TEXT");
-  addColumn("athletes", "password_hash TEXT");
-  addColumn("injuries", "resolved_at TEXT");           // null = still active
-  addColumn("races", "created_by_athlete_id INTEGER REFERENCES athletes(id)"); // null = coach/seed-created
-  addColumn("races", "team_id INTEGER REFERENCES teams(id)");
-  // Max heart rate. null = the athlete hasn't set one, so it gets resolved from
-  // their workout history or their age at read time — see src/lib/hrmax.ts.
-  addColumn("athletes", "hr_max REAL");
-  addColumn("athletes", "hr_max_source TEXT"); // 'manual' | 'calibrated'
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_races_created_by ON races(created_by_athlete_id);
-    CREATE INDEX IF NOT EXISTS idx_races_team ON races(team_id);
-  `);
-  try {
-    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_athletes_email ON athletes(email) WHERE email IS NOT NULL");
-  } catch {
-    /* index exists */
+function makeClient(): ReturnType<typeof postgres> {
+  // Preferred: connect from a raw password (DB_PASSWORD) plus the public
+  // host/user/db. This avoids URL-encoding headaches — a password with @, #,
+  // :, / etc. just works, no escaping needed.
+  const pw = process.env.DB_PASSWORD;
+  if (pw && !pw.includes("[YOUR")) {
+    return postgres({
+      host: process.env.DB_HOST || "aws-0-ca-central-1.pooler.supabase.com",
+      port: Number(process.env.DB_PORT || 6543),
+      username: process.env.DB_USER || "postgres.lmhxdnqxtecwogmnrdxg",
+      password: pw,
+      database: process.env.DB_NAME || "postgres",
+      prepare: false,
+      ssl: "require",
+      // Serverless-safe: one connection per instance so many concurrent Vercel
+      // lambdas don't exhaust the Supabase pooler.
+      max: 1,
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
   }
-  return db;
+  // Fallback: a full DATABASE_URL connection string.
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("Set DB_PASSWORD (or DATABASE_URL) in .env.local");
+  const local = /localhost|127\.0\.0\.1|\/tmp|@db\.local/.test(url);
+  return postgres(url, {
+    // Supabase's transaction pooler (pgbouncer) doesn't support prepared
+    // statements, so disable them; harmless on a direct connection too.
+    prepare: false,
+    ssl: local ? false : "require",
+    // Serverless-safe pool sizing (see note above).
+    max: 1,
+    idle_timeout: 20,
+    connect_timeout: 10,
+  });
+}
+
+export function getSql(): ReturnType<typeof postgres> {
+  if (!global.__rgsql) {
+    global.__rgsql = makeClient();
+  }
+  return global.__rgsql;
+}
+
+function first<T>(rows: readonly T[]): T | undefined {
+  return rows.length ? rows[0] : undefined;
 }
 
 /* ---------------- password hashing (scrypt) ---------------- */
@@ -260,7 +86,6 @@ export function verifyPassword(pw: string, stored: string | null | undefined): b
   }
 }
 
-/* readable join code like "LELAND-7QK4" */
 export function makeJoinCode(teamName: string): string {
   const stem = (teamName.replace(/[^a-zA-Z]/g, "").slice(0, 6) || "TEAM").toUpperCase();
   const rand = crypto.randomBytes(3).toString("hex").toUpperCase().slice(0, 4);
@@ -271,10 +96,7 @@ export function newDeviceToken(): string {
   return "dt_" + crypto.randomBytes(20).toString("hex");
 }
 
-export function getDb(): Database.Database {
-  if (!global.__mmdb) global.__mmdb = init();
-  return global.__mmdb;
-}
+/* ---------------- types ---------------- */
 
 export type AthleteRow = {
   id: number;
@@ -291,8 +113,6 @@ export type AthleteRow = {
   team_id: number | null;
   email: string | null;
   password_hash: string | null;
-  hr_max: number | null;
-  hr_max_source: string | null; // 'manual' | 'calibrated'; null = resolve automatically
 };
 
 export type TeamRow = {
@@ -302,98 +122,8 @@ export type TeamRow = {
   coach_name: string | null;
   coach_email: string | null;
   coach_password_hash: string | null;
+  auth_user_id: string | null;
 };
-
-/* ---------------- teams + accounts ---------------- */
-
-export function createTeam(t: {
-  name: string;
-  coach_name: string;
-  coach_email: string;
-  coach_password_hash: string;
-}): TeamRow {
-  const db = getDb();
-  let code = makeJoinCode(t.name);
-  // guarantee uniqueness
-  for (let i = 0; i < 5; i++) {
-    const exists = db.prepare("SELECT 1 FROM teams WHERE join_code = ?").get(code);
-    if (!exists) break;
-    code = makeJoinCode(t.name);
-  }
-  const info = db
-    .prepare(
-      `INSERT INTO teams (name, join_code, coach_name, coach_email, coach_password_hash)
-       VALUES (@name, @join_code, @coach_name, @coach_email, @coach_password_hash)`
-    )
-    .run({ ...t, join_code: code });
-  return getTeam(Number(info.lastInsertRowid))!;
-}
-
-export function getTeam(id: number): TeamRow | undefined {
-  return getDb().prepare("SELECT * FROM teams WHERE id = ?").get(id) as TeamRow | undefined;
-}
-
-export function getTeamByCode(code: string): TeamRow | undefined {
-  return getDb()
-    .prepare("SELECT * FROM teams WHERE join_code = ? COLLATE NOCASE")
-    .get(code.trim()) as TeamRow | undefined;
-}
-
-export function getTeamByCoachEmail(email: string): TeamRow | undefined {
-  return getDb()
-    .prepare("SELECT * FROM teams WHERE coach_email = ? COLLATE NOCASE")
-    .get(email.trim()) as TeamRow | undefined;
-}
-
-export function athletesForTeam(teamId: number): AthleteRow[] {
-  return getDb()
-    .prepare("SELECT * FROM athletes WHERE team_id = ? ORDER BY name")
-    .all(teamId) as AthleteRow[];
-}
-
-export function getAthleteByEmail(email: string): AthleteRow | undefined {
-  return getDb()
-    .prepare("SELECT * FROM athletes WHERE email = ? COLLATE NOCASE")
-    .get(email.trim()) as AthleteRow | undefined;
-}
-
-export function getAthleteByToken(token: string): AthleteRow | undefined {
-  return getDb()
-    .prepare("SELECT * FROM athletes WHERE device_token = ?")
-    .get(token) as AthleteRow | undefined;
-}
-
-export function setAthleteTeam(athleteId: number, teamId: number | null): void {
-  getDb().prepare("UPDATE athletes SET team_id = ? WHERE id = ?").run(teamId, athleteId);
-}
-
-export function createAthleteAccount(a: {
-  name: string;
-  email: string;
-  password_hash: string;
-  team_id: number | null;
-  grade?: number | null;
-  sex?: string | null;
-  event_group?: string | null;
-}): AthleteRow {
-  const db = getDb();
-  const hue = 180 + Math.floor(Math.random() * 160);
-  const token = newDeviceToken();
-  const info = db
-    .prepare(
-      `INSERT INTO athletes (name, email, password_hash, team_id, grade, sex, event_group, avatar_hue, device_token)
-       VALUES (@name, @email, @password_hash, @team_id, @grade, @sex, @event_group, @avatar_hue, @device_token)`
-    )
-    .run({
-      grade: null,
-      sex: null,
-      event_group: "distance",
-      ...a,
-      avatar_hue: hue,
-      device_token: token,
-    });
-  return getAthlete(Number(info.lastInsertRowid))!;
-}
 
 export type ActivityRow = {
   id: number;
@@ -410,25 +140,8 @@ export type ActivityRow = {
   elevation_gain_m: number | null;
   calories: number | null;
   cadence: number | null;
+  route: string | null;
 };
-
-export function listAthletes(): AthleteRow[] {
-  return getDb().prepare("SELECT * FROM athletes ORDER BY name").all() as AthleteRow[];
-}
-
-export function getAthlete(id: number): AthleteRow | undefined {
-  return getDb().prepare("SELECT * FROM athletes WHERE id = ?").get(id) as
-    | AthleteRow
-    | undefined;
-}
-
-export function activitiesForAthlete(athleteId: number, sinceIso: string): ActivityRow[] {
-  return getDb()
-    .prepare(
-      "SELECT * FROM activities WHERE athlete_id = ? AND start_time >= ? ORDER BY start_time"
-    )
-    .all(athleteId, sinceIso) as ActivityRow[];
-}
 
 export type MetricRow = {
   id: number;
@@ -455,8 +168,6 @@ export type RaceRow = {
   event: string;
   distance_m: number;
   location: string | null;
-  created_by_athlete_id: number | null; // null = coach/seed-created
-  team_id: number | null;
 };
 
 export type RaceResultRow = {
@@ -484,105 +195,152 @@ export type CheckinRow = {
   academic_stress: number | null;
 };
 
-export type CheckinSorenessRow = {
-  id: number;
-  checkin_id: number;
-  athlete_id: number;
-  date: string;
-  body_part: string;
-  severity: number;
-};
-
 export type InjuryRow = {
   id: number;
   athlete_id: number;
   date: string;
   body_part: string;
   note: string | null;
-  resolved_at: string | null;
 };
 
 export type GoalRow = { id: number; athlete_id: number; event: string; target: number };
 
-export function upcomingRaces(scope: { athleteId: number; teamId: number | null }): RaceRow[] {
-  const today = localDay();
-  return getDb()
-    .prepare(
-      `SELECT * FROM races WHERE date >= ?
-         AND (created_by_athlete_id = ?
-              OR (created_by_athlete_id IS NULL AND team_id IS NOT NULL AND team_id = ?))
-       ORDER BY date`
-    )
-    .all(today, scope.athleteId, scope.teamId) as RaceRow[];
-}
+/* ---------------- teams + accounts ---------------- */
 
-export function createRace(r: {
+export async function createTeam(t: {
   name: string;
-  date: string;
-  event: string;
-  distance_m: number;
-  location?: string | null;
-  created_by_athlete_id: number;
+  coach_name: string;
+  coach_email: string;
+  coach_password_hash: string;
+  auth_user_id?: string | null;
+}): Promise<TeamRow> {
+  const sql = getSql();
+  let code = makeJoinCode(t.name);
+  for (let i = 0; i < 5; i++) {
+    const exists = await sql`select 1 from teams where join_code = ${code}`;
+    if (!exists.length) break;
+    code = makeJoinCode(t.name);
+  }
+  const rows = await sql`
+    insert into teams (name, join_code, coach_name, coach_email, coach_password_hash, auth_user_id)
+    values (${t.name}, ${code}, ${t.coach_name}, ${t.coach_email}, ${t.coach_password_hash}, ${t.auth_user_id ?? null})
+    returning *`;
+  return rows[0] as unknown as TeamRow;
+}
+
+export async function getTeamByAuthUser(authUserId: string): Promise<TeamRow | undefined> {
+  return first(
+    await getSql()`select * from teams where auth_user_id = ${authUserId}`
+  ) as TeamRow | undefined;
+}
+
+export async function setTeamAuthUser(teamId: number, authUserId: string): Promise<void> {
+  await getSql()`update teams set auth_user_id = ${authUserId} where id = ${teamId}`;
+}
+
+export async function getTeam(id: number): Promise<TeamRow | undefined> {
+  return first(await getSql()`select * from teams where id = ${id}`) as TeamRow | undefined;
+}
+
+export async function getTeamByCode(code: string): Promise<TeamRow | undefined> {
+  return first(
+    await getSql()`select * from teams where lower(join_code) = lower(${code.trim()})`
+  ) as TeamRow | undefined;
+}
+
+export async function getTeamByCoachEmail(email: string): Promise<TeamRow | undefined> {
+  return first(
+    await getSql()`select * from teams where lower(coach_email) = lower(${email.trim()})`
+  ) as TeamRow | undefined;
+}
+
+export async function athletesForTeam(teamId: number): Promise<AthleteRow[]> {
+  return (await getSql()`select * from athletes where team_id = ${teamId} order by name`) as unknown as AthleteRow[];
+}
+
+export async function getAthleteByEmail(email: string): Promise<AthleteRow | undefined> {
+  return first(
+    await getSql()`select * from athletes where lower(email) = lower(${email.trim()})`
+  ) as AthleteRow | undefined;
+}
+
+export async function getAthleteByToken(token: string): Promise<AthleteRow | undefined> {
+  return first(
+    await getSql()`select * from athletes where device_token = ${token}`
+  ) as AthleteRow | undefined;
+}
+
+export async function setAthleteTeam(athleteId: number, teamId: number | null): Promise<void> {
+  await getSql()`update athletes set team_id = ${teamId} where id = ${athleteId}`;
+}
+
+export async function createAthleteAccount(a: {
+  name: string;
+  email: string;
+  password_hash: string;
   team_id: number | null;
-}): RaceRow {
-  const db = getDb();
-  const info = db
-    .prepare(
-      `INSERT INTO races (name, date, event, distance_m, location, created_by_athlete_id, team_id)
-       VALUES (@name, @date, @event, @distance_m, @location, @created_by_athlete_id, @team_id)`
-    )
-    .run({ location: null, ...r });
-  return db.prepare("SELECT * FROM races WHERE id = ?").get(info.lastInsertRowid) as RaceRow;
+  grade?: number | null;
+  sex?: string | null;
+  event_group?: string | null;
+}): Promise<AthleteRow> {
+  const sql = getSql();
+  const hue = 180 + Math.floor(Math.random() * 160);
+  const token = newDeviceToken();
+  const rows = await sql`
+    insert into athletes (name, email, password_hash, team_id, grade, sex, event_group, avatar_hue, device_token)
+    values (${a.name}, ${a.email}, ${a.password_hash}, ${a.team_id}, ${a.grade ?? null}, ${a.sex ?? null}, ${a.event_group ?? "distance"}, ${hue}, ${token})
+    returning *`;
+  return rows[0] as unknown as AthleteRow;
 }
 
-export function updateRace(
-  id: number,
+export async function listAthletes(): Promise<AthleteRow[]> {
+  return (await getSql()`select * from athletes order by name`) as unknown as AthleteRow[];
+}
+
+export async function getAthlete(id: number): Promise<AthleteRow | undefined> {
+  return first(await getSql()`select * from athletes where id = ${id}`) as AthleteRow | undefined;
+}
+
+export async function activitiesForAthlete(
   athleteId: number,
-  patch: Partial<Pick<RaceRow, "name" | "date" | "event" | "distance_m" | "location">>
-): boolean {
-  const db = getDb();
-  const race = db.prepare("SELECT * FROM races WHERE id = ?").get(id) as RaceRow | undefined;
-  if (!race || race.created_by_athlete_id !== athleteId) return false;
-  const fields = Object.keys(patch);
-  if (!fields.length) return true;
-  const sets = fields.map((f) => `${f} = @${f}`).join(", ");
-  db.prepare(`UPDATE races SET ${sets} WHERE id = @id`).run({ ...patch, id });
-  return true;
+  sinceIso: string
+): Promise<ActivityRow[]> {
+  return (await getSql()`
+    select * from activities
+    where athlete_id = ${athleteId} and start_time >= ${sinceIso}
+    order by start_time`) as unknown as ActivityRow[];
 }
 
-export function deleteRace(id: number, athleteId: number): boolean {
-  const db = getDb();
-  const race = db.prepare("SELECT * FROM races WHERE id = ?").get(id) as RaceRow | undefined;
-  if (!race || race.created_by_athlete_id !== athleteId) return false;
-  db.prepare("DELETE FROM races WHERE id = ?").run(id);
-  return true;
+export async function upcomingRaces(): Promise<RaceRow[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  return (await getSql()`select * from races where date >= ${today} order by date`) as unknown as RaceRow[];
 }
 
-export function raceResultsForAthlete(athleteId: number): RaceResultRow[] {
-  return getDb()
-    .prepare("SELECT * FROM race_results WHERE athlete_id = ? ORDER BY date")
-    .all(athleteId) as RaceResultRow[];
+export async function raceResultsForAthlete(athleteId: number): Promise<RaceResultRow[]> {
+  return (await getSql()`
+    select * from race_results where athlete_id = ${athleteId} order by date`) as unknown as RaceResultRow[];
 }
 
-export function checkinsForAthlete(athleteId: number, sinceIso: string): CheckinRow[] {
-  return getDb()
-    .prepare("SELECT * FROM checkins WHERE athlete_id = ? AND date >= ? ORDER BY date")
-    .all(athleteId, sinceIso.slice(0, 10)) as CheckinRow[];
+export async function checkinsForAthlete(
+  athleteId: number,
+  sinceIso: string
+): Promise<CheckinRow[]> {
+  return (await getSql()`
+    select * from checkins
+    where athlete_id = ${athleteId} and date >= ${sinceIso.slice(0, 10)}
+    order by date`) as unknown as CheckinRow[];
 }
 
-export function injuriesForAthlete(athleteId: number): InjuryRow[] {
-  return getDb()
-    .prepare("SELECT * FROM injuries WHERE athlete_id = ? ORDER BY date DESC")
-    .all(athleteId) as InjuryRow[];
+export async function injuriesForAthlete(athleteId: number): Promise<InjuryRow[]> {
+  return (await getSql()`
+    select * from injuries where athlete_id = ${athleteId} order by date desc`) as unknown as InjuryRow[];
 }
 
-export function goalsForAthlete(athleteId: number): GoalRow[] {
-  return getDb()
-    .prepare("SELECT * FROM goals WHERE athlete_id = ?")
-    .all(athleteId) as GoalRow[];
+export async function goalsForAthlete(athleteId: number): Promise<GoalRow[]> {
+  return (await getSql()`select * from goals where athlete_id = ${athleteId}`) as unknown as GoalRow[];
 }
 
-export function upsertCheckin(c: {
+export async function upsertCheckin(c: {
   athlete_id: number;
   date: string;
   rpe?: number | null;
@@ -591,72 +349,30 @@ export function upsertCheckin(c: {
   energy?: number | null;
   motivation?: number | null;
   academic_stress?: number | null;
-}): void {
-  getDb()
-    .prepare(
-      `INSERT INTO checkins (athlete_id, date, rpe, soreness_part, soreness_severity, energy, motivation, academic_stress)
-       VALUES (@athlete_id, @date, @rpe, @soreness_part, @soreness_severity, @energy, @motivation, @academic_stress)
-       ON CONFLICT(athlete_id, date) DO UPDATE SET
-         rpe = COALESCE(excluded.rpe, checkins.rpe),
-         soreness_part = COALESCE(excluded.soreness_part, checkins.soreness_part),
-         soreness_severity = COALESCE(excluded.soreness_severity, checkins.soreness_severity),
-         energy = COALESCE(excluded.energy, checkins.energy),
-         motivation = COALESCE(excluded.motivation, checkins.motivation),
-         academic_stress = COALESCE(excluded.academic_stress, checkins.academic_stress)`
-    )
-    .run({
-      rpe: null,
-      soreness_part: null,
-      soreness_severity: null,
-      energy: null,
-      motivation: null,
-      academic_stress: null,
-      ...c,
-    });
+}): Promise<void> {
+  await getSql()`
+    insert into checkins (athlete_id, date, rpe, soreness_part, soreness_severity, energy, motivation, academic_stress)
+    values (${c.athlete_id}, ${c.date}, ${c.rpe ?? null}, ${c.soreness_part ?? null}, ${c.soreness_severity ?? null}, ${c.energy ?? null}, ${c.motivation ?? null}, ${c.academic_stress ?? null})
+    on conflict (athlete_id, date) do update set
+      rpe = coalesce(excluded.rpe, checkins.rpe),
+      soreness_part = coalesce(excluded.soreness_part, checkins.soreness_part),
+      soreness_severity = coalesce(excluded.soreness_severity, checkins.soreness_severity),
+      energy = coalesce(excluded.energy, checkins.energy),
+      motivation = coalesce(excluded.motivation, checkins.motivation),
+      academic_stress = coalesce(excluded.academic_stress, checkins.academic_stress)`;
 }
 
-export function sorenessForCheckin(athleteId: number, date: string): CheckinSorenessRow[] {
-  return getDb()
-    .prepare("SELECT * FROM checkin_soreness WHERE athlete_id = ? AND date = ? ORDER BY severity DESC")
-    .all(athleteId, date) as CheckinSorenessRow[];
+export async function metricsForAthlete(
+  athleteId: number,
+  sinceIso: string
+): Promise<MetricRow[]> {
+  return (await getSql()`
+    select * from health_metrics
+    where athlete_id = ${athleteId} and date >= ${sinceIso.slice(0, 10)}
+    order by date`) as unknown as MetricRow[];
 }
 
-export function upsertCheckinSoreness(s: {
-  athlete_id: number;
-  date: string;
-  body_part: string;
-  severity: number;
-}): void {
-  const db = getDb();
-  upsertCheckin({ athlete_id: s.athlete_id, date: s.date });
-  const checkin = db
-    .prepare("SELECT id FROM checkins WHERE athlete_id = ? AND date = ?")
-    .get(s.athlete_id, s.date) as { id: number };
-  db.prepare(
-    `INSERT INTO checkin_soreness (checkin_id, athlete_id, date, body_part, severity)
-     VALUES (@checkin_id, @athlete_id, @date, @body_part, @severity)
-     ON CONFLICT(athlete_id, date, body_part) DO UPDATE SET
-       severity = excluded.severity, checkin_id = excluded.checkin_id`
-  ).run({ ...s, checkin_id: checkin.id });
-}
-
-export function clearCheckinSoreness(s: { athlete_id: number; date: string; body_part: string }): void {
-  getDb()
-    .prepare("DELETE FROM checkin_soreness WHERE athlete_id = ? AND date = ? AND body_part = ?")
-    .run(s.athlete_id, s.date, s.body_part);
-}
-
-export function metricsForAthlete(athleteId: number, sinceIso: string): MetricRow[] {
-  const sinceDay = sinceIso.slice(0, 10);
-  return getDb()
-    .prepare(
-      "SELECT * FROM health_metrics WHERE athlete_id = ? AND date >= ? ORDER BY date"
-    )
-    .all(athleteId, sinceDay) as MetricRow[];
-}
-
-/** Insert or merge a day's recovery metrics — only overwrites fields that arrive non-null. */
-export function upsertMetric(m: {
+export async function upsertMetric(m: {
   athlete_id: number;
   date: string;
   resting_hr?: number | null;
@@ -671,44 +387,27 @@ export function upsertMetric(m: {
   sleep_light?: number | null;
   sleep_awake?: number | null;
   source?: string;
-}): void {
-  getDb()
-    .prepare(
-      `INSERT INTO health_metrics
-        (athlete_id, date, resting_hr, hrv, sleep_hours, vo2max, resp_rate, spo2, wrist_temp, sleep_deep, sleep_rem, sleep_light, sleep_awake, source, updated_at)
-       VALUES (@athlete_id, @date, @resting_hr, @hrv, @sleep_hours, @vo2max, @resp_rate, @spo2, @wrist_temp, @sleep_deep, @sleep_rem, @sleep_light, @sleep_awake, @source, datetime('now'))
-       ON CONFLICT(athlete_id, date) DO UPDATE SET
-         resting_hr  = COALESCE(excluded.resting_hr, health_metrics.resting_hr),
-         hrv         = COALESCE(excluded.hrv, health_metrics.hrv),
-         sleep_hours = COALESCE(excluded.sleep_hours, health_metrics.sleep_hours),
-         vo2max      = COALESCE(excluded.vo2max, health_metrics.vo2max),
-         resp_rate   = COALESCE(excluded.resp_rate, health_metrics.resp_rate),
-         spo2        = COALESCE(excluded.spo2, health_metrics.spo2),
-         wrist_temp  = COALESCE(excluded.wrist_temp, health_metrics.wrist_temp),
-         sleep_deep  = COALESCE(excluded.sleep_deep, health_metrics.sleep_deep),
-         sleep_rem   = COALESCE(excluded.sleep_rem, health_metrics.sleep_rem),
-         sleep_light = COALESCE(excluded.sleep_light, health_metrics.sleep_light),
-         sleep_awake = COALESCE(excluded.sleep_awake, health_metrics.sleep_awake),
-         updated_at  = datetime('now')`
-    )
-    .run({
-      resting_hr: null,
-      hrv: null,
-      sleep_hours: null,
-      vo2max: null,
-      resp_rate: null,
-      spo2: null,
-      wrist_temp: null,
-      sleep_deep: null,
-      sleep_rem: null,
-      sleep_light: null,
-      sleep_awake: null,
-      source: "healthkit",
-      ...m,
-    });
+}): Promise<void> {
+  await getSql()`
+    insert into health_metrics
+      (athlete_id, date, resting_hr, hrv, sleep_hours, vo2max, resp_rate, spo2, wrist_temp, sleep_deep, sleep_rem, sleep_light, sleep_awake, source, updated_at)
+    values (${m.athlete_id}, ${m.date}, ${m.resting_hr ?? null}, ${m.hrv ?? null}, ${m.sleep_hours ?? null}, ${m.vo2max ?? null}, ${m.resp_rate ?? null}, ${m.spo2 ?? null}, ${m.wrist_temp ?? null}, ${m.sleep_deep ?? null}, ${m.sleep_rem ?? null}, ${m.sleep_light ?? null}, ${m.sleep_awake ?? null}, ${m.source ?? "healthkit"}, ${new Date().toISOString()})
+    on conflict (athlete_id, date) do update set
+      resting_hr  = coalesce(excluded.resting_hr, health_metrics.resting_hr),
+      hrv         = coalesce(excluded.hrv, health_metrics.hrv),
+      sleep_hours = coalesce(excluded.sleep_hours, health_metrics.sleep_hours),
+      vo2max      = coalesce(excluded.vo2max, health_metrics.vo2max),
+      resp_rate   = coalesce(excluded.resp_rate, health_metrics.resp_rate),
+      spo2        = coalesce(excluded.spo2, health_metrics.spo2),
+      wrist_temp  = coalesce(excluded.wrist_temp, health_metrics.wrist_temp),
+      sleep_deep  = coalesce(excluded.sleep_deep, health_metrics.sleep_deep),
+      sleep_rem   = coalesce(excluded.sleep_rem, health_metrics.sleep_rem),
+      sleep_light = coalesce(excluded.sleep_light, health_metrics.sleep_light),
+      sleep_awake = coalesce(excluded.sleep_awake, health_metrics.sleep_awake),
+      updated_at  = ${new Date().toISOString()}`;
 }
 
-export function insertActivity(a: {
+export async function insertActivity(a: {
   athlete_id: number;
   source: string;
   external_id?: string | null;
@@ -722,109 +421,26 @@ export function insertActivity(a: {
   elevation_gain_m?: number | null;
   calories?: number | null;
   cadence?: number | null;
-}): boolean {
-  const res = getDb()
-    .prepare(
-      `INSERT OR IGNORE INTO activities
-       (athlete_id, source, external_id, name, type, start_time, distance_m, duration_s, avg_hr, max_hr, elevation_gain_m, calories, cadence)
-       VALUES (@athlete_id, @source, @external_id, @name, @type, @start_time, @distance_m, @duration_s, @avg_hr, @max_hr, @elevation_gain_m, @calories, @cadence)`
-    )
-    .run({
-      external_id: null,
-      name: null,
-      type: "Run",
-      distance_m: 0,
-      duration_s: 0,
-      avg_hr: null,
-      max_hr: null,
-      elevation_gain_m: null,
-      calories: null,
-      cadence: null,
-      ...a,
-    });
-  return res.changes > 0;
+  route?: string | null;
+}): Promise<boolean> {
+  const res = await getSql()`
+    insert into activities
+      (athlete_id, source, external_id, name, type, start_time, distance_m, duration_s, avg_hr, max_hr, elevation_gain_m, calories, cadence, route)
+    values (${a.athlete_id}, ${a.source}, ${a.external_id ?? null}, ${a.name ?? null}, ${a.type ?? "Run"}, ${a.start_time}, ${a.distance_m ?? 0}, ${a.duration_s ?? 0}, ${a.avg_hr ?? null}, ${a.max_hr ?? null}, ${a.elevation_gain_m ?? null}, ${a.calories ?? null}, ${a.cadence ?? null}, ${a.route ?? null})
+    on conflict (athlete_id, source, external_id) do nothing`;
+  return res.count > 0;
 }
 
-/** Every soreness report in a window. `checkin_soreness` has always stored the
- *  full dated history and is indexed for it, but until now only the single
- *  current day was ever read back. */
-export function sorenessHistory(athleteId: number, sinceIso: string): CheckinSorenessRow[] {
-  return getDb()
-    .prepare(
-      "SELECT * FROM checkin_soreness WHERE athlete_id = ? AND date >= ? ORDER BY date ASC, severity DESC"
-    )
-    .all(athleteId, sinceIso) as CheckinSorenessRow[];
+/** Most recent activities for an athlete, newest first. */
+export async function recentActivities(athleteId: number, limit = 60): Promise<ActivityRow[]> {
+  return (await getSql()`
+    select * from activities
+    where athlete_id = ${athleteId}
+    order by start_time desc
+    limit ${limit}`) as unknown as ActivityRow[];
 }
 
-/** Set (or clear) an athlete's max heart rate. Passing null for `hrMax` clears
- *  the stored value so it falls back to automatic resolution. */
-export function setAthleteHrMax(
-  athleteId: number,
-  hrMax: number | null,
-  source: "manual" | "calibrated" | null
-): void {
-  getDb()
-    .prepare("UPDATE athletes SET hr_max = ?, hr_max_source = ? WHERE id = ?")
-    .run(hrMax, hrMax === null ? null : source, athleteId);
-}
-
-
-/* ---------------- daily snapshots ---------------- */
-
-export type RiskSnapshotRow = {
-  id: number;
-  athlete_id: number;
-  date: string;
-  acwr: number | null;
-  ramp_pct: number | null;
-  monotony: number | null;
-  days_since_rest: number | null;
-  week_km: number | null;
-  rhr_delta: number | null;
-  hrv_delta_pct: number | null;
-  sleep_avg: number | null;
-  soreness_max: number | null;
-  soreness_days_7: number | null;
-  energy: number | null;
-  readiness: number | null;
-  spike_pct_above: number | null;
-  spike_km: number | null;
-  hr_max: number | null;
-  hr_max_source: string | null;
-  legacy_risk_score: number | null;
-  created_at: string;
-};
-
-/** Idempotent per (athlete, day) so backfills and re-runs converge. */
-export function upsertRiskSnapshot(s: Omit<RiskSnapshotRow, "id" | "created_at">): void {
-  getDb()
-    .prepare(
-      `INSERT INTO risk_snapshots
-         (athlete_id, date, acwr, ramp_pct, monotony, days_since_rest, week_km,
-          rhr_delta, hrv_delta_pct, sleep_avg, soreness_max, soreness_days_7,
-          energy, readiness, spike_pct_above, spike_km, hr_max, hr_max_source,
-          legacy_risk_score)
-       VALUES
-         (@athlete_id, @date, @acwr, @ramp_pct, @monotony, @days_since_rest, @week_km,
-          @rhr_delta, @hrv_delta_pct, @sleep_avg, @soreness_max, @soreness_days_7,
-          @energy, @readiness, @spike_pct_above, @spike_km, @hr_max, @hr_max_source,
-          @legacy_risk_score)
-       ON CONFLICT(athlete_id, date) DO UPDATE SET
-         acwr = excluded.acwr, ramp_pct = excluded.ramp_pct,
-         monotony = excluded.monotony, days_since_rest = excluded.days_since_rest,
-         week_km = excluded.week_km, rhr_delta = excluded.rhr_delta,
-         hrv_delta_pct = excluded.hrv_delta_pct, sleep_avg = excluded.sleep_avg,
-         soreness_max = excluded.soreness_max, soreness_days_7 = excluded.soreness_days_7,
-         energy = excluded.energy, readiness = excluded.readiness,
-         spike_pct_above = excluded.spike_pct_above, spike_km = excluded.spike_km,
-         hr_max = excluded.hr_max, hr_max_source = excluded.hr_max_source,
-         legacy_risk_score = excluded.legacy_risk_score`
-    )
-    .run(s);
-}
-
-export function allRiskSnapshots(): RiskSnapshotRow[] {
-  return getDb()
-    .prepare("SELECT * FROM risk_snapshots ORDER BY athlete_id ASC, date ASC")
-    .all() as RiskSnapshotRow[];
+/** A single activity by id (caller must check ownership). */
+export async function activityById(id: number): Promise<ActivityRow | undefined> {
+  return first(await getSql()`select * from activities where id = ${id}`) as ActivityRow | undefined;
 }

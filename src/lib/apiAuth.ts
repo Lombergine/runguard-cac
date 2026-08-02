@@ -1,11 +1,5 @@
-import { getDb, AthleteRow } from "./db";
-import { isLoggedIn, athleteTokenFromCookie } from "./session";
-
-function byToken(token: string): AthleteRow | undefined {
-  return getDb()
-    .prepare("SELECT * FROM athletes WHERE device_token = ?")
-    .get(token) as AthleteRow | undefined;
-}
+import { getAthlete, getAthleteByToken, AthleteRow } from "./db";
+import { athleteTokenFromCookie, currentTeamId } from "./session";
 
 /**
  * Resolve which athlete a request acts for. Three auth paths:
@@ -20,19 +14,23 @@ export async function resolveAthlete(
   const auth = request.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
   if (token) {
-    const a = byToken(token);
+    const a = await getAthleteByToken(token);
     if (a) return a;
   }
   const cookieToken = await athleteTokenFromCookie();
   if (cookieToken) {
-    const a = byToken(cookieToken);
+    const a = await getAthleteByToken(cookieToken);
     if (a && (athleteId == null || athleteId === a.id)) return a;
   }
-  if (athleteId != null && Number.isInteger(athleteId) && (await isLoggedIn())) {
-    const a = getDb().prepare("SELECT * FROM athletes WHERE id = ?").get(athleteId) as
-      | AthleteRow
-      | undefined;
-    if (a) return a;
+  // Coach web session: may act on an athlete ONLY if that athlete is on the
+  // coach's own team. This prevents a coach from reading or writing another
+  // team's athlete data by passing an arbitrary athleteId.
+  if (athleteId != null && Number.isInteger(athleteId)) {
+    const teamId = await currentTeamId();
+    if (teamId != null) {
+      const a = await getAthlete(athleteId);
+      if (a && a.team_id === teamId) return a;
+    }
   }
   return null;
 }

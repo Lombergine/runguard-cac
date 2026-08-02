@@ -4,7 +4,13 @@ import crypto from "crypto";
 const COOKIE = "mm_session";
 
 function secret(): string {
-  return process.env.SESSION_SECRET || "milemarker-dev-secret";
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  // Never fall back to a known dev secret in production — sessions would be forgeable.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET is not set. Set it in your environment before deploying.");
+  }
+  return "milemarker-dev-secret";
 }
 
 /* ---- coach session: signed, carries the team id ---- */
