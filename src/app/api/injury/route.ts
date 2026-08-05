@@ -1,6 +1,6 @@
 import { localDay } from "@/lib/day";
 import { resolveAthlete } from "@/lib/apiAuth";
-import { getDb } from "@/lib/db";
+import { run } from "@/lib/db/driver";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -9,16 +9,17 @@ export async function POST(request: Request) {
 
   const bodyPart = typeof body.bodyPart === "string" ? body.bodyPart.slice(0, 60) : "";
   if (!bodyPart) return Response.json({ error: "Need bodyPart" }, { status: 400 });
-  getDb()
-    .prepare("INSERT INTO injuries (athlete_id, date, body_part, note) VALUES (?, ?, ?, ?)")
-    .run(
+  await run(
+    "INSERT INTO injuries (athlete_id, date, body_part, note) VALUES (?, ?, ?, ?)",
+    [
       athlete.id,
       typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
         ? body.date
         : localDay(),
       bodyPart,
-      typeof body.note === "string" ? body.note.slice(0, 300) : null
-    );
+      typeof body.note === "string" ? body.note.slice(0, 300) : null,
+    ]
+  );
   return Response.json({ ok: true });
 }
 
@@ -39,9 +40,10 @@ export async function PATCH(request: Request) {
         : localDay();
 
   // athlete_id in the WHERE keeps a coach from editing another athlete's record
-  const res = getDb()
-    .prepare("UPDATE injuries SET resolved_at = ? WHERE id = ? AND athlete_id = ?")
-    .run(resolvedAt, id, athlete.id);
-  if (res.changes === 0) return Response.json({ error: "Not found" }, { status: 404 });
+  const changes = await run(
+    "UPDATE injuries SET resolved_at = ? WHERE id = ? AND athlete_id = ?",
+    [resolvedAt, id, athlete.id]
+  );
+  if (changes === 0) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ ok: true, resolvedAt });
 }

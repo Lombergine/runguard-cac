@@ -14,10 +14,10 @@ export default async function ConnectPage({
   const sp = await searchParams;
   const teamId = await currentTeamId();
   // Fail closed. This page renders every listed athlete's device_token — their
-  // Bearer credential — so the `: listAthletes()` fallback handed out the whole
+  // Bearer credential — so the `: await listAthletes()` fallback handed out the whole
   // database's credentials to any session whose team id was falsy. team 0 is a
   // valid HMAC-signed value and is falsy.
-  const athletes = teamId ? athletesForTeam(teamId) : [];
+  const athletes = teamId ? await athletesForTeam(teamId) : [];
   const configured = stravaConfigured();
 
   return (

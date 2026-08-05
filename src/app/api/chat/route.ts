@@ -19,8 +19,8 @@ export async function POST(request: Request) {
   // the athlete's own message, which is what keeps it off the coach's screen.
   const safe = safetyIntercept(q);
   if (safe) {
-    logChat(athlete.id, "user", q, `safety:${safe.id}`);
-    logChat(athlete.id, "assistant", safe.reply, `safety:${safe.id}`);
+    await logChat(athlete.id, "user", q, `safety:${safe.id}`);
+    await logChat(athlete.id, "assistant", safe.reply, `safety:${safe.id}`);
     return Response.json({ reply: safe.reply });
   }
 
@@ -28,25 +28,25 @@ export async function POST(request: Request) {
   // engine. "why?" after a crisis disclosure has no trigger words of its own, so
   // it would score on `mental` and return race-nerves advice — reinstating, one
   // turn later, the exact bug the intercept above exists to fix.
-  const prev = lastUserEngine(athlete.id);
+  const prev = await lastUserEngine(athlete.id);
   if (prev?.startsWith("safety:") && isFollowUp(q)) {
     const reply = replyFor(prev.slice("safety:".length));
     if (reply) {
-      logChat(athlete.id, "user", q, prev);
-      logChat(athlete.id, "assistant", reply, prev);
+      await logChat(athlete.id, "user", q, prev);
+      await logChat(athlete.id, "assistant", reply, prev);
       return Response.json({ reply });
     }
   }
 
-  const profile = buildProfile(athlete.id);
+  const profile = await buildProfile(athlete.id);
   if (!profile) return Response.json({ error: "No athlete" }, { status: 404 });
 
-  logChat(athlete.id, "user", q);
+  await logChat(athlete.id, "user", q);
   // The local model, if one is configured. Every failure inside coachAnswer —
   // model down, timeout, busy, unsafe output, a number it wasn't given — returns
   // the rule engine's answer, so this can only ever be as bad as before.
   const r = await coachAnswer(q, profile);
-  logChat(athlete.id, "assistant", r.text, r.engine);
+  await logChat(athlete.id, "assistant", r.text, r.engine);
   return Response.json({ reply: r.text });
 }
 
@@ -61,6 +61,6 @@ export async function GET(request: Request) {
   // panel does. Filtering chatSummary alone would have left the full transcript
   // one tab away, which is not a privacy fix.
   return Response.json({
-    history: chatHistory(r.athlete.id, 30, { includeSafety: r.via !== "coach" }),
+    history: await chatHistory(r.athlete.id, 30, { includeSafety: r.via !== "coach" }),
   });
 }

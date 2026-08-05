@@ -1,5 +1,6 @@
 import crypto from "crypto";
-import { getDb, getAthlete, insertActivity, AthleteRow } from "./db";
+import { getAthlete, insertActivity, AthleteRow } from "./db";
+import { one, run } from "./db/driver";
 
 const TOKEN_URL = "https://www.strava.com/oauth/token";
 const API = "https://www.strava.com/api/v3";
@@ -78,11 +79,10 @@ async function freshToken(athlete: AthleteRow): Promise<string> {
   });
   if (!res.ok) throw new Error(`Strava token refresh failed: ${res.status}`);
   const tok = (await res.json()) as TokenResponse;
-  getDb()
-    .prepare(
-      "UPDATE athletes SET strava_access_token=?, strava_refresh_token=?, strava_expires_at=? WHERE id=?"
-    )
-    .run(tok.access_token, tok.refresh_token, tok.expires_at, athlete.id);
+  await run(
+    "UPDATE athletes SET strava_access_token=?, strava_refresh_token=?, strava_expires_at=? WHERE id=?",
+    [tok.access_token, tok.refresh_token, tok.expires_at, athlete.id]
+  );
   return tok.access_token;
 }
 
@@ -99,7 +99,7 @@ type StravaActivity = {
   total_elevation_gain?: number;
 };
 
-function storeActivity(athleteId: number, act: StravaActivity): boolean {
+function storeActivity(athleteId: number, act: StravaActivity): Promise<boolean> {
   return insertActivity({
     athlete_id: athleteId,
     source: "strava",
@@ -124,7 +124,7 @@ export async function syncAthlete(
   athleteId: number,
   opts: { days?: number; after?: number; before?: number } = {}
 ): Promise<number> {
-  const athlete = getAthlete(athleteId);
+  const athlete = await getAthlete(athleteId);
   if (!athlete?.strava_refresh_token) return 0;
   const token = await freshToken(athlete);
   const after = opts.after ?? Math.floor((Date.now() - (opts.days ?? 120) * 86400000) / 1000);
@@ -139,7 +139,7 @@ export async function syncAthlete(
     if (!res.ok) throw new Error(`Strava activities fetch failed: ${res.status}`);
     const batch = (await res.json()) as StravaActivity[];
     for (const act of batch) {
-      if (storeActivity(athlete.id, act)) imported++;
+      if (await storeActivity(athlete.id, act)) imported++;
     }
     if (batch.length < 100) break;
     page++;
@@ -152,14 +152,15 @@ export async function importOneActivity(
   stravaAthleteId: string,
   activityId: string
 ): Promise<void> {
-  const athlete = getDb()
-    .prepare("SELECT * FROM athletes WHERE strava_athlete_id = ?")
-    .get(stravaAthleteId) as AthleteRow | undefined;
+  const athlete = await one<AthleteRow>(
+    "SELECT * FROM athletes WHERE strava_athlete_id = ?",
+    [stravaAthleteId]
+  );
   if (!athlete) return;
   const token = await freshToken(athlete);
   const res = await fetch(`${API}/activities/${activityId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return;
-  storeActivity(athlete.id, (await res.json()) as StravaActivity);
+  await storeActivity(athlete.id, (await res.json()) as StravaActivity);
 }

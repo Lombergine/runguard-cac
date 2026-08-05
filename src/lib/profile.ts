@@ -1,6 +1,6 @@
 import { localDay, localDayOffset } from "./day";
+import { all } from "./db/driver";
 import {
-  getDb,
   getAthlete,
   getTeam,
   athletesForTeam,
@@ -132,23 +132,25 @@ function connectedSources(a: AthleteRow, acts: ActivityRow[]): string[] {
   return [...out];
 }
 
-export function buildProfile(athleteId: number, now: Date = new Date()): CoreProfile | null {
-  const athlete = getAthlete(athleteId);
+export async function buildProfile(
+  athleteId: number,
+  now: Date = new Date()
+): Promise<CoreProfile | null> {
+  const athlete = await getAthlete(athleteId);
   if (!athlete) return null;
 
   const since = new Date(now.getTime() - 400 * DAY_MS).toISOString();
-  const acts = activitiesForAthlete(athlete.id, since);
-  const metrics = metricsForAthlete(athlete.id, since);
-  const checkins = checkinsForAthlete(athlete.id, since);
-  const results = raceResultsForAthlete(athlete.id);
-  const injuries = injuriesForAthlete(athlete.id);
-  const goals = goalsForAthlete(athlete.id);
-  const races = upcomingRaces({ athleteId: athlete.id, teamId: athlete.team_id });
+  const acts = await activitiesForAthlete(athlete.id, since);
+  const metrics = await metricsForAthlete(athlete.id, since);
+  const checkins = await checkinsForAthlete(athlete.id, since);
+  const results = await raceResultsForAthlete(athlete.id);
+  const injuries = await injuriesForAthlete(athlete.id);
+  const goals = await goalsForAthlete(athlete.id);
+  const races = await upcomingRaces({ athleteId: athlete.id, teamId: athlete.team_id });
 
   // last 14 days of soreness reports — the risk engine reads the trend, not just today
-  const soreReports = sorenessHistory(
-    athlete.id,
-    localDayOffset(13, now)
+  const soreReports = (
+    await sorenessHistory(athlete.id, localDayOffset(13, now))
   ).map((s) => ({ date: s.date, body_part: s.body_part, severity: s.severity }));
 
   const risk = computeRisk(acts, metrics, now, soreReports, athlete);
@@ -162,7 +164,9 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
 
   const todayIso = localDay(now);
   const todayCheckin = checkins.find((c) => c.date === todayIso) ?? null;
-  const todaySoreness: SorenessEntry[] = sorenessForCheckin(athlete.id, todayIso).map((s) => ({
+  const todaySoreness: SorenessEntry[] = (
+    await sorenessForCheckin(athlete.id, todayIso)
+  ).map((s) => ({
     part: s.body_part,
     severity: s.severity,
   }));
@@ -173,9 +177,12 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
     : null;
 
   const statuses = new Map<string, string>(
-    (getDb()
-      .prepare("SELECT date, status FROM workout_status WHERE athlete_id = ?")
-      .all(athlete.id) as { date: string; status: string }[]).map((r) => [r.date, r.status])
+    (
+      await all<{ date: string; status: string }>(
+        "SELECT date, status FROM workout_status WHERE athlete_id = ?",
+        [athlete.id]
+      )
+    ).map((r) => [r.date, r.status])
   );
   // Recent runs, newest first, each rated against the athlete's own longest run
   // in the 30 days before it. This is the one load pattern the running evidence
@@ -301,22 +308,25 @@ export function buildProfile(athleteId: number, now: Date = new Date()): CorePro
   // `NULL NOT LIKE 'safety:%'` evaluates to NULL rather than true, so without it
   // every pre-migration row would be excluded and this panel would silently
   // empty out.
-  const chatQs = (getDb()
-    .prepare(
-      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT 5"
+  const chatQs = (
+    await all<{ text: string }>(
+      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT 5",
+      [athlete.id]
     )
-    .all(athlete.id) as { text: string }[]).map((r) => r.text);
+  ).map((r) => r.text);
+
+  const team = athlete.team_id ? await getTeam(athlete.team_id) : undefined;
 
   return {
     athlete: {
       id: athlete.id,
       name: athlete.name,
       grade: athlete.grade,
-      school: (athlete.team_id ? getTeam(athlete.team_id)?.name : null) ?? "Independent",
+      school: team?.name ?? "Independent",
       events: ["800m", "Mile", "5K", "XC 5K"],
       hue: athlete.avatar_hue,
       deviceToken: athlete.device_token,
-      teamName: athlete.team_id ? getTeam(athlete.team_id)?.name ?? null : null,
+      teamName: team?.name ?? null,
     },
     risk,
     series: risk.series,

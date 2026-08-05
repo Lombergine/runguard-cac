@@ -9,7 +9,7 @@ export async function POST(request: Request) {
 
   // Email + password (real accounts)
   if (email && password) {
-    const athlete = getAthleteByEmail(email);
+    const athlete = await getAthleteByEmail(email);
     if (!athlete || !verifyPassword(password, athlete.password_hash)) {
       return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
     }
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
   // Legacy / demo app-token path
   if (token) {
-    const athlete = getAthleteByToken(token);
+    const athlete = await getAthleteByToken(token);
     if (!athlete) {
       return Response.json(
         { error: "That token doesn't match any athlete. Try your email + password, or the demo token." },

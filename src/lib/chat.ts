@@ -12,7 +12,7 @@
  * see src/lib/safety.ts, which also owns the copy for the weight, menstrual and
  * cardiac intents below so there is one version of each.
  */
-import { getDb } from "./db";
+import { all, one, run } from "./db/driver";
 import { CoreProfile } from "./profile";
 import { fmtTime, EventName, EVENTS } from "./engine";
 import { FACTS, KNOWLEDGE_FOR_PROMPT } from "./knowledge";
@@ -34,26 +34,24 @@ import {
  * own message, because that is what lets chatSummary keep the disclosure off the
  * coach's screen.
  */
-export function logChat(
+export async function logChat(
   athleteId: number,
   role: "user" | "assistant",
   text: string,
   engine?: string
-): void {
-  getDb()
-    .prepare(
-      "INSERT INTO chat_messages (athlete_id, role, text, engine) VALUES (?, ?, ?, ?)"
-    )
-    .run(athleteId, role, text, engine ?? null);
+): Promise<void> {
+  await run(
+    "INSERT INTO chat_messages (athlete_id, role, text, engine) VALUES (?, ?, ?, ?)",
+    [athleteId, role, text, engine ?? null]
+  );
 }
 
 /** The engine tag on this athlete's most recent user message, if any. */
-export function lastUserEngine(athleteId: number): string | null {
-  const row = getDb()
-    .prepare(
-      "SELECT engine FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1"
-    )
-    .get(athleteId) as { engine: string | null } | undefined;
+export async function lastUserEngine(athleteId: number): Promise<string | null> {
+  const row = await one<{ engine: string | null }>(
+    "SELECT engine FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1",
+    [athleteId]
+  );
   return row?.engine ?? null;
 }
 
@@ -62,19 +60,17 @@ export function lastUserEngine(athleteId: number): string | null {
  * Used when a COACH is reading an athlete's transcript — the same exclusion
  * chatSummary applies, so the disclosure isn't simply one tab away.
  */
-export function chatHistory(
+export async function chatHistory(
   athleteId: number,
   limit = 30,
   opts: { includeSafety?: boolean } = {}
-): { role: string; text: string }[] {
+): Promise<{ role: string; text: string }[]> {
   const includeSafety = opts.includeSafety !== false;
   const sql = includeSafety
     ? "SELECT role, text FROM chat_messages WHERE athlete_id = ? ORDER BY id DESC LIMIT ?"
     : "SELECT role, text FROM chat_messages WHERE athlete_id = ? AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT ?";
-  return (getDb().prepare(sql).all(athleteId, limit) as {
-    role: string;
-    text: string;
-  }[]).reverse();
+  const rows = await all<{ role: string; text: string }>(sql, [athleteId, limit]);
+  return rows.reverse();
 }
 
 /* ------------------------------------------------------------------ */
@@ -627,10 +623,11 @@ function classify(lower: string): { intent: Intent | null; score: number } {
 }
 
 /** The user message just before the current one (for follow-up continuity). */
-function previousUserMessage(athleteId: number): string | null {
-  const rows = getDb()
-    .prepare("SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 2")
-    .all(athleteId) as { text: string }[];
+async function previousUserMessage(athleteId: number): Promise<string | null> {
+  const rows = await all<{ text: string }>(
+    "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' ORDER BY id DESC LIMIT 2",
+    [athleteId]
+  );
   return rows[1]?.text ?? null; // rows[0] is the current message
 }
 
@@ -680,7 +677,7 @@ export function isSymptomShaped(lower: string): boolean {
   return BODY_PART.test(lower) && SYMPTOM_WORD.test(lower);
 }
 
-export function ruleAnswer(q: string, p: CoreProfile): string {
+export async function ruleAnswer(q: string, p: CoreProfile): Promise<string> {
   const lower = q.toLowerCase().trim();
   const words = lower.split(/\s+/).length;
   const { intent, score } = classify(lower);
@@ -700,7 +697,7 @@ export function ruleAnswer(q: string, p: CoreProfile): string {
 
   // Thin follow-up ("how long?", "why?", "what do I do") — continue the last topic.
   if ((FOLLOWUP.test(lower) || words <= 4) && score < 2) {
-    const prev = previousUserMessage(p.athlete.id);
+    const prev = await previousUserMessage(p.athlete.id);
     if (prev) {
       const prevMatch = classify(prev.toLowerCase());
       if (prevMatch.intent && prevMatch.score > 0) {
@@ -777,7 +774,7 @@ Athlete data (live, from their synced wearables and check-ins):
  * model rather than something to rewrite.
  */
 export async function answer(q: string, p: CoreProfile): Promise<string> {
-  return ruleAnswer(q, p);
+  return await ruleAnswer(q, p);
 }
 
 export function eventFromText(t: string): EventName | null {

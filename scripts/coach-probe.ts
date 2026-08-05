@@ -132,7 +132,7 @@ async function ask(system: string, q: string): Promise<NativeChat | null> {
 }
 
 async function main() {
-  const p = buildProfile(athleteId);
+  const p = await buildProfile(athleteId);
   if (!p) {
     console.error(`No athlete ${athleteId}. Run npm run seed first.`);
     process.exit(1);

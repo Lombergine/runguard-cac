@@ -12,18 +12,18 @@ export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
   const teamId = await currentTeamId();
-  const team = teamId ? getTeam(teamId) : null;
+  const team = teamId ? await getTeam(teamId) : null;
   const nowMs = Date.now();
   const since = new Date(nowMs - 130 * 86400000).toISOString();
   const soreSince = localDayOffset(13, new Date(nowMs));
   // Fail closed rather than falling back to every athlete in the database.
-  const roster = teamId ? athletesForTeam(teamId) : [];
-  const athletes = roster.map((a) => {
-    const acts = activitiesForAthlete(a.id, since);
-    const metrics = metricsForAthlete(a.id, since);
+  const roster = teamId ? await athletesForTeam(teamId) : [];
+  const athletes = await Promise.all(roster.map(async (a) => {
+    const acts = await activitiesForAthlete(a.id, since);
+    const metrics = await metricsForAthlete(a.id, since);
     // the roster is the coach's triage screen — it has to see what athletes
     // reported, not just what their watches recorded
-    const sore = sorenessHistory(a.id, soreSince).map((s) => ({
+    const sore = (await sorenessHistory(a.id, soreSince)).map((s) => ({
       date: s.date,
       body_part: s.body_part,
       severity: s.severity,
@@ -37,7 +37,7 @@ export default async function Dashboard() {
       .map((x) => ({ at: x.start_time, spike: sessionSpike(x, acts) }))
       .find((x) => x.spike !== null);
     return { a, risk, fitness, spike: spikeRun?.spike ?? null };
-  });
+  }));
   // Alphabetical, deliberately. Ranking minors by an injury-risk number teaches
   // them to inflate their check-ins to avoid being at the top of it — which
   // corrupts self-report, the most sensitive signal in the whole system.

@@ -220,14 +220,14 @@ export type CoachReply = { text: string; engine: string };
 
 export async function coachAnswer(q: string, p: CoreProfile): Promise<CoachReply> {
   const m = model();
-  if (!m) return { text: ruleAnswer(q, p), engine: "rules" };
+  if (!m) return { text: await ruleAnswer(q, p), engine: "rules" };
 
   // STRUCTURAL, not probabilistic: symptom questions never reach the model at
   // all. That is what makes "never diagnoses" a property of a code path you can
   // grep for, rather than a hoped-for property of an 8B's output distribution.
   const lower = q.toLowerCase();
   if (isSymptomShaped(lower)) {
-    return { text: ruleAnswer(q, p), engine: "rules:symptom" };
+    return { text: await ruleAnswer(q, p), engine: "rules:symptom" };
   }
 
   // The tier-2 safety categories — weight/body image, menstrual, cardiac — live
@@ -246,7 +246,7 @@ export async function coachAnswer(q: string, p: CoreProfile): Promise<CoachReply
     matchesAny(lower, MENSTRUAL_PATTERNS) ||
     matchesAny(lower, CARDIAC_PATTERNS)
   ) {
-    return { text: ruleAnswer(q, p), engine: "rules:safety-topic" };
+    return { text: await ruleAnswer(q, p), engine: "rules:safety-topic" };
   }
 
   // Scope, before spending a round trip on it.
@@ -256,7 +256,7 @@ export async function coachAnswer(q: string, p: CoreProfile): Promise<CoachReply
 
   // Fail fast rather than queue. A request behind another is guaranteed to miss
   // the deadline and get this same answer 40 seconds later.
-  if (inFlight > 0) return { text: ruleAnswer(q, p), engine: "rules:busy" };
+  if (inFlight > 0) return { text: await ruleAnswer(q, p), engine: "rules:busy" };
 
   const digest = dataContext(p);
   const allowed = harvest(digest);
@@ -281,25 +281,25 @@ export async function coachAnswer(q: string, p: CoreProfile): Promise<CoachReply
         ],
       }),
     });
-    if (!res.ok) return { text: ruleAnswer(q, p), engine: "rules:llm-http" };
+    if (!res.ok) return { text: await ruleAnswer(q, p), engine: "rules:llm-http" };
 
     const data = (await res.json()) as { message?: { content?: string } };
     const raw = (data.message?.content ?? "").trim();
-    if (!raw) return { text: ruleAnswer(q, p), engine: "rules:llm-empty" };
+    if (!raw) return { text: await ruleAnswer(q, p), engine: "rules:llm-empty" };
 
     const text = stripMarkdown(raw);
-    if (!text) return { text: ruleAnswer(q, p), engine: "rules:llm-empty" };
+    if (!text) return { text: await ruleAnswer(q, p), engine: "rules:llm-empty" };
 
     // Discard the whole answer on either control. Editing it out would leave the
     // claim standing with its evidence removed.
-    if (outputUnsafe(text)) return { text: ruleAnswer(q, p), engine: "safety:output-weight" };
+    if (outputUnsafe(text)) return { text: await ruleAnswer(q, p), engine: "safety:output-weight" };
     const bad = unsourcedNumber(text, allowed);
-    if (bad) return { text: ruleAnswer(q, p), engine: `safety:unsourced-${bad}` };
+    if (bad) return { text: await ruleAnswer(q, p), engine: `safety:unsourced-${bad}` };
 
     return { text, engine: "llm" };
   } catch {
     // Timeout, connection refused, malformed JSON — all the same outcome.
-    return { text: ruleAnswer(q, p), engine: "rules:llm-failed" };
+    return { text: await ruleAnswer(q, p), engine: "rules:llm-failed" };
   } finally {
     clearTimeout(timer);
     inFlight--;

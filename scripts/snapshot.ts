@@ -36,7 +36,7 @@ const args = process.argv.slice(2);
 const backfill = args.includes("--backfill");
 const days = backfill ? Number(args[args.indexOf("--backfill") + 1]) || 120 : 1;
 
-const athletes = listAthletes();
+const athletes = await listAthletes();
 if (!athletes.length) {
   console.log("No athletes — nothing to snapshot.");
   process.exit(0);
@@ -48,10 +48,10 @@ const lookback = new Date(today.getTime() - (days + 140) * DAY_MS);
 
 for (const a of athletes) {
   // one query per athlete, then filter per day in memory
-  const allActs = activitiesForAthlete(a.id, lookback.toISOString());
-  const allMetrics = metricsForAthlete(a.id, localDay(lookback));
-  const allSore = sorenessHistory(a.id, localDayOffset(days + 10, today));
-  const allCheckins = checkinsForAthlete(a.id, localDay(lookback));
+  const allActs = await activitiesForAthlete(a.id, lookback.toISOString());
+  const allMetrics = await metricsForAthlete(a.id, localDay(lookback));
+  const allSore = await sorenessHistory(a.id, localDayOffset(days + 10, today));
+  const allCheckins = await checkinsForAthlete(a.id, localDay(lookback));
 
   for (let back = days - 1; back >= 0; back--) {
     const asOf = new Date(today.getTime() - back * DAY_MS);
@@ -68,7 +68,7 @@ for (const a of athletes) {
     const risk = computeRisk(acts, metrics, asOf, sore, a);
 
     const checkin = allCheckins.find((c) => c.date === date) ?? null;
-    const todaySore = sorenessForCheckin(a.id, date).map((s) => ({
+    const todaySore = (await sorenessForCheckin(a.id, date)).map((s) => ({
       part: s.body_part,
       severity: s.severity,
     }));
@@ -85,7 +85,7 @@ for (const a of athletes) {
       }
     }
 
-    upsertRiskSnapshot({
+    await upsertRiskSnapshot({
       athlete_id: a.id,
       date,
       acwr: risk.acwr,

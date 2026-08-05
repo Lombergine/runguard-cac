@@ -41,12 +41,12 @@ export default async function AthletePage({
 
   // team-scope: a coach may only open athletes on their own team
   const teamId = await currentTeamId();
-  const target = getAthlete(Number(id));
+  const target = await getAthlete(Number(id));
   if (!target) notFound();
   // Strict: `&& target.team_id` short-circuited for team-less athletes.
   if (teamId == null || target.team_id !== teamId) notFound();
 
-  const p = buildProfile(Number(id));
+  const p = await buildProfile(Number(id));
   if (!p) notFound();
 
   const first = p.athlete.name.split(" ")[0];
@@ -132,7 +132,7 @@ function CoachView({
   flagLabel,
   coachExplanation,
 }: {
-  p: NonNullable<ReturnType<typeof buildProfile>>;
+  p: NonNullable<Awaited<ReturnType<typeof buildProfile>>>;
   flagColor: string;
   flagLabel: string;
   coachExplanation: string;

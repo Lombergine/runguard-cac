@@ -1,4 +1,5 @@
-import { listAthletes, getDb } from "../src/lib/db";
+import { listAthletes } from "../src/lib/db";
+import { columns, describeTarget, close } from "../src/lib/db/driver";
 import { buildProfile } from "../src/lib/profile";
 import { coachWhy, answer } from "../src/lib/chat";
 
@@ -14,11 +15,12 @@ function ok(label: string, fn: () => unknown) {
 }
 
 async function main() {
-  const athletes = listAthletes();
+  const athletes = await listAthletes();
+  console.log(`Target: ${describeTarget()}`);
   console.log(`Smoke-testing ${athletes.length} athletes end to end\n`);
 
   for (const a of athletes) {
-    const p = buildProfile(a.id);
+    const p = await buildProfile(a.id);
     if (!p) {
       fails++;
       console.log(`  x ${a.name}: buildProfile returned null`);
@@ -34,7 +36,7 @@ async function main() {
       ].every((x) => x !== undefined));
   }
 
-  const p0 = buildProfile(athletes[0].id)!;
+  const p0 = (await buildProfile(athletes[0].id))!;
   const questions = [
     "should i run today", "why is my risk high", "my shin hurts", "how much should i run",
     "should i lift", "im tired and unmotivated", "what shoes should i get", "my stomach hurts",
@@ -50,8 +52,6 @@ async function main() {
     }
   }
 
-  const cols = (t: string) =>
-    (getDb().prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
   for (const [table, need] of [
     ["athletes", "hr_max"],
     ["athletes", "hr_max_source"],
@@ -60,13 +60,14 @@ async function main() {
     ["risk_snapshots", "spike_pct_above"],
     ["risk_snapshots", "readiness"],
   ] as const) {
-    if (!cols(table).includes(need)) {
+    if (!(await columns(table)).includes(need)) {
       fails++;
       console.log(`  x schema ${table}.${need} missing`);
     }
   }
 
   console.log(fails === 0 ? "\nAll smoke checks passed" : `\n${fails} failures`);
+  await close();
   process.exit(fails === 0 ? 0 : 1);
 }
 

@@ -1,19 +1,15 @@
-import { getDb, insertActivity, upsertMetric, AthleteRow } from "@/lib/db";
+import { getAthleteByToken, insertActivity, upsertMetric, AthleteRow } from "@/lib/db";
 
 /**
  * The RunGuard iOS app posts HealthKit data here:
  *   { workouts?: [...], metrics?: [{ date, restingHr, hrv, sleepHours, vo2max, respRate }] }
  * Auth: Authorization: Bearer <device_token> (each athlete has one).
  */
-function athleteFromRequest(request: Request): AthleteRow | null {
+async function athleteFromRequest(request: Request): Promise<AthleteRow | null> {
   const auth = request.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token) return null;
-  return (
-    (getDb()
-      .prepare("SELECT * FROM athletes WHERE device_token = ?")
-      .get(token) as AthleteRow | undefined) ?? null
-  );
+  return (await getAthleteByToken(token)) ?? null;
 }
 
 function num(v: unknown): number | null {
@@ -21,7 +17,7 @@ function num(v: unknown): number | null {
 }
 
 export async function POST(request: Request) {
-  const athlete = athleteFromRequest(request);
+  const athlete = await athleteFromRequest(request);
   if (!athlete) {
     return Response.json({ error: "Invalid device token" }, { status: 401 });
   }
@@ -38,7 +34,7 @@ export async function POST(request: Request) {
   let importedWorkouts = 0;
   for (const w of workouts.slice(0, 1000)) {
     if (typeof w?.start !== "string" || typeof w?.durationS !== "number") continue;
-    const ok = insertActivity({
+    const ok = await insertActivity({
       athlete_id: athlete.id,
       source: "healthkit",
       external_id: typeof w.id === "string" ? w.id : `${w.start}-${w.durationS}`,
@@ -60,7 +56,7 @@ export async function POST(request: Request) {
     if (typeof m?.date !== "string") continue;
     const date = m.date.slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    upsertMetric({
+    await upsertMetric({
       athlete_id: athlete.id,
       date,
       resting_hr: num(m.restingHr),

@@ -7,7 +7,8 @@ import { localDay, localDayOffset } from "../src/lib/day";
  *  - 1 athlete: returning from time off, chronic base collapsed (caution/red)
  *  - 1 athlete: high monotony grinder (caution)
  */
-import { getDb, insertActivity, upsertMetric, upsertCheckin, upsertCheckinSoreness, hashPassword } from "../src/lib/db";
+import { insertActivity, upsertMetric, upsertCheckin, upsertCheckinSoreness, hashPassword } from "../src/lib/db";
+import { sqliteOnlyHandle, close } from "../src/lib/db/driver";
 
 type Pattern = "steady" | "spiking" | "returning" | "monotone" | "building" | "light";
 
@@ -73,8 +74,8 @@ function weekMultiplier(p: Pattern, weeksAgo: number): number {
   }
 }
 
-function seed() {
-  const db = getDb();
+async function seed() {
+  const db = sqliteOnlyHandle();
   const existing = db.prepare("SELECT COUNT(*) c FROM athletes").get() as { c: number };
   if (existing.c > 0) {
     // real signed-up accounts always have an email/password_hash; seed-created demo
@@ -177,7 +178,7 @@ function seed() {
       const start = new Date(date);
       start.setMinutes(start.getMinutes() + Math.floor(rand() * 40));
 
-      insertActivity({
+      await insertActivity({
         athlete_id: athleteId,
         source: "seed",
         external_id: `seed-${athleteId}-${d}`,
@@ -240,7 +241,7 @@ function seed() {
       const sleepH = Math.round(sleep * 10) / 10;
 
       // Apple Watch doesn't log every metric every day — occasional gaps
-      upsertMetric({
+      await upsertMetric({
         athlete_id: athleteId,
         date: iso,
         resting_hr: rand() < 0.96 ? Math.round(rhr) : null,
@@ -266,7 +267,7 @@ function seed() {
       const stressedNow =
         (spec.pattern === "spiking" && weeksAgo <= 1) ||
         (spec.pattern === "returning" && weeksAgo === 0);
-      upsertCheckin({
+      await upsertCheckin({
         athlete_id: athleteId,
         date,
         rpe: Math.round((5 + rand() * 3 + (stressedNow ? 1.5 : 0)) * 10) / 10,
@@ -279,7 +280,7 @@ function seed() {
       if (stressedNow && rand() < 0.6) {
         const parts = rand() < 0.4 ? 2 : 1;
         for (let i = 0; i < parts; i++) {
-          upsertCheckinSoreness({
+          await upsertCheckinSoreness({
             athlete_id: athleteId,
             date,
             body_part: soreOptions[Math.floor(rand() * soreOptions.length)],
@@ -287,7 +288,7 @@ function seed() {
           });
         }
       } else if (rand() < 0.3) {
-        upsertCheckinSoreness({
+        await upsertCheckinSoreness({
           athlete_id: athleteId,
           date,
           body_part: soreOptions[Math.floor(rand() * soreOptions.length)],
@@ -384,4 +385,4 @@ function seed() {
   console.log("Seeded", ATHLETES.length, "athletes,", raceCount.c, "race results.");
 }
 
-seed();
+seed().then(close);

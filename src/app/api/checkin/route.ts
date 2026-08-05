@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
 
   const date = localDay();
-  upsertCheckin({
+  await upsertCheckin({
     athlete_id: athlete.id,
     date,
     rpe: num(body.rpe, 1, 10),
@@ -26,9 +26,9 @@ export async function POST(request: Request) {
     const bodyPart = body.sorenessPart.slice(0, 60);
     const severity = num(body.sorenessSeverity, 0, 10);
     if (severity === null) {
-      clearCheckinSoreness({ athlete_id: athlete.id, date, body_part: bodyPart });
+      await clearCheckinSoreness({ athlete_id: athlete.id, date, body_part: bodyPart });
     } else {
-      upsertCheckinSoreness({ athlete_id: athlete.id, date, body_part: bodyPart, severity });
+      await upsertCheckinSoreness({ athlete_id: athlete.id, date, body_part: bodyPart, severity });
     }
   }
   return Response.json({ ok: true });

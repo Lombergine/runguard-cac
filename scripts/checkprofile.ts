@@ -1,7 +1,7 @@
 import { listAthletes } from "../src/lib/db";
 import { buildProfile } from "../src/lib/profile";
-const marcus = listAthletes().find(a => a.name === "Marcus Lee")!;
-const p = buildProfile(marcus.id)!;
+const marcus = (await listAthletes()).find(a => a.name === "Marcus Lee")!;
+const p = (await buildProfile(marcus.id))!;
 console.log("readiness:", p.readiness, "| risk:", p.risk.score, "| flag:", p.prePractice.flag);
 console.log("fitness:", p.fitness.score, p.fitness.trend, p.fitness.tier, "| freshness:", p.fitness.freshness, "| vo2:", p.fitness.vo2max);
 console.log("TRIMP wk:", p.load.weekTrimp, "| zones:", JSON.stringify(p.load.weekZones));
