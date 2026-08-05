@@ -3,8 +3,28 @@ import crypto from "crypto";
 
 const COOKIE = "mm_session";
 
-function secret(): string {
-  return process.env.SESSION_SECRET || "milemarker-dev-secret";
+/**
+ * The dev fallback is only safe while it cannot reach a deployment. This file is
+ * public on GitHub, so a deployed instance running on the literal string below
+ * signs its session cookies with a secret anyone can read — meaning anyone can
+ * mint a valid coach cookie for any team.
+ *
+ * So it fails closed exactly where that becomes reachable: the moment the app is
+ * pointed at a shared database (DB_DRIVER=supabase) or built for production,
+ * SESSION_SECRET must be set. Locally against the SQLite file, the fallback
+ * stands and nothing changes.
+ */
+export function secret(): string {
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.DB_DRIVER === "supabase" || process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SESSION_SECRET is not set. Refusing to sign sessions with the public " +
+        "dev default. Generate one with `openssl rand -hex 32` and set it in " +
+        "Vercel → Settings → Environment Variables."
+    );
+  }
+  return "milemarker-dev-secret";
 }
 
 /* ---- coach session: signed, carries the team id ---- */

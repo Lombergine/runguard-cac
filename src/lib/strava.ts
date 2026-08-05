@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { getAthlete, insertActivity, AthleteRow } from "./db";
 import { one, run } from "./db/driver";
+import { secret } from "./session";
 
 const TOKEN_URL = "https://www.strava.com/oauth/token";
 const API = "https://www.strava.com/api/v3";
@@ -11,7 +12,7 @@ export function stravaConfigured(): boolean {
 
 export function signState(athleteId: number): string {
   const sig = crypto
-    .createHmac("sha256", process.env.SESSION_SECRET || "milemarker-dev-secret")
+    .createHmac("sha256", secret())
     .update(String(athleteId))
     .digest("hex")
     .slice(0, 16);
