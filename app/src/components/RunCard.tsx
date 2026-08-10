@@ -27,14 +27,18 @@ import { layout, ruleWidth, space } from "../theme/space";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
-const GLYPH = 24;
+/**
+ * The route glyph's rendered size — a real dimension, so it comes off the 4px
+ * scale rather than being typed in here.
+ */
+const GLYPH = space.xl;
 
 /**
- * The micro scale has no line height of its own, so the card fixes one. A
- * measured line is what lets the run-log skeleton reserve the exact final
- * height instead of an approximation — the list must not shift as data lands.
+ * One line of the micro scale, taken from the scale itself. The run-log
+ * skeleton reserves the eyebrow's height from this, and a locally-guessed line
+ * would reserve something other than what renders.
  */
-const MICRO_LINE = Math.round((text.micro.fontSize ?? 0) * 1.4);
+const MICRO_LINE = text.micro.lineHeight ?? 0;
 
 /**
  * The geometry of a card's content box, exported for the run-log skeleton
@@ -117,16 +121,18 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
 
         <View style={styles.stats}>
           <View style={styles.stat}>
-            <Stat label="DISTANCE" value={formatDistance(run.km)} />
+            {/* Sentence case at every call site: text.micro owns the
+                uppercasing, so a shouted literal only splits the convention. */}
+            <Stat label="Distance" value={formatDistance(run.km)} />
           </View>
           <View style={styles.stat}>
-            <Stat label="TIME" value={formatDuration(run.durationS)} />
+            <Stat label="Time" value={formatDuration(run.durationS)} />
           </View>
           <View style={styles.stat}>
             {pace === null ? (
-              <Absent eyebrow="PACE" />
+              <Absent eyebrow="Pace" />
             ) : (
-              <Stat label="PACE" value={pace} />
+              <Stat label="Pace" value={pace} />
             )}
           </View>
         </View>
@@ -147,11 +153,8 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
 }
 
 const styles = StyleSheet.create({
-  eyebrow: {
-    ...text.micro,
-    lineHeight: runCardMetrics.eyebrowLine,
-    color: color.muted,
-  },
+  /** No local lineHeight: text.micro carries the one the metrics reserve. */
+  eyebrow: { ...text.micro, color: color.muted },
   row: {
     flexDirection: "row",
     alignItems: "center",

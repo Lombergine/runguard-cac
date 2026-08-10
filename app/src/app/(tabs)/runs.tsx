@@ -29,6 +29,37 @@ import { text } from "../../theme/type";
 const SKELETON_ROWS = 3;
 
 /**
+ * "12 runs" — the numeral and its noun in ONE node, never a bare count with the
+ * word rendered beside it.
+ */
+function countLabel(n: number): string {
+  return `${n} ${n === 1 ? "run" : "runs"}`;
+}
+
+/**
+ * The screen header. `count` is null until the payload lands, and the count is
+ * withheld at zero on purpose: an empty log is Absent, and "0 runs" would state
+ * a measured fact we do not have. The slot sits beside the heading rather than
+ * below it, so nothing moves vertically when the figure appears.
+ */
+function Header({ count }: { count: number | null }) {
+  return (
+    <View style={styles.header}>
+      <Text style={styles.eyebrow}>Run log</Text>
+      <View style={styles.headingRow}>
+        <Text style={styles.heading}>Recent runs</Text>
+        {count !== null && count > 0 ? (
+          <Text style={styles.count}>{countLabel(count)}</Text>
+        ) : null}
+      </View>
+      <Text style={styles.note}>
+        Long runs well past your usual are flagged.
+      </Text>
+    </View>
+  );
+}
+
+/**
  * Reserves the height of the tallest card the log can produce, so the list
  * cannot shift as data lands. Neither of the two things that make a card taller
  * — a missing pace, which renders a bordered `Absent` slot, and a spike, which
@@ -82,7 +113,10 @@ export default function RunsScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
-          <Text style={styles.failed}>Your runs could not be loaded.</Text>
+          <Header count={null} />
+          <Card>
+            <Text style={styles.failed}>Your runs could not be loaded.</Text>
+          </Card>
         </View>
       </SafeAreaView>
     );
@@ -92,9 +126,12 @@ export default function RunsScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
-          {Array.from({ length: SKELETON_ROWS }, (_, i) => (
-            <RunSkeleton key={i} />
-          ))}
+          <Header count={null} />
+          <View style={styles.rows}>
+            {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+              <RunSkeleton key={i} />
+            ))}
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -107,6 +144,7 @@ export default function RunsScreen() {
         keyExtractor={(run) => String(run.id)}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={Separator}
+        ListHeaderComponent={<Header count={runs.length} />}
         /*
          * Absent, not NoRun. An empty log means the payload carried no runs —
          * "we have nothing", not "the athlete rested". `plan.days` cannot
@@ -137,14 +175,30 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: layout.page,
     paddingTop: space.xl,
-    gap: space.md,
   },
   list: {
     paddingHorizontal: layout.page,
     paddingTop: space.xl,
     paddingBottom: layout.section,
   },
+  /** Matches the FlatList separator, so loading and loaded rhythm agree. */
+  rows: { gap: space.md },
   separator: { height: space.md },
+
+  header: { marginBottom: layout.section },
+  eyebrow: { ...text.micro, color: color.muted },
+  headingRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.md,
+    marginTop: space.xs,
+  },
+  heading: { ...text.title, color: color.ink },
+  /** Mono, with the noun welded on. Never a bare numeral. */
+  count: { ...text.stat, color: color.ink2 },
+  note: { ...text.meta, color: color.muted, marginTop: space.xs },
+
   failed: { ...text.base, color: color.ink2 },
   skeletonEyebrow: {
     height: runCardMetrics.eyebrowLine,

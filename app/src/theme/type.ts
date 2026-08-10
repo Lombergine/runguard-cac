@@ -35,10 +35,18 @@ export const tabular: TextStyle = {
  * number.
  */
 export const text = {
-  /** 11.5 mono, uppercase, +0.12em — micro-labels and eyebrows. */
+  /**
+   * 11.5 mono, uppercase, +0.12em — micro-labels and eyebrows.
+   *
+   * `lineHeight` is explicit because skeletons reserve height from these
+   * numbers. Without it, callers guessed: CheckInCard used fontSize + space.xs
+   * (15.5) and RunCard used round(fontSize * 1.4) (16), so two reserved heights
+   * disagreed by half a point and neither matched what actually rendered.
+   */
   micro: {
     fontFamily: font.mono,
     fontSize: 11.5,
+    lineHeight: 16,
     letterSpacing: 0.12 * 11.5,
     textTransform: "uppercase",
     ...tabular,

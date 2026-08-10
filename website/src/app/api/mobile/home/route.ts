@@ -8,8 +8,9 @@ import { buildProfile } from "@/lib/profile";
  * which `calendar` (366 days), `risk.series` (400 days) and `series` (60 days)
  * are ~75% on their own. The home screen renders none of that: it needs the
  * greeting, today's readiness and pre-practice state, today's check-in, the
- * recent runs list, this week's plan, and the four risk fields the header reads.
- * This endpoint returns exactly those, ~2 KB.
+ * recent runs list, this week's plan and its mileage target, the recovery
+ * snapshot, the insight line, the next race, and the notifications.
+ * This endpoint returns exactly those — 5.3 KB at the seeded worst case.
  *
  * It deliberately still goes through buildProfile rather than recomputing a
  * cheaper subset. readiness and prePractice are safety-adjacent, and a second
@@ -41,11 +42,21 @@ export async function GET(request: Request) {
     risk: {
       hasActivityHistory: profile.risk.hasActivityHistory,
       weekKm: profile.risk.weekKm,
-      recovery: { hasData: profile.risk.recovery.hasData },
+      // The whole RecoverySnapshot: nine scalars, ~150 bytes. The home screen
+      // shows resting HR, HRV and sleep against their baselines, and each of
+      // those needs its baseline to say anything.
+      recovery: profile.risk.recovery,
       selfReport: profile.risk.selfReport,
     },
     // weeklyPlan already emits exactly Monday–Sunday of the current week, so
     // this is the current week with no further filtering.
     plan: { days: profile.plan.days },
+    // The denominator for the weekly mileage tile — meaningless without it.
+    weeklyTargetKm: profile.weeklyTargetKm,
+    aiInsight: profile.aiInsight,
+    // Only the next race. `upcoming` is unbounded and each entry carries a
+    // pacing array, so the whole list is not a fixed cost; one is.
+    races: { upcoming: profile.races.upcoming.slice(0, 1) },
+    notifications: profile.notifications,
   });
 }

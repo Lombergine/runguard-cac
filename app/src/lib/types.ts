@@ -65,6 +65,65 @@ export type PlanDay = {
   status: "done" | "modified" | "skipped" | null;
 };
 
+/**
+ * Wearable-derived recovery. Mirrors `RecoverySnapshot` in
+ * website/src/lib/risk.ts.
+ *
+ * Every metric is independently nullable: null means never recorded, and must
+ * render through `Absent` — never as 0, and never as a healthy-looking blank.
+ * `hasData` is false when the athlete has no wearable data at all.
+ */
+export type RecoverySnapshot = {
+  /** Beats per minute. */
+  restingHr: number | null;
+  restingHrBaseline: number | null;
+  /** Recent minus baseline, bpm. Positive = resting HR is elevated. */
+  restingHrDelta: number | null;
+  /** Milliseconds. */
+  hrv: number | null;
+  hrvBaseline: number | null;
+  /** Percent off baseline. Negative = HRV suppressed. */
+  hrvDeltaPct: number | null;
+  /** Hours per night, mean of the last 7 days. */
+  sleepAvg: number | null;
+  vo2max: number | null;
+  hasData: boolean;
+};
+
+/**
+ * One upcoming race. Carries the raw `races` row (snake_case, straight from the
+ * database) plus four server-derived fields.
+ */
+export type UpcomingRace = {
+  id: number;
+  /** The meet's name, e.g. "Central League Championships". */
+  name: string;
+  /** Local day, YYYY-MM-DD. Format through lib/dates before display. */
+  date: string;
+  /** The distance contested, e.g. "5K". */
+  event: string;
+  distance_m: number;
+  location: string | null;
+  /** null = coach- or seed-created. */
+  created_by_athlete_id: number | null;
+  team_id: number | null;
+  /** Whole days from today; 0 is race day, and past races are not sent. */
+  daysUntil: number;
+  /** Split-by-split advice, one sentence per entry. */
+  pacing: string[];
+  /** Pre-formatted predicted time, e.g. "18:42". Never a bare number. */
+  predicted: string;
+  /** False for coach-created races — the athlete may not edit those. */
+  canEdit: boolean;
+};
+
+/** A server-composed nudge. Advisory copy; render it as description, not alarm. */
+export type Notification = {
+  type: string;
+  text: string;
+  severity: "info" | "warning" | "critical";
+};
+
 /** The slice of CoreProfile the app consumes. The endpoint returns much more. */
 export type Profile = {
   athlete: {
@@ -85,9 +144,30 @@ export type Profile = {
   risk: {
     hasActivityHistory: boolean;
     weekKm: number;
-    recovery: { hasData: boolean };
+    recovery: RecoverySnapshot;
     selfReport: { hasData: boolean; daysSinceReport: number | null };
   };
+  /**
+   * This week's mileage goal, in KILOMETRES — the denominator for `risk.weekKm`.
+   * Convert both through lib/units before display.
+   */
+  weeklyTargetKm?: number;
+  /** One server-written sentence about this athlete's current training. */
+  aiInsight?: string;
+  notifications?: Notification[];
+};
+
+/**
+ * `Profile` with the next race attached — the shape `GET /api/mobile/home`
+ * returns, where `races.upcoming` holds at most one entry.
+ *
+ * `races` deliberately lives here and not on `Profile`: /me's `races` also
+ * carries `history` and `prProgression`, the races screen already intersects
+ * that fuller shape onto `Profile`, and two disagreeing declarations of one key
+ * do not intersect. Home code takes this type; everything else keeps `Profile`.
+ */
+export type ProfileWithNextRace = Profile & {
+  races?: { upcoming: UpcomingRace[] };
 };
 
 /* ------------------------------------------------------------------ *

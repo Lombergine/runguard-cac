@@ -79,8 +79,8 @@ const PROMPT_LINE = text.prompt.lineHeight as number;
  * the layout is forbidden from moving under their thumb.
  */
 export const checkInMetrics = {
-  /** One line of text.micro, which sets no explicit lineHeight. */
-  eyebrowLine: (text.micro.fontSize as number) + space.xs,
+  /** One line of text.micro, taken from the scale rather than guessed at. */
+  eyebrowLine: text.micro.lineHeight as number,
   /** Two lines of text.prompt — the longer question wraps to two at 360px. */
   promptBlock: PROMPT_LINE * 2,
   /** Comfortably over the 48px floor, with room for a wrapped label. */
@@ -222,14 +222,24 @@ function AnswerRow<T extends string>({
   onPick,
 }: AnswerRowProps<T>) {
   return (
-    <View style={styles.row}>
+    /**
+     * A radiogroup, not a row of buttons: these are three answers to ONE
+     * question, exactly one of which holds. A screen reader should say "1 of 3"
+     * and announce the swap when the athlete changes their mind — a button
+     * announces neither.
+     */
+    <View style={styles.row} accessibilityRole="radiogroup">
       {options.map((option) => {
         const isSelected = option.value === selected;
         return (
           <Pressable
             key={option.value}
-            accessibilityRole="button"
+            accessibilityRole="radio"
             accessibilityState={{
+              // `checked` is the state a radio carries; `selected` is what
+              // VoiceOver reads off the trait. Both, so neither platform
+              // announces an answered question as unanswered.
+              checked: isSelected,
               selected: isSelected,
               disabled,
               ...(expanded === undefined ? {} : { expanded: isSelected && expanded }),

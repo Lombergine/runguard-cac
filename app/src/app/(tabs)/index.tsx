@@ -1,13 +1,19 @@
 /**
- * Home — the check-in hero. See ../../../../docs/visual-spec.md § "The
- * signature".
+ * Home — the check-in hero, and what the check-in unlocks. See
+ * ../../../../docs/visual-spec.md § "The signature".
  *
  * The inversion: the hero is the check-in PROMPT, not readiness. Readiness is
- * demoted to a consequence of having checked in, and it lives in a footer that
- * occupies the same place in every state — loading, prompt and receipt — so the
- * layout cannot move under a thumb that is already reaching for an answer.
+ * demoted to a consequence of having checked in.
  *
- * Three things this screen is careful about:
+ * BEFORE a check-in the screen is unchanged — one question, three targets, a lot
+ * of air, and the readiness footer reading "— unknown". The emptiness is the
+ * product's main call to action and nothing is stacked above it.
+ *
+ * AFTER a check-in the same space carries the day's picture, in this order:
+ * receipt → readiness + verdict → the insight → recovery → weekly mileage →
+ * today's session → next race.
+ *
+ * Four things this screen is careful about:
  *
  *  1. Readiness renders ONLY through readinessState(). The server sends 100 for
  *     an athlete it knows nothing about, so `profile.readiness` is never read
@@ -18,6 +24,10 @@
  *  3. Every date is a pre-formatted local string from lib/dates. A check-in
  *     loaded from the server carries a day but NO time of day, so its receipt
  *     shows the day alone — inventing a clock time would be inventing data.
+ *  4. A blank is never a zero. `weekKm` is always a number and the recovery
+ *     readings are always present as keys, so each block is gated on the flag
+ *     that says whether the figure was measured at all — `hasActivityHistory`
+ *     and `recovery.hasData` — and renders <Absent/> when it was not.
  */
 import { useEffect, useRef, useState } from "react";
 import {
@@ -41,7 +51,12 @@ import {
   type SorenessAnswer,
 } from "../../components/CheckInCard";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
-import { getProfile, isUnauthorized, postCheckin } from "../../lib/api";
+import { Absent } from "../../components/Nothing";
+import { Tile } from "../../components/Tile";
+import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
+import { WeekProgress } from "../../components/WeekProgress";
+import { ApiError, BASE_URL, isUnauthorized, postCheckin } from "../../lib/api";
+import { getToken } from "../../lib/auth";
 import { sorenessLabel } from "../../lib/bodyParts";
 import {
   readinessColor,
@@ -50,10 +65,49 @@ import {
 } from "../../lib/readinessVerdict";
 import { checkinHeader, dayLabel, localDay, receiptLabel } from "../../lib/dates";
 import { displayFlag, readinessState } from "../../lib/readiness";
-import type { Flag, Profile } from "../../lib/types";
+import type { Flag, ProfileWithNextRace, RecoverySnapshot } from "../../lib/types";
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
+
+/**
+ * GET /api/mobile/home — the home screen's own slice of the profile: readiness,
+ * pre-practice, today's check-in, the plan, the full recovery snapshot, the
+ * weekly target, the insight line and the next race. 5.3 KB against /me's 57 KB,
+ * because /me also ships a 366-day calendar and two long series this screen
+ * renders none of.
+ *
+ * It lives HERE rather than in lib/api.ts because this segment does not own that
+ * file and `getHome()` did not exist in it. It is a copy of that module's
+ * `request()` narrowed to one GET; move it across and delete this when the
+ * client grows the method.
+ */
+const HOME_TIMEOUT_MS = 15_000;
+
+async function getHome(): Promise<ProfileWithNextRace> {
+  const token = await getToken();
+  // Fail closed rather than sending an unauthenticated request.
+  if (!token) throw new ApiError(401, "No device token. Pair this device first.");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HOME_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/api/mobile/home`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch {
+    // The thrown value can echo the request, token and all; never re-use it.
+    throw new ApiError(0, `Could not reach the RunGuard server at ${BASE_URL}.`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) throw new ApiError(res.status, `Request failed (${res.status}).`);
+  return (await res.json()) as ProfileWithNextRace;
+}
 
 /**
  * "How did you sleep?" maps to `energy`, which is the only self-report field
@@ -101,13 +155,14 @@ const STAT_LINE = text.stat.lineHeight as number;
  * writes wraps past one line at 360px, so reserving one made the answer targets
  * above jump upward the moment the profile landed — a layout shift under a
  * thumb that is already reaching, which the spec forbids. Reserving the common
- * height costs nothing: the footer is the last block on the screen.
+ * height costs nothing: in the prompt state the footer is the last block on the
+ * screen.
  */
 const ADVISORY_BLOCK =
   (text.base.lineHeight as number) + space.xs + (text.meta.lineHeight as number) * 2;
 
 export default function CheckInScreen() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<ProfileWithNextRace | null>(null);
   const [loadError, setLoadError] = useState<"none" | "unpaired" | "failed">("none");
   /** Set only when this session submitted the check-in — the one time we know. */
   const [submittedAt, setSubmittedAt] = useState<Date | null>(null);
@@ -132,7 +187,7 @@ export default function CheckInScreen() {
 
   useEffect(() => {
     let alive = true;
-    getProfile()
+    getHome()
       .then((p) => {
         if (alive) setProfile(p);
       })
@@ -186,7 +241,7 @@ export default function CheckInScreen() {
     // Readiness is recomputed server-side, so it has to be re-read rather than
     // guessed at locally.
     try {
-      setProfile(await getProfile());
+      setProfile(await getHome());
     } catch {
       setStaleReadiness(true);
     }
@@ -220,30 +275,163 @@ export default function CheckInScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      {/* Scrolls only when text scaling demands it; the targets stay hittable. */}
-      <ScrollView
-        contentContainerStyle={styles.page}
-        showsVerticalScrollIndicator={false}
-      >
+      {/* The bottom inset belongs to the tab bar, which reserves it in its own
+          height (see _layout.tsx), so the scroll view stops exactly above the
+          bar and its last card clears it by one section. */}
+      <ScrollView contentContainerStyle={styles.page}>
         {!profile ? (
-          <Skeleton />
+          <>
+            <Skeleton />
+            <ReadinessFooter profile={null} />
+          </>
         ) : receipt ? (
-          <Animated.View style={[styles.body, { opacity: reveal }]}>
+          // One reveal for the whole collapsed state, so the receipt and what
+          // it unlocked arrive together rather than in two steps.
+          <Animated.View style={{ opacity: reveal }}>
             <CheckInReceipt label={receipt} />
             <SorenessNote stored={stored} />
+            <ReadinessFooter profile={awaitingReadiness ? null : profile} />
+            <AfterCheckIn profile={profile} />
           </Animated.View>
         ) : (
-          <CheckInCard
-            header={checkinHeader(localDay())}
-            onComplete={submit}
-            submitting={submitting}
-            failed={submitFailed}
-          />
+          <>
+            <CheckInCard
+              header={checkinHeader(localDay())}
+              onComplete={submit}
+              submitting={submitting}
+              failed={submitFailed}
+            />
+            <ReadinessFooter profile={profile} />
+          </>
         )}
-
-        <ReadinessFooter profile={awaitingReadiness ? null : profile} />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Everything the check-in unlocks, in the order the day is read: what the server
+ * makes of the training, then the body, then the week, then today, then the next
+ * thing on the calendar.
+ *
+ * None of it renders before a check-in. The empty prompt screen is the
+ * signature, and a stack of tiles above the fold would be exactly the summary
+ * widget the spec leaves the space empty instead of.
+ */
+function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
+  const today = profile.plan.days.find((d) => d.isToday);
+  const next = profile.races?.upcoming[0];
+
+  return (
+    <View style={styles.sections}>
+      {/*
+        One server-written sentence about this athlete's training, given the
+        prominence the web portal gives it: prose at the base size, directly
+        under the verdict, no card and no rule of its own. It DESCRIBES, so it
+        gets no dot, no colour and no alarm weight.
+      */}
+      {profile.aiInsight ? (
+        <Text style={styles.insight}>{profile.aiInsight}</Text>
+      ) : null}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Recovery</Text>
+        {profile.risk.recovery.hasData ? (
+          <RecoveryGrid recovery={profile.risk.recovery} />
+        ) : (
+          // No wearable at all. One dashed slot rather than a grid of them:
+          // three Absents would state three separate unknowns where there is
+          // really only one.
+          <Absent label="No wearable data recorded" />
+        )}
+      </View>
+
+      {/*
+        `weekKm` is always a number, so the guard is `hasActivityHistory`, not
+        the value. "0 mi of 40 mi target" from an athlete who has never synced a
+        run is a blank reading as a measured fact, which is the one failure the
+        visual spec exists to prevent.
+      */}
+      {profile.risk.hasActivityHistory ? (
+        <WeekProgress
+          weekKm={profile.risk.weekKm}
+          weeklyTargetKm={profile.weeklyTargetKm ?? null}
+        />
+      ) : (
+        <Absent eyebrow="Weekly mileage" label="No runs recorded yet" />
+      )}
+
+      <TodayBlock day={today} dateLabel={dayLabel(localDay())} />
+
+      {/* Renders nothing at all when the calendar is empty — see NextRaceBlock. */}
+      <NextRaceBlock
+        race={
+          next
+            ? {
+                name: next.name,
+                daysUntil: next.daysUntil,
+                dateLabel: dayLabel(next.date),
+              }
+            : null
+        }
+      />
+    </View>
+  );
+}
+
+/** "+3" / "-12" — the sign is part of the figure, so it stays in the same node. */
+function signed(n: number): string {
+  return n > 0 ? `+${n}` : String(n);
+}
+
+/**
+ * The wearable readings: Sleep · 7d, HRV, Resting HR.
+ *
+ * Deliberately NOT <RecoveryTiles/>, whose fourth tile is this week's mileage.
+ * That figure renders below through <WeekProgress/> instead, which carries the
+ * target alongside it — the more useful framing, and the one the athlete can act
+ * on — and the same number cannot appear twice on one screen in two different
+ * framings without one of them looking wrong. The vacated slot is left blank
+ * rather than backfilled with an invented reading; it sits directly above the
+ * block the week moved into.
+ *
+ * Every figure is already rounded by the server (website/src/lib/risk.ts), so
+ * nothing is re-formatted here beyond welding the unit on. Null is a reading
+ * that was never taken and renders <Absent/> through <Tile/> — never 0.
+ */
+function RecoveryGrid({ recovery }: { recovery: RecoverySnapshot }) {
+  return (
+    <View style={styles.grid}>
+      <View style={styles.gridRow}>
+        <Tile
+          label="Sleep · 7d"
+          value={recovery.sleepAvg !== null ? `${recovery.sleepAvg} h` : null}
+        />
+        <Tile
+          label="HRV"
+          value={recovery.hrv !== null ? `${recovery.hrv} ms` : null}
+          sub={
+            recovery.hrvDeltaPct !== null
+              ? `${signed(recovery.hrvDeltaPct)}% vs base`
+              : undefined
+          }
+        />
+      </View>
+      <View style={styles.gridRow}>
+        <Tile
+          label="Resting HR"
+          value={recovery.restingHr !== null ? `${recovery.restingHr} bpm` : null}
+          sub={
+            recovery.restingHrDelta !== null
+              ? `${signed(recovery.restingHrDelta)} bpm vs base`
+              : undefined
+          }
+        />
+        {/* The week's slot, left empty. Not an Absent: nothing is unknown here,
+            the figure simply lives in the block below. */}
+        <View style={styles.gridSlot} />
+      </View>
+    </View>
   );
 }
 
@@ -280,7 +468,7 @@ function SorenessNote({
  * then reserves its height rather than claiming "unknown", which is a statement
  * about the athlete and not about the network.
  */
-function ReadinessFooter({ profile }: { profile: Profile | null }) {
+function ReadinessFooter({ profile }: { profile: ProfileWithNextRace | null }) {
   const state = profile ? readinessState(profile) : null;
   const known = state?.known === true;
 
@@ -350,7 +538,16 @@ function DashedRule() {
   );
 }
 
-/** Reserves the prompt's exact height, block for block. */
+/**
+ * Reserves the prompt's exact height, block for block.
+ *
+ * It reserves the PROMPT and not the collapsed state on purpose: ten of fourteen
+ * athletes have not checked in, so the prompt is what usually lands, and it is
+ * the state whose targets a thumb is already reaching for. The blocks below a
+ * receipt are not reserved because they cannot be — whether they exist at all is
+ * the thing the payload is being fetched to find out — but every one of them
+ * arrives in the same render as the receipt, so nothing shifts once it does.
+ */
 function Skeleton() {
   return (
     <View style={styles.body}>
@@ -380,6 +577,19 @@ const styles = StyleSheet.create({
   sorenessNote: { ...text.meta, color: color.muted, marginTop: space.sm },
   /** Numerals are mono everywhere, and the count keeps its noun welded on. */
   sorenessCount: { ...tabular, fontFamily: font.mono, color: color.ink2 },
+
+  sections: { marginTop: layout.section, gap: layout.section },
+  section: { gap: space.md },
+  sectionLabel: { ...text.micro, color: color.muted },
+  /** Prose, not a figure and not a status: base weight, ink2, no ornament. */
+  insight: { ...text.base, color: color.ink2 },
+  grid: { gap: space.md },
+  // Two explicit rows rather than a wrapping grid: `flex: 1` on each tile keeps
+  // the pair the same width and the same height at 360px, which a flexBasis
+  // wrap does not guarantee once one tile carries a sub-line.
+  gridRow: { flexDirection: "row", gap: space.md },
+  /** Holds the second column open so the lone tile stays half-width. */
+  gridSlot: { flex: 1 },
 
   footer: { marginTop: layout.section },
   solidRule: { height: ruleWidth, backgroundColor: color.rule },

@@ -16,6 +16,7 @@
 import Svg, { Circle, Path } from "react-native-svg";
 
 import { StatusDotProps } from "../lib/types";
+import { space } from "../theme/space";
 import { color } from "../theme/tokens";
 
 const BOX = 24;
@@ -25,7 +26,14 @@ const STROKE = 3;
 /** 24 dashes around the ring, so the pattern closes evenly. */
 const DASH = (2 * Math.PI * R) / 24;
 
-export function StatusDot({ flag, size = 12 }: StatusDotProps) {
+/**
+ * The rendered diameter beside a line of body text — a real dimension, so it
+ * comes off the 4px scale rather than being typed in here. `space.md` is 12,
+ * which is the size the contract in lib/types documents as the default.
+ */
+const SIZE = space.md;
+
+export function StatusDot({ flag, size = SIZE }: StatusDotProps) {
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${BOX} ${BOX}`}>
       {flag === "clear" ? (

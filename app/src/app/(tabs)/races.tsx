@@ -5,10 +5,10 @@
  * a plain two-letter label, not a badge, a medal or a fill. The screen is a
  * printed results sheet, not a trophy cabinet.
  *
- * `races` is not part of the `Profile` slice in lib/types — that type is the
- * subset most screens need — so the two shapes below narrow the real payload
- * (`CoreProfile.races` in website/src/lib/profile.ts) to the fields this screen
- * reads. They are local on purpose; types.ts stays untouched.
+ * `UpcomingRace` comes from lib/types. `races.history` does not exist in that
+ * contract yet, so `RaceResult` below narrows the real payload
+ * (`CoreProfile.races.history` in website/src/lib/profile.ts) to the fields this
+ * screen reads — local on purpose; types.ts stays untouched.
  */
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
@@ -19,24 +19,10 @@ import { Card } from "../../components/Card";
 import { Stat } from "../../components/Stat";
 import { getProfile } from "../../lib/api";
 import { dayLabel } from "../../lib/dates";
-import type { Profile } from "../../lib/types";
+import type { Profile, UpcomingRace } from "../../lib/types";
 import { layout, radius, ruleWidth, space } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
-
-type UpcomingRace = {
-  id: number;
-  /** The meet's name, e.g. "Central League Championships". */
-  name: string;
-  /** Local day, YYYY-MM-DD. */
-  date: string;
-  /** The distance contested, e.g. "5K". */
-  event: string;
-  location: string | null;
-  daysUntil: number;
-  /** Pre-formatted predicted time, e.g. "18:42". Never a bare number. */
-  predicted: string;
-};
 
 type RaceResult = {
   id: number;
@@ -48,8 +34,9 @@ type RaceResult = {
   isPr: boolean;
 };
 
-type WithRaces = Profile & {
-  races?: { upcoming: UpcomingRace[]; history: RaceResult[] };
+/** `Profile["races"]` plus the history leg, which the contract does not carry. */
+type WithRaces = Omit<Profile, "races"> & {
+  races?: { upcoming: UpcomingRace[]; history?: RaceResult[] };
 };
 
 /** "in 12 days", welded, in one node. Today and tomorrow read as words. */
@@ -66,6 +53,46 @@ function placeLabel(place: number): string {
   const last = place % 10;
   const suffix = last === 1 ? "st" : last === 2 ? "nd" : last === 3 ? "rd" : "th";
   return `${place}${suffix}`;
+}
+
+/**
+ * "6 races" — the numeral and its noun in ONE node, never a bare count with the
+ * word rendered beside it.
+ */
+function countLabel(n: number): string {
+  return `${n} ${n === 1 ? "race" : "races"}`;
+}
+
+/**
+ * The screen header. `count` is null until the payload lands, and is withheld
+ * at zero: an empty card is Absent, and "0 races" would state a measured fact
+ * we do not have. The figure sits beside the heading, so nothing shifts
+ * vertically when it appears.
+ */
+function Header({ count }: { count: number | null }) {
+  return (
+    <View style={styles.header}>
+      <Text style={styles.eyebrow}>Race log</Text>
+      <View style={styles.headingRow}>
+        <Text style={styles.heading}>Races</Text>
+        {count !== null && count > 0 ? (
+          <Text style={styles.count}>{countLabel(count)}</Text>
+        ) : null}
+      </View>
+      <Text style={styles.note}>
+        {"What is coming, and what you have already run."}
+      </Text>
+    </View>
+  );
+}
+
+function SectionHeading({ title, note }: { title: string; note: string }) {
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.note}>{note}</Text>
+    </View>
+  );
 }
 
 function UpcomingCard({ race }: { race: UpcomingRace }) {
@@ -149,7 +176,10 @@ export default function RacesScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
-          <Text style={styles.failed}>Your races could not be loaded.</Text>
+          <Header count={null} />
+          <Card>
+            <Text style={styles.failed}>Your races could not be loaded.</Text>
+          </Card>
         </View>
       </SafeAreaView>
     );
@@ -159,9 +189,12 @@ export default function RacesScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
+          <Header count={null} />
           {/* Reserves height so the sections do not jump as data arrives. */}
-          <View style={styles.skeletonCard} />
-          <View style={styles.skeletonCard} />
+          <View style={styles.sections}>
+            <View style={styles.skeletonCard} />
+            <View style={styles.skeletonCard} />
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -170,28 +203,38 @@ export default function RacesScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.page}>
-        <View style={styles.section}>
-          <Text style={styles.eyebrow}>Upcoming</Text>
-          {upcoming.length === 0 ? (
-            <Absent label="No races scheduled." />
-          ) : (
-            upcoming.map((race) => <UpcomingCard key={race.id} race={race} />)
-          )}
-        </View>
+        <Header count={upcoming.length + history.length} />
 
-        <View style={styles.section}>
-          <Text style={styles.eyebrow}>History</Text>
-          {history.length === 0 ? (
-            <Absent label="No races run yet." />
-          ) : (
-            <Card padded={false}>
-              {history.map((result, i) => (
-                <View key={result.id} style={i > 0 ? styles.divided : undefined}>
-                  <ResultRow result={result} />
-                </View>
-              ))}
-            </Card>
-          )}
+        <View style={styles.sections}>
+          <View style={styles.section}>
+            <SectionHeading
+              title="Upcoming"
+              note="Predicted times come from your recent training."
+            />
+            {upcoming.length === 0 ? (
+              <Absent label="No races scheduled." />
+            ) : (
+              upcoming.map((race) => <UpcomingCard key={race.id} race={race} />)
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <SectionHeading title="History" note="Every step down is a PR." />
+            {history.length === 0 ? (
+              <Absent label="No races run yet." />
+            ) : (
+              <Card padded={false}>
+                {history.map((result, i) => (
+                  <View
+                    key={result.id}
+                    style={i > 0 ? styles.divided : undefined}
+                  >
+                    <ResultRow result={result} />
+                  </View>
+                ))}
+              </Card>
+            )}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -204,13 +247,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.page,
     paddingTop: space.xl,
     paddingBottom: layout.section,
-    gap: layout.section,
   },
+  sections: { gap: layout.section },
   section: { gap: space.md },
   eyebrow: { ...text.micro, color: color.muted },
   title: { ...text.title, color: color.ink, marginTop: space.sm },
   meta: { ...text.meta, color: color.ink2 },
   failed: { ...text.base, color: color.ink2 },
+
+  header: { marginBottom: layout.section },
+  headingRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.md,
+    marginTop: space.xs,
+  },
+  heading: { ...text.title, color: color.ink },
+  /** Mono, with the noun welded on. Never a bare numeral. */
+  count: { ...text.stat, color: color.ink2 },
+  sectionTitle: { ...text.title, color: color.ink },
+  note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   upcomingStats: { flexDirection: "row", gap: space.xxl, marginTop: space.lg },
 

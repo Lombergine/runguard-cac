@@ -3,26 +3,86 @@
  *
  * Every shared primitive in every state, labelled, so the system can be
  * verified by eye: the three kinds of nothing side by side, all four status
- * shapes, the advisory in each flag, cards, stats, and the type scale with its
- * role names.
+ * shapes, the advisory in each flag, cards, stats, run cards, the receipt, both
+ * chat surfaces, the body map, and the type scale with its role names.
  *
- * The greyscale test lives here too: screenshot the status row, desaturate it,
- * and all four states must still be tellable apart.
+ * The greyscale test lives here too: screenshot a section, desaturate it, and
+ * every state in it must still be tellable apart. Each specimen's label names
+ * the cue that is supposed to survive, so the check can be read off the
+ * screenshot without the source open.
+ *
+ * DEV ONLY, AND ENFORCED. This is a live route under src/app/, so a release
+ * build can reach it by URL; expo-router has no dev-only route mechanism, so
+ * the component itself renders nothing outside development.
  */
+import { useState } from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent, Zero, NoRun } from "../components/Nothing";
 import { StatusDot } from "../components/StatusDot";
 import { Advisory } from "../components/Advisory";
+import { BodyMap } from "../components/BodyMap";
 import { Card } from "../components/Card";
+import { ChatBubble, bubbleText } from "../components/ChatBubble";
+import { CheckInReceipt } from "../components/CheckInReceipt";
+import { RunCard } from "../components/RunCard";
+import { SafetyNotice } from "../components/SafetyNotice";
 import { Stat } from "../components/Stat";
-import { Flag } from "../lib/types";
+import { ChatMessage, Flag, RecentRun } from "../lib/types";
 import { color } from "../theme/tokens";
 import { text, TextRole } from "../theme/type";
 import { layout, space } from "../theme/space";
 
 const FLAGS: Flag[] = ["clear", "watch", "unusual", "unknown"];
+
+/**
+ * Fixed specimen runs. `date` is only the payload's day key — every card takes
+ * its visible date pre-formatted through `dateLabel`, same as in the log.
+ */
+const PLAIN_RUN: RecentRun = {
+  id: 1,
+  date: "2025-10-14",
+  km: 6.8,
+  durationS: 2292,
+  spike: null,
+};
+
+const SPIKED_RUN: RecentRun = {
+  id: 2,
+  date: "2025-10-12",
+  km: 19.3,
+  durationS: 6420,
+  spike: { km: 19.3, longestKm: 15.9, pctAbove: 21.4, level: "large" },
+};
+
+/** No duration, so there is no pace to compute — the third column goes Absent. */
+const PACELESS_RUN: RecentRun = {
+  id: 3,
+  date: "2025-10-11",
+  km: 5.2,
+  durationS: 0,
+  spike: null,
+};
+
+const ATHLETE_MESSAGE: ChatMessage = {
+  role: "user",
+  text: "Calves were tight on the second mile today.",
+  safety: false,
+};
+
+const COACH_MESSAGE: ChatMessage = {
+  role: "assistant",
+  text: "Noted. Yesterday's pace was quicker than your usual easy run, so tightness on the follow-up is a common pattern.",
+  safety: false,
+};
+
+/** Flagged, so `bubbleText` returns null and the routing below cannot bubble it. */
+const SAFETY_MESSAGE: ChatMessage = {
+  role: "assistant",
+  text: "This sounds like something to talk through with a person, not an app. Your coach and the school counsellor can both help, and 988 is available any time.",
+  safety: true,
+};
 
 const REASONS: Record<Flag, string> = {
   clear: "Sleep, soreness and pace were all in your usual range.",
@@ -41,7 +101,22 @@ const TYPE_SCALE: { role: TextRole; sample: string; use: string }[] = [
   { role: "prompt", sample: "How did you sleep?", use: "34 display 800 — the check-in prompt" },
 ];
 
+/**
+ * The route. It renders the sheet in development and NOTHING otherwise: the
+ * file stays (it is the only visual test of the three-kinds-of-nothing
+ * contract) but a shipped build has no specimen sheet behind a deep link.
+ *
+ * The sheet is a separate component so the guard sits ahead of every hook.
+ */
 export default function Gallery() {
+  if (!__DEV__) return null;
+  return <SpecimenSheet />;
+}
+
+function SpecimenSheet() {
+  // Live, so the map's fill and its 48pt hit areas can be checked by thumb.
+  const [soreParts, setSoreParts] = useState<string[]>(["calf"]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.page}>
@@ -59,15 +134,15 @@ export default function Gallery() {
         <View style={styles.trio}>
           <View style={styles.trioCell}>
             <Absent />
-            <Caption>Absent</Caption>
+            <Caption>Absent — dashed</Caption>
           </View>
           <View style={styles.trioCell}>
             <Zero unit="mi" />
-            <Caption>Zero</Caption>
+            <Caption>Zero — solid</Caption>
           </View>
           <View style={styles.trioCell}>
             <NoRun />
-            <Caption>NoRun</Caption>
+            <Caption>NoRun — dotted</Caption>
           </View>
         </View>
 
@@ -161,6 +236,75 @@ export default function Gallery() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
+        <Section title="RunCard" />
+        <Text style={styles.note}>
+          Distance / Time / Pace, always that order, right of the route glyph.
+          Nothing here is coloured, so the greyscale copy should be identical.
+        </Text>
+        <Specimen label="Ordinary run — eyebrow carries the date and the team's word">
+          <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" sessionLabel="Easy run" />
+        </Specimen>
+        <Specimen label="Spiked run — advisory inline, split dot, no banner or modal">
+          <RunCard run={SPIKED_RUN} dateLabel="Sun 12 Oct" sessionLabel="Long run" />
+        </Specimen>
+        <Specimen label="No pace — the third column goes dashed, never '0:00 /mi'">
+          <RunCard run={PACELESS_RUN} dateLabel="Sat 11 Oct" />
+        </Specimen>
+        <Specimen label="No session type — eyebrow is the date alone">
+          <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" />
+        </Specimen>
+
+        {/* ---------------------------------------------------------- */}
+        <Section title="CheckInReceipt" />
+        <Text style={styles.note}>
+          What the check-in card collapses into. One line, mono, time and day
+          welded together. There is no success screen.
+        </Text>
+        <Specimen label="After a completed check-in">
+          <CheckInReceipt label="Checked in 6:12am · Tue 14 Oct" />
+        </Specimen>
+
+        {/* ---------------------------------------------------------- */}
+        <Section title="Chat" />
+        <Text style={styles.note}>
+          Side and geometry separate the speakers, not hue: the athlete's bubble
+          is right-aligned and unruled, the coach's is left and held by a rule.
+          The safety notice has no bubble geometry at all — no radius, no side,
+          one heavy left rule; it is full-bleed in the thread and only inset
+          here by the page. In greyscale the three stay unmistakable.
+        </Text>
+        <Specimen label="Athlete — right, accent fill, 12px radius">
+          <ChatRow message={ATHLETE_MESSAGE} />
+        </Specimen>
+        <Specimen label="Coach — left, well fill and a rule">
+          <ChatRow message={COACH_MESSAGE} />
+        </Specimen>
+        <Specimen label="Safety intercept — routed away from the bubble by bubbleText()">
+          <ChatRow message={SAFETY_MESSAGE} />
+        </Specimen>
+
+        {/* ---------------------------------------------------------- */}
+        <Section title="BodyMap" />
+        <Text style={styles.note}>
+          Tappable. Selection is a filled patch inside an outline, so it survives
+          desaturation; the fill is track, not accent, because this is the
+          athlete describing their body rather than actuating the system. Hit
+          areas are 48pt even where the drawing is a few points wide.
+        </Text>
+        <Specimen label="Calf selected — tap to check the targets and the fill">
+          <BodyMap
+            selected={soreParts}
+            onToggle={(partKey) =>
+              setSoreParts((prev) =>
+                prev.includes(partKey)
+                  ? prev.filter((k) => k !== partKey)
+                  : [...prev, partKey],
+              )
+            }
+          />
+        </Specimen>
+
+        {/* ---------------------------------------------------------- */}
         <Section title="Type scale" />
         {TYPE_SCALE.map((step) => (
           <View key={step.role} style={styles.typeRow}>
@@ -203,6 +347,18 @@ function Specimen({
       {children}
     </View>
   );
+}
+
+/**
+ * The routing every chat caller has to do, shown rather than described:
+ * `bubbleText` mints the branded string a bubble needs and returns null for a
+ * flagged message, so the safety branch is the only place that text can go.
+ * There is no argument this file could construct that would bubble it.
+ */
+function ChatRow({ message }: { message: ChatMessage }) {
+  const body = bubbleText(message);
+  if (body === null) return <SafetyNotice text={message.text} />;
+  return <ChatBubble role={message.role} text={body} />;
 }
 
 const styles = StyleSheet.create({
