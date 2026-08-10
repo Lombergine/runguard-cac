@@ -228,6 +228,10 @@ export function applySqliteSchema(db: Database.Database): void {
   addColumn("health_metrics", "sleep_awake REAL");
   addColumn("activities", "calories REAL");            // active kcal
   addColumn("activities", "cadence REAL");             // steps/min
+  // Encoded GPS polyline for the per-activity map. Already present in Supabase
+  // (it predates this lineage); added here so the activity detail screen works
+  // on both drivers rather than only against Postgres.
+  addColumn("activities", "route TEXT");
   // real-account columns on athletes
   addColumn("athletes", "team_id INTEGER");
   addColumn("athletes", "email TEXT");

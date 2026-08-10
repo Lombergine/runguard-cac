@@ -177,6 +177,8 @@ export type ActivityRow = {
   elevation_gain_m: number | null;
   calories: number | null;
   cadence: number | null;
+  /** Encoded GPS polyline, when the source provided one. */
+  route: string | null;
 };
 
 export async function listAthletes(): Promise<AthleteRow[]> {
