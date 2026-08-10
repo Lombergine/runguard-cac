@@ -60,18 +60,26 @@ export async function lastUserEngine(athleteId: number): Promise<string | null> 
  * `includeSafety: false` drops both halves of a safety-intercepted exchange.
  * Used when a COACH is reading an athlete's transcript — the same exclusion
  * chatSummary applies, so the disclosure isn't simply one tab away.
+ *
+ * `safety` is projected out of the `engine` tag so a client can tell an
+ * intercepted reply from an ordinary one. The app renders those through a
+ * structurally separate component rather than a chat bubble, and it cannot do
+ * that from `{role, text}` alone. On the coach path the flag is always false,
+ * because those rows never make it past the WHERE clause.
  */
 export async function chatHistory(
   athleteId: number,
   limit = 30,
   opts: { includeSafety?: boolean } = {}
-): Promise<{ role: string; text: string }[]> {
+): Promise<{ role: string; text: string; safety: boolean }[]> {
   const includeSafety = opts.includeSafety !== false;
   const sql = includeSafety
-    ? "SELECT role, text FROM chat_messages WHERE athlete_id = ? ORDER BY id DESC LIMIT ?"
-    : "SELECT role, text FROM chat_messages WHERE athlete_id = ? AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT ?";
-  const rows = await all<{ role: string; text: string }>(sql, [athleteId, limit]);
-  return rows.reverse();
+    ? "SELECT role, text, engine FROM chat_messages WHERE athlete_id = ? ORDER BY id DESC LIMIT ?"
+    : "SELECT role, text, engine FROM chat_messages WHERE athlete_id = ? AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT ?";
+  const rows = await all<{ role: string; text: string; engine: string | null }>(sql, [athleteId, limit]);
+  return rows
+    .reverse()
+    .map(({ role, text, engine }) => ({ role, text, safety: engine?.startsWith("safety:") ?? false }));
 }
 
 /* ------------------------------------------------------------------ */

@@ -140,18 +140,64 @@ export async function buildProfile(
   if (!athlete) return null;
 
   const since = new Date(now.getTime() - 400 * DAY_MS).toISOString();
-  const acts = await activitiesForAthlete(athlete.id, since);
-  const metrics = await metricsForAthlete(athlete.id, since);
-  const checkins = await checkinsForAthlete(athlete.id, since);
-  const results = await raceResultsForAthlete(athlete.id);
-  const injuries = await injuriesForAthlete(athlete.id);
-  const goals = await goalsForAthlete(athlete.id);
-  const races = await upcomingRaces({ athleteId: athlete.id, teamId: athlete.team_id });
+  const todayIso = localDay(now);
 
-  // last 14 days of soreness reports — the risk engine reads the trend, not just today
-  const soreReports = (
-    await sorenessHistory(athlete.id, localDayOffset(13, now))
-  ).map((s) => ({ date: s.date, body_part: s.body_part, severity: s.severity }));
+  // Every read here takes its arguments from `athlete` or from the clock — none
+  // of them consumes another's result — so they are issued together rather than
+  // one after the next. Under the SQLite driver this changes nothing —
+  // better-sqlite3 is synchronous, so the queries still run in sequence — but
+  // under the Supabase driver it collapses twelve sequential pooler round trips
+  // into one, which is where the latency actually lives. Reads only, no writes,
+  // so the interleaving carries no ordering risk.
+  const [
+    acts,
+    metrics,
+    checkins,
+    results,
+    injuries,
+    goals,
+    races,
+    soreRows,
+    todaySoreRows,
+    statusRows,
+    chatRows,
+    team,
+  ] = await Promise.all([
+    activitiesForAthlete(athlete.id, since),
+    metricsForAthlete(athlete.id, since),
+    checkinsForAthlete(athlete.id, since),
+    raceResultsForAthlete(athlete.id),
+    injuriesForAthlete(athlete.id),
+    goalsForAthlete(athlete.id),
+    upcomingRaces({ athleteId: athlete.id, teamId: athlete.team_id }),
+    // last 14 days of soreness reports — the risk engine reads the trend, not just today
+    sorenessHistory(athlete.id, localDayOffset(13, now)),
+    sorenessForCheckin(athlete.id, todayIso),
+    all<{ date: string; status: string }>(
+      "SELECT date, status FROM workout_status WHERE athlete_id = ?",
+      [athlete.id]
+    ),
+    // The coach dashboard renders these VERBATIM, in quotes. Safety-intercepted
+    // messages are excluded — an athlete who has just been told to talk to a
+    // parent and a doctor should not then find that disclosure quoted on their
+    // coach's screen.
+    //
+    // The `engine IS NULL` half is mandatory, not defensive: in SQLite
+    // `NULL NOT LIKE 'safety:%'` evaluates to NULL rather than true, so without it
+    // every pre-migration row would be excluded and this panel would silently
+    // empty out.
+    all<{ text: string }>(
+      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT 5",
+      [athlete.id]
+    ),
+    athlete.team_id ? getTeam(athlete.team_id) : Promise.resolve(undefined),
+  ]);
+
+  const soreReports = soreRows.map((s) => ({
+    date: s.date,
+    body_part: s.body_part,
+    severity: s.severity,
+  }));
 
   const risk = computeRisk(acts, metrics, now, soreReports, athlete);
   const restingHr = risk.recovery.restingHrBaseline ?? 55;
@@ -162,11 +208,8 @@ export async function buildProfile(
   const prsMap = personalRecords(results);
   const illness = illnessFlag(risk);
 
-  const todayIso = localDay(now);
   const todayCheckin = checkins.find((c) => c.date === todayIso) ?? null;
-  const todaySoreness: SorenessEntry[] = (
-    await sorenessForCheckin(athlete.id, todayIso)
-  ).map((s) => ({
+  const todaySoreness: SorenessEntry[] = todaySoreRows.map((s) => ({
     part: s.body_part,
     severity: s.severity,
   }));
@@ -176,14 +219,7 @@ export async function buildProfile(
     ? Math.ceil((new Date(nextRace.date + "T12:00:00").getTime() - now.getTime()) / DAY_MS)
     : null;
 
-  const statuses = new Map<string, string>(
-    (
-      await all<{ date: string; status: string }>(
-        "SELECT date, status FROM workout_status WHERE athlete_id = ?",
-        [athlete.id]
-      )
-    ).map((r) => [r.date, r.status])
-  );
+  const statuses = new Map<string, string>(statusRows.map((r) => [r.date, r.status]));
   // Recent runs, newest first, each rated against the athlete's own longest run
   // in the 30 days before it. This is the one load pattern the running evidence
   // supports, and it is reported against the session rather than the athlete.
@@ -299,23 +335,7 @@ export async function buildProfile(
     goals.find((g) => g.event === "weekly_km")?.target ??
     Math.max(Math.round(risk.weekKm * 1.05), 20);
 
-  // The coach dashboard renders these VERBATIM, in quotes. Safety-intercepted
-  // messages are excluded — an athlete who has just been told to talk to a
-  // parent and a doctor should not then find that disclosure quoted on their
-  // coach's screen.
-  //
-  // The `engine IS NULL` half is mandatory, not defensive: in SQLite
-  // `NULL NOT LIKE 'safety:%'` evaluates to NULL rather than true, so without it
-  // every pre-migration row would be excluded and this panel would silently
-  // empty out.
-  const chatQs = (
-    await all<{ text: string }>(
-      "SELECT text FROM chat_messages WHERE athlete_id = ? AND role = 'user' AND (engine IS NULL OR engine NOT LIKE 'safety:%') ORDER BY id DESC LIMIT 5",
-      [athlete.id]
-    )
-  ).map((r) => r.text);
-
-  const team = athlete.team_id ? await getTeam(athlete.team_id) : undefined;
+  const chatQs = chatRows.map((r) => r.text);
 
   return {
     athlete: {

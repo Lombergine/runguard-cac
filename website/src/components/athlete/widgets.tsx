@@ -1,6 +1,7 @@
 "use client";
 
 import { localDay } from "@/lib/day";
+import { BODY_PARTS, sorenessLabel, type Side } from "@/lib/bodyParts";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { severityColor } from "@/lib/severityColor";
@@ -112,19 +113,7 @@ export function CopyToken({ token }: { token: string }) {
 
 /* ---------- quick soreness check-in (1-10 tap) ---------- */
 
-/* regions match AthleteModel's anatomy map so the body scan lights up correctly */
-const SORE_PARTS: { k: string; label: string; lateral: boolean }[] = [
-  { k: "shin", label: "Shin", lateral: true },
-  { k: "calf", label: "Calf", lateral: true },
-  { k: "knee", label: "Knee", lateral: true },
-  { k: "hamstring", label: "Hamstring", lateral: true },
-  { k: "quad", label: "Quad", lateral: true },
-  { k: "hip", label: "Hip / IT band", lateral: true },
-  { k: "achilles", label: "Achilles", lateral: true },
-  { k: "foot", label: "Foot", lateral: true },
-  { k: "lower back", label: "Lower back", lateral: false },
-  { k: "shoulder", label: "Shoulder", lateral: true },
-];
+const SIDES = ["left", "right", "both"] as const satisfies readonly Side[];
 
 export function CheckinWidget({
   athleteId,
@@ -136,12 +125,12 @@ export function CheckinWidget({
   const [busy, setBusy] = useState(false);
   const [soreness, setSoreness] = useState<Record<string, number>>(initialSoreness);
   const [part, setPart] = useState<string | null>(null);
-  const [side, setSide] = useState<"left" | "right" | "both" | null>(null);
+  const [side, setSide] = useState<Side | null>(null);
   const router = useRouter();
 
-  const region = SORE_PARTS.find((p) => p.k === part) ?? null;
+  const region = BODY_PARTS.find((p) => p.key === part) ?? null;
   // for a lateral part, a side must be chosen before it's loggable — no bare "shin" entries
-  const sorenessKey = part ? (region?.lateral ? (side ? `${side} ${part}` : null) : part) : null;
+  const sorenessKey = part ? (region?.lateral && !side ? null : sorenessLabel(part, side)) : null;
   const currentSeverity = sorenessKey ? soreness[sorenessKey] ?? null : null;
 
   async function clearKey(key: string) {
@@ -169,7 +158,11 @@ export function CheckinWidget({
     setBusy(true);
     // "both" supersedes separately-logged left/right; logging one side makes a prior "both" stale
     const toClear =
-      side === "both" ? [`left ${part}`, `right ${part}`] : side ? [`both ${part}`] : [];
+      side === "both"
+        ? [sorenessLabel(part, "left"), sorenessLabel(part, "right")]
+        : side
+          ? [sorenessLabel(part, "both")]
+          : [];
     await fetch("/api/checkin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -207,20 +200,20 @@ export function CheckinWidget({
         Where? <span style={{ opacity: 0.7 }}>(tap to score — lights up the body scan)</span>
       </div>
       <div className="flex flex-wrap gap-1.5 mb-2">
-        {SORE_PARTS.map((p) => {
+        {BODY_PARTS.map((p) => {
           // a lateral part may be logged under "left knee"/"right knee"/"both knee" rather
           // than the bare key — the chip should still light up, colored by the worst side
-          const matches = [p.k, `left ${p.k}`, `right ${p.k}`, `both ${p.k}`]
+          const matches = [p.key, ...SIDES.map((s) => sorenessLabel(p.key, s))]
             .map((k) => soreness[k])
             .filter((v): v is number => v != null);
           const partSeverity = matches.length ? Math.max(...matches) : null;
-          const isSelected = part === p.k;
+          const isSelected = part === p.key;
           return (
             <button
-              key={p.k}
+              key={p.key}
               type="button"
               disabled={busy}
-              onClick={() => setPart(part === p.k ? null : p.k)}
+              onClick={() => setPart(part === p.key ? null : p.key)}
               className="px-2.5 h-7 rounded-lg text-xs font-medium cursor-pointer transition-colors"
               style={{
                 background: partSeverity !== null ? severityColor(partSeverity) : "var(--surface-2)",
@@ -235,13 +228,13 @@ export function CheckinWidget({
       </div>
 
       {/* which side? — only for lateral regions */}
-      {region?.lateral && (
+      {part && region?.lateral && (
         <div className="flex items-center gap-1.5 mb-3">
           <span className="text-[11px]" style={{ color: "var(--ink-muted)" }}>Side:</span>
-          {(["left", "right", "both"] as const).map((s) => {
+          {SIDES.map((s) => {
             // stays highlighted (by severity color) whenever that side has a real logged
             // score, independent of whether it's the one currently being edited
-            const sideSeverity = part ? soreness[`${s} ${part}`] ?? null : null;
+            const sideSeverity = soreness[sorenessLabel(part, s)] ?? null;
             const isSideSelected = side === s;
             return (
               <button
@@ -252,7 +245,7 @@ export function CheckinWidget({
                   // clicking the already-selected side again clears its score (if any),
                   // same "tap again to clear" pattern as the severity buttons below
                   if (isSideSelected && sideSeverity !== null) {
-                    clearSoreness(`${s} ${part}`);
+                    clearSoreness(sorenessLabel(part, s));
                     setSide(null);
                   } else {
                     setSide(side === s ? null : s);

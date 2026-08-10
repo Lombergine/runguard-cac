@@ -1,6 +1,7 @@
 "use client";
 
 import { localDay } from "@/lib/day";
+import { BODY_PARTS, injuryLabel, type Side } from "@/lib/bodyParts";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -19,22 +20,6 @@ export type InjuryItem = {
   resolved_at: string | null;
 };
 
-/* regions match AthleteModel's anatomy map so the body scan lights up correctly */
-const PARTS: { k: string; label: string; lateral: boolean }[] = [
-  { k: "shin", label: "Shin", lateral: true },
-  { k: "calf", label: "Calf", lateral: true },
-  { k: "achilles", label: "Achilles", lateral: true },
-  { k: "heel", label: "Heel / plantar", lateral: true },
-  { k: "foot", label: "Foot", lateral: true },
-  { k: "knee", label: "Knee", lateral: true },
-  { k: "hamstring", label: "Hamstring", lateral: true },
-  { k: "quad", label: "Quad", lateral: true },
-  { k: "hip", label: "Hip / IT band", lateral: true },
-  { k: "groin", label: "Groin", lateral: false },
-  { k: "lower back", label: "Lower back", lateral: false },
-  { k: "shoulder", label: "Shoulder", lateral: true },
-];
-
 const fmt = (d: string) =>
   new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -52,14 +37,14 @@ export default function InjuryManager({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [part, setPart] = useState("");
-  const [side, setSide] = useState<"left" | "right" | "both">("left");
+  const [side, setSide] = useState<Side>("left");
   const [date, setDate] = useState(today());
   const [note, setNote] = useState("");
   const router = useRouter();
 
-  const region = PARTS.find((p) => p.k === part) ?? null;
+  const region = BODY_PARTS.find((p) => p.key === part) ?? null;
   // a lateral part needs a side, or the scan lights up both legs
-  const bodyPart = region ? (region.lateral ? `${part} (${side})` : part) : "";
+  const bodyPart = region ? injuryLabel(part, side) : "";
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -190,8 +175,8 @@ export default function InjuryManager({
               style={{ borderColor: "var(--hairline)", background: "var(--surface)", color: "var(--ink)" }}
             >
               <option value="">Body part…</option>
-              {PARTS.map((p) => (
-                <option key={p.k} value={p.k}>
+              {BODY_PARTS.map((p) => (
+                <option key={p.key} value={p.key}>
                   {p.label}
                 </option>
               ))}

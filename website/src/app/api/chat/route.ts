@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (safe) {
     await logChat(athlete.id, "user", q, `safety:${safe.id}`);
     await logChat(athlete.id, "assistant", safe.reply, `safety:${safe.id}`);
-    return Response.json({ reply: safe.reply });
+    return Response.json({ reply: safe.reply, safety: true });
   }
 
   // A thin follow-up after a safety reply must not fall through to the intent
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     if (reply) {
       await logChat(athlete.id, "user", q, prev);
       await logChat(athlete.id, "assistant", reply, prev);
-      return Response.json({ reply });
+      return Response.json({ reply, safety: true });
     }
   }
 
@@ -47,7 +47,11 @@ export async function POST(request: Request) {
   // the rule engine's answer, so this can only ever be as bad as before.
   const r = await coachAnswer(q, profile);
   await logChat(athlete.id, "assistant", r.text, r.engine);
-  return Response.json({ reply: r.text });
+  // The rule engine and the local model both land here, and neither is a safety
+  // intercept — those returned above. A client can therefore trust `safety` to
+  // mean "this reply came from safety.ts", not "this reply mentions something
+  // serious".
+  return Response.json({ reply: r.text, safety: false });
 }
 
 export async function GET(request: Request) {

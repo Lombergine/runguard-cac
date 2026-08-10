@@ -467,7 +467,18 @@ export function weeklyPlan(
  * decision. The states now describe what the data looks like and hand the
  * judgement to the humans, who are the ones qualified to make it.
  */
-export type PrePractice = { flag: "clear" | "watch" | "unusual"; reason: string };
+export type PrePractice = {
+  flag: "clear" | "watch" | "unusual";
+  /** Coach-facing, third person. Never rendered in the athlete's own app. */
+  reason: string;
+  /**
+   * The same observation, addressed to the athlete. Descriptive and past tense:
+   * what their check-in said, not what to do about it. The coach's copy hands a
+   * judgement to an adult; this one must not hand a directive to a minor, so it
+   * carries no imperative and no recommendation.
+   */
+  athleteReason: string;
+};
 export type SorenessEntry = { part: string; severity: number };
 
 export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, soreness: SorenessEntry[]): PrePractice {
@@ -479,18 +490,26 @@ export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, soreness: 
       flag: "unusual",
       reason:
         "Resting heart rate is up and HRV is down together — the pattern that often precedes illness. Worth asking how they feel before training.",
+      athleteReason:
+        "Your resting heart rate was up and your HRV was down together this morning — the pattern that often shows up before an illness.",
     };
   if (worst && worst.severity >= 7)
     return {
       flag: "unusual",
       reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra}. That is high enough to be worth a conversation, and an athletic trainer or clinician if it persists.`,
+      athleteReason: `Your ${worst.part} was ${worst.severity}/10 in today's check-in${extra}. That is high for a check-in, and your coach can see it.`,
     };
   if (worst && worst.severity >= 4)
     return {
       flag: "watch",
       reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra} — worth checking in on before hard work.`,
+      athleteReason: `Your ${worst.part} was ${worst.severity}/10 in today's check-in${extra}.`,
     };
-  return { flag: "clear", reason: "Nothing in today's check-in or recovery data stands out." };
+  return {
+    flag: "clear",
+    reason: "Nothing in today's check-in or recovery data stands out.",
+    athleteReason: "Nothing in today's check-in or recovery data stood out.",
+  };
 }
 
 /** How much of readiness comes from what the athlete says vs. what sensors say. */

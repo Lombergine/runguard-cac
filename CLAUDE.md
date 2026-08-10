@@ -7,6 +7,13 @@
   (`/api/mobile/*`, `Authorization: Bearer <device_token>`). It never connects
   to the database; credentials must not ship inside an app binary.
 
+## Before writing any UI
+
+Read [`docs/visual-spec.md`](docs/visual-spec.md). It defines the visual system
+and six non-negotiables that override every aesthetic choice — chief among them
+that safety-intercepted replies must be *structurally incapable* of rendering as
+chat, and that a blank must never read as a healthy value.
+
 ## Running things
 
 All npm commands run from inside `website/` or `app/`. There is no root
