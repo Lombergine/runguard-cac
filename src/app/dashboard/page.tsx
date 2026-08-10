@@ -1,4 +1,5 @@
 import { localDayOffset } from "@/lib/day";
+import { miNum } from "@/lib/units";
 import Link from "next/link";
 import { athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory } from "@/lib/db";
 import { computeRisk, sessionSpike, type RiskSnapshot, type SessionSpike } from "@/lib/risk";
@@ -108,7 +109,7 @@ export default async function Dashboard() {
           },
           {
             label: "Team distance (7d)",
-            value: `${Math.round(teamKm)} km`,
+            value: `${miNum(teamKm, 0)} mi`,
             accent: undefined as string | undefined,
             sub: `${teamDelta >= 0 ? "+" : ""}${teamDelta}% vs last week`,
           },
@@ -138,7 +139,7 @@ export default async function Dashboard() {
             >
               <th className="px-4 py-3 font-medium">Athlete</th>
               <th className="px-3 py-3 font-medium">Needs a look</th>
-              <th className="px-3 py-3 font-medium text-right">7-day km</th>
+              <th className="px-3 py-3 font-medium text-right">7-day mi</th>
               <th className="px-3 py-3 font-medium hidden md:table-cell w-36">Last 4 weeks</th>
               <th className="px-3 py-3" />
             </tr>
@@ -173,7 +174,7 @@ export default async function Dashboard() {
                   <RosterFlags self={risk.selfReport} spike={spike} />
                 </td>
                 <td className="px-3 py-3 text-right tabular-nums" style={{ color: "var(--ink-2)" }}>
-                  {risk.weekKm}
+                  {miNum(risk.weekKm)}
                 </td>
                 <td className="px-3 py-1 hidden md:table-cell">
                   <LoadSpark data={risk.series} />
@@ -227,9 +228,9 @@ function RosterFlags({
 
   if (spike) {
     rows.push({
-      text: `\u26a0 ${spike.km} km run · ${spike.pctAbove}% over usual`,
+      text: `\u26a0 ${miNum(spike.km)} mi run · ${spike.pctAbove}% over usual`,
       color: spike.level === "large" ? "var(--status-critical)" : "var(--status-warning)",
-      title: `Longest run in the 30 days before it was ${spike.longestKm} km`,
+      title: `Longest run in the 30 days before it was ${miNum(spike.longestKm)} mi`,
     });
   }
   if (persistent) {

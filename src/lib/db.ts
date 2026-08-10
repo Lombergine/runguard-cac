@@ -197,6 +197,11 @@ export async function activitiesForAthlete(
   );
 }
 
+/** A single activity by id (caller must check ownership against athlete_id). */
+export async function getActivityById(id: number): Promise<ActivityRow | undefined> {
+  return one<ActivityRow>("SELECT * FROM activities WHERE id = ?", [id]);
+}
+
 export type MetricRow = {
   id: number;
   athlete_id: number;

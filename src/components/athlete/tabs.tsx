@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { CoreProfile } from "@/lib/profile";
+import { miNum } from "@/lib/units";
 import {
   AcwrChart,
   LoadChart,
@@ -79,7 +81,7 @@ function workoutBlocks(d: {
   const isWorkout = t.includes("workout") || t.includes("tempo") || t.includes("×") || t.includes("interval") || t.includes("race-pace") || t.includes("400");
   const main: Block = {
     label: "Main set",
-    text: `${d.distanceKm ? `${d.distanceKm} km` : ""}${d.targetPace ? ` @ ${d.targetPace}` : ""}${d.distanceKm || d.targetPace ? " — " : ""}${d.details}`,
+    text: `${d.distanceKm ? `${miNum(d.distanceKm)} mi` : ""}${d.targetPace ? ` @ ${d.targetPace}` : ""}${d.distanceKm || d.targetPace ? " — " : ""}${d.details}`,
     accent: true,
   };
   if (!isWorkout) {
@@ -89,9 +91,9 @@ function workoutBlocks(d: {
     return blocks;
   }
   return [
-    { label: "Warm-up", text: "1.5 km easy jog + leg swings, A-skips, and 3 build-ups to open the legs." },
+    { label: "Warm-up", text: "1 mi easy jog + leg swings, A-skips, and 3 build-ups to open the legs." },
     main,
-    { label: "Cool-down", text: "1 km easy jog + light stretching while you're still warm." },
+    { label: "Cool-down", text: "0.5 mi easy jog + light stretching while you're still warm." },
   ];
 }
 
@@ -236,7 +238,7 @@ export function HomeTab({ p }: { p: CoreProfile }) {
 
       {/* weekly mileage progress — wide */}
       <div className="enter" style={{ ["--i" as string]: 5 }}>
-        <Panel title="Weekly mileage" note={`${p.risk.weekKm} of ${p.weeklyTargetKm} km target`}>
+        <Panel title="Weekly mileage" note={`${miNum(p.risk.weekKm)} of ${miNum(p.weeklyTargetKm)} mi target`}>
           <div className="h-3 rounded-full overflow-hidden" style={{ background: "var(--surface-2)" }}>
             <div
               className="h-full rounded-full bar-fill"
@@ -319,9 +321,10 @@ function RecentRuns({ runs }: { runs: CoreProfile["recentRuns"] }) {
   return (
     <div className="space-y-1.5">
       {runs.map((r) => (
-        <div
+        <Link
           key={r.id}
-          className="rounded-xl px-3.5 py-2.5"
+          href={`/athlete/activity/${r.id}`}
+          className="block rounded-xl px-3.5 py-2.5 transition-opacity hover:opacity-80"
           style={{
             background: r.spike
               ? `color-mix(in oklab, ${r.spike.level === "large" ? "var(--status-critical)" : "var(--status-warning)"} 8%, var(--surface-2))`
@@ -329,9 +332,10 @@ function RecentRuns({ runs }: { runs: CoreProfile["recentRuns"] }) {
           }}
         >
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-sm font-medium tabular-nums">{r.km} km</span>
-            <span className="text-xs tabular-nums" style={{ color: "var(--ink-muted)" }}>
+            <span className="text-sm font-medium tabular-nums">{miNum(r.km)} mi</span>
+            <span className="flex items-center gap-1.5 text-xs tabular-nums" style={{ color: "var(--ink-muted)" }}>
               {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+              <span aria-hidden style={{ opacity: 0.6 }}>›</span>
             </span>
           </div>
           {r.spike && (
@@ -339,12 +343,12 @@ function RecentRuns({ runs }: { runs: CoreProfile["recentRuns"] }) {
               <span className="font-semibold">
                 {r.spike.pctAbove}% longer than your longest run in the month before it
               </span>{" "}
-              ({r.spike.longestKm} km). In a study of 5,205 adult runners, single sessions well past
+              ({miNum(r.spike.longestKm)} mi). In a study of 5,205 adult runners, single sessions well past
               a runner&apos;s recent longest carried a higher injury rate — the clearest load signal
               there is, though it hasn&apos;t been shown specifically in teenagers.
             </p>
           )}
-        </div>
+        </Link>
       ))}
     </div>
   );
@@ -396,7 +400,7 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
               <span className="flex-1 min-w-40">
                 <span className="text-sm font-medium">{d.type}</span>
                 <span className="text-xs ml-2" style={{ color: "var(--ink-muted)" }}>
-                  {d.distanceKm ? `${d.distanceKm} km` : ""}{d.targetPace ? ` @ ${d.targetPace}` : ""}
+                  {d.distanceKm ? `${miNum(d.distanceKm)} mi` : ""}{d.targetPace ? ` @ ${d.targetPace}` : ""}
                 </span>
               </span>
               {d.isTaper && <span className="text-[10px] font-medium rounded-full px-2 py-0.5" style={{ background: "rgba(245,158,11,0.15)", color: "var(--brand-strong)" }}>taper</span>}
@@ -441,7 +445,7 @@ export function StatsTab({ p }: { p: CoreProfile }) {
             value={p.risk.hasActivityHistory ? String(p.fitness.score) : "Not enough data yet"}
             sub={p.risk.hasActivityHistory ? `${p.fitness.trend} · ${p.fitness.tier} tier` : undefined}
             color={p.risk.hasActivityHistory && p.fitness.trend === "improving" ? "var(--status-good)" : undefined}
-            info="0–100, from your most recent week with real running in it: 55% your VO₂max reading, 45% your distance-weighted pace (about 7:00/km scores 0, 3:20/km scores 100). Trend compares this week against the average of the last four."
+            info="0–100, from your most recent week with real running in it: 55% your VO₂max reading, 45% your distance-weighted pace (about 11:15/mi scores 0, 5:20/mi scores 100). Trend compares this week against the average of the last four."
           />
           <Stat
             label="VO₂max"
@@ -456,9 +460,9 @@ export function StatsTab({ p }: { p: CoreProfile }) {
             info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard your heart was working. Two runs the same distance can score very differently. Runs synced without heart-rate data count as zero."
           />
           <Stat
-            label="7-day km"
-            value={`${p.risk.weekKm}`}
-            sub={`target ${p.weeklyTargetKm}`}
+            label="7-day mi"
+            value={`${miNum(p.risk.weekKm)}`}
+            sub={`target ${miNum(p.weeklyTargetKm)}`}
             info="Distance over the last 7 days — a rolling window, not since Monday. The target is your weekly-distance goal if you've set one; otherwise it's a placeholder just above your current week."
           />
           <Stat
