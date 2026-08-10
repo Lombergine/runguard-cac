@@ -16,10 +16,17 @@
  * Tables are copied parents-first. Columns are intersected with the target, so
  * columns that exist only in Supabase (activities.route, teams.auth_user_id,
  * both from the other repo lineage) are simply left null.
+ *
+ * ALL OR NOTHING. The clear, the copy, the sequence resets and the row-count
+ * check run in one transaction. Anything that fails — a dropped connection
+ * mid-copy, a constraint violation on row 9,000, a count that does not match —
+ * rolls the whole thing back and leaves the target exactly as it was. Without
+ * that, a failure halfway through left production truncated and half
+ * repopulated, with no way back except re-running the script.
  */
 import Database from "better-sqlite3";
 import path from "path";
-import { all, run, driver, describeTarget, close } from "../src/lib/db/driver";
+import { all, driver, describeTarget, close, transaction } from "../src/lib/db/driver";
 
 // parents before children — FKs point leftward
 const TABLES = [
@@ -76,65 +83,85 @@ async function main() {
     process.exit(1);
   }
 
-  // One statement so the CASCADE cannot leave a partially-cleared database.
-  console.log("clearing target...");
-  await run(
-    `TRUNCATE TABLE ${TABLES.map((t) => `public.${t}`).join(", ")} RESTART IDENTITY CASCADE`
-  );
+  // Read the source before opening the transaction, so the write connection is
+  // not held open for the length of a few thousand SQLite reads.
+  const source = TABLES.map((table) => {
+    const rows = src.prepare(`SELECT * FROM ${table}`).all() as Record<string, unknown>[];
+    const srcColsAll = rows.length ? Object.keys(rows[0]) : [];
+    return {
+      table,
+      rows,
+      cols: srcColsAll.filter((c) => targetCols.get(table)!.has(c)),
+      dropped: srcColsAll.filter((c) => !targetCols.get(table)!.has(c)),
+    };
+  });
+  src.close();
 
   const summary: { table: string; rows: number; skipped: string }[] = [];
 
-  for (const table of TABLES) {
-    const rows = src.prepare(`SELECT * FROM ${table}`).all() as Record<string, unknown>[];
-    if (rows.length === 0) {
-      summary.push({ table, rows: 0, skipped: "" });
-      continue;
-    }
-    const srcColsAll = Object.keys(rows[0]);
-    const cols = srcColsAll.filter((c) => targetCols.get(table)!.has(c));
-    const dropped = srcColsAll.filter((c) => !targetCols.get(table)!.has(c));
+  // Everything below either all lands or none of it does.
+  await transaction(async (tx) => {
+    // One statement so the CASCADE cannot leave a partially-cleared database.
+    console.log("clearing target...");
+    await tx.run(
+      `TRUNCATE TABLE ${TABLES.map((t) => `public.${t}`).join(", ")} RESTART IDENTITY CASCADE`
+    );
 
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
-      const values: unknown[] = [];
-      const tuples = chunk.map((r) => {
-        const ph = cols.map(() => "?").join(", ");
-        for (const c of cols) values.push(r[c] ?? null);
-        return `(${ph})`;
-      });
-      // OVERRIDING SYSTEM VALUE: id is GENERATED ALWAYS, so an explicit id is
-      // rejected without it, and every foreign key would break.
-      await run(
-        `INSERT INTO public.${table} (${cols.join(", ")})
-         OVERRIDING SYSTEM VALUE VALUES ${tuples.join(", ")}`,
-        values
+    for (const { table, rows, cols, dropped } of source) {
+      if (rows.length === 0) {
+        summary.push({ table, rows: 0, skipped: "" });
+        continue;
+      }
+
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        const values: unknown[] = [];
+        const tuples = chunk.map((r) => {
+          const ph = cols.map(() => "?").join(", ");
+          for (const c of cols) values.push(r[c] ?? null);
+          return `(${ph})`;
+        });
+        // OVERRIDING SYSTEM VALUE: id is GENERATED ALWAYS, so an explicit id is
+        // rejected without it, and every foreign key would break.
+        await tx.run(
+          `INSERT INTO public.${table} (${cols.join(", ")})
+           OVERRIDING SYSTEM VALUE VALUES ${tuples.join(", ")}`,
+          values
+        );
+      }
+
+      summary.push({ table, rows: rows.length, skipped: dropped.join(",") });
+      console.log(`  ${table.padEnd(18)} ${String(rows.length).padStart(6)}`);
+    }
+
+    // Identity sequences still sit at 1 after RESTART IDENTITY, so the next
+    // insert would collide with a copied id. setval's two-argument form marks
+    // the value as already used, so nextval returns MAX(id)+1.
+    console.log("\nresetting identity sequences...");
+    for (const table of TABLES) {
+      if (!targetCols.get(table)!.has("id")) continue;
+      await tx.run(
+        `SELECT setval(pg_get_serial_sequence('public.${table}', 'id'),
+                       GREATEST((SELECT COALESCE(MAX(id), 0) FROM public.${table}), 1))`
       );
     }
 
-    summary.push({ table, rows: rows.length, skipped: dropped.join(",") });
-    console.log(`  ${table.padEnd(18)} ${String(rows.length).padStart(6)}`);
-  }
-
-  // Identity sequences still sit at 1 after RESTART IDENTITY, so the next insert
-  // would collide with a copied id.
-  console.log("\nresetting identity sequences...");
-  for (const table of TABLES) {
-    if (!targetCols.get(table)!.has("id")) continue;
-    await run(
-      `SELECT setval(pg_get_serial_sequence('public.${table}', 'id'),
-                     GREATEST((SELECT COALESCE(MAX(id), 0) FROM public.${table}), 1))`
-    );
-  }
-
-  console.log("\nverifying row counts...");
-  let bad = 0;
-  for (const { table, rows } of summary) {
-    const got = await all<{ n: number }>(`SELECT COUNT(*)::int AS n FROM public.${table}`);
-    const n = Number(got[0]?.n ?? 0);
-    const ok = n === rows;
-    if (!ok) bad++;
-    console.log(`  ${ok ? "ok " : "MISMATCH"} ${table.padEnd(18)} sqlite=${rows} pg=${n}`);
-  }
+    // Verified INSIDE the transaction on purpose: a mismatch now throws, which
+    // rolls the copy back instead of reporting a bad database that has already
+    // replaced the good one.
+    console.log("\nverifying row counts...");
+    const bad: string[] = [];
+    for (const { table, rows } of summary) {
+      const got = await tx.all<{ n: number }>(`SELECT COUNT(*)::int AS n FROM public.${table}`);
+      const n = Number(got[0]?.n ?? 0);
+      const ok = n === rows;
+      if (!ok) bad.push(`${table} (sqlite=${rows} pg=${n})`);
+      console.log(`  ${ok ? "ok " : "MISMATCH"} ${table.padEnd(18)} sqlite=${rows} pg=${n}`);
+    }
+    if (bad.length) {
+      throw new Error(`row counts do not match, rolling back: ${bad.join(", ")}`);
+    }
+  });
 
   const skipped = summary.filter((s) => s.skipped);
   if (skipped.length) {
@@ -142,10 +169,15 @@ async function main() {
     for (const s of skipped) console.log(`  ${s.table}: ${s.skipped}`);
   }
 
-  src.close();
   await close();
-  console.log(bad === 0 ? "\nMigration complete." : `\n${bad} table(s) mismatched.`);
-  process.exit(bad === 0 ? 0 : 1);
+  console.log("\nMigration complete.");
+  process.exit(0);
 }
 
-main();
+main().catch(async (e) => {
+  // The transaction has already rolled back by the time this runs — the target
+  // still holds whatever it held before the script started.
+  console.error(`\nMigration FAILED, target unchanged:\n  ${e instanceof Error ? e.message : e}`);
+  await close().catch(() => {});
+  process.exit(1);
+});

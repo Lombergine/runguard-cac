@@ -22,7 +22,18 @@ export async function resolveAthleteWithPath(
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
   if (token) {
     const a = await getAthleteByToken(token);
-    if (a) return { athlete: a, via: "bearer" };
+    // Honour an explicit athleteId here for the same reason the cookie branch
+    // below does. A device token authenticates exactly ONE athlete, so a token
+    // holder naming somebody else is either a bug or an attack — and a route
+    // that forwards the caller's id downstream instead of the resolved row
+    // (as /api/strava/connect did) would otherwise act on that stranger.
+    //
+    // Safe to tighten: no in-repo client sends both. The iOS app posts to
+    // /api/mobile/*, which reads the token directly and never takes an
+    // athleteId. Mismatches fall through rather than hard-denying, so a request
+    // carrying both a stale Bearer header and a valid coach cookie still
+    // resolves by the coach path.
+    if (a && (athleteId == null || athleteId === a.id)) return { athlete: a, via: "bearer" };
   }
   const cookieToken = await athleteTokenFromCookie();
   if (cookieToken) {

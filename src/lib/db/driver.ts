@@ -148,9 +148,43 @@ export function toPg(sql: string, params: Params): { text: string; values: unkno
       continue;
     }
 
+    // Double-quoted identifiers. Postgres allows "" as an escaped quote inside
+    // one, same as string literals.
+    if (c === '"') {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === '"' && sql[j + 1] === '"') {
+          j += 2;
+          continue;
+        }
+        if (sql[j] === '"') {
+          j++;
+          break;
+        }
+        j++;
+      }
+      out += sql.slice(i, j);
+      i = j;
+      continue;
+    }
+
     if (c === "-" && sql[i + 1] === "-") {
       const nl = sql.indexOf("\n", i);
       const end = nl === -1 ? sql.length : nl;
+      out += sql.slice(i, end);
+      i = end;
+      continue;
+    }
+
+    // Block comments. Without this a `?` inside one becomes $n, consumes a bind
+    // value, and every placeholder after it shifts by one — a silent wrong-data
+    // bug rather than a syntax error, which is the worst kind. No SQL in db.ts
+    // uses them today; this exists so that adding one is not a landmine.
+    // (Postgres nests /* */; SQLite does not. Matching the first close is the
+    // conservative reading and is correct for every non-nested comment.)
+    if (c === "/" && sql[i + 1] === "*") {
+      const close = sql.indexOf("*/", i + 2);
+      const end = close === -1 ? sql.length : close + 2;
       out += sql.slice(i, end);
       i = end;
       continue;
@@ -246,6 +280,61 @@ export function sqliteOnlyHandle(): Database.Database {
     );
   }
   return sqlite();
+}
+
+/* ---------------- transactions ---------------- */
+
+/** The subset of the interface available inside a transaction. */
+export type Tx = {
+  all<T>(sql: string, params?: Params): Promise<T[]>;
+  run(sql: string, params?: Params): Promise<number>;
+};
+
+/**
+ * Run `fn` inside a single transaction, rolling back if it throws.
+ *
+ * NOT `run("BEGIN")` … `run("COMMIT")`. The Postgres pool hands out a
+ * connection per call, so those two statements can land on different sessions —
+ * the BEGIN opens a transaction on a connection that is immediately returned to
+ * the pool and rolled back, and everything in between auto-commits anyway. The
+ * bug is invisible until something fails halfway. postgres.js's `begin()`
+ * reserves one connection for the callback, which is the only correct way to do
+ * this through pgbouncer. (Port 6543 is transaction-mode pooling, which does
+ * support transactions — it is prepared statements it cannot hold, hence
+ * prepare:false above.)
+ *
+ * SQLite runs on a single handle, so plain BEGIN/COMMIT is already correct
+ * there; better-sqlite3's own `transaction()` wrapper is sync-only and cannot
+ * wrap an async callback.
+ */
+export async function transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  if (driver() === "sqlite") {
+    const db = sqlite();
+    db.exec("BEGIN");
+    try {
+      const out = await fn({ all, run });
+      db.exec("COMMIT");
+      return out;
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+  const result = await pg().begin(async (sql) => {
+    const tx: Tx = {
+      async all<R>(text: string, params: Params = []): Promise<R[]> {
+        const q = toPg(text, params);
+        return (await sql.unsafe(q.text, q.values as never[])) as unknown as R[];
+      },
+      async run(text: string, params: Params = []): Promise<number> {
+        const q = toPg(text, params);
+        const res = await sql.unsafe(q.text, q.values as never[]);
+        return res.count ?? 0;
+      },
+    };
+    return [await fn(tx)];
+  });
+  return (result as unknown as [T])[0];
 }
 
 /** Close pooled connections. Scripts need this to exit; the app never calls it. */

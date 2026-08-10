@@ -4,11 +4,20 @@ import { resolveAthlete } from "@/lib/apiAuth";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const athleteId = Number(url.searchParams.get("athlete"));
+  const requested = Number(url.searchParams.get("athlete"));
   // This endpoint had NO auth check of any kind. Any unauthenticated visitor
   // could hit ?athlete=N, complete the Strava OAuth flow, and the callback would
   // write THEIR Strava tokens onto athlete N's row and sync their history in.
-  if (!(await resolveAthlete(request, Number.isInteger(athleteId) ? athleteId : null))) {
+  //
+  // The id that goes into the signed OAuth `state` MUST be the resolved
+  // athlete's, never the query string's. Authorizing one principal and then
+  // acting on an unvalidated id is how the fix above got reopened: the bearer
+  // branch of resolveAthlete used to ignore athleteId, so any athlete holding
+  // their own device token could name a victim here, finish Strava's OAuth with
+  // their own account, and have the callback bind those tokens onto the
+  // victim's row — across teams, since bearer had no team scoping.
+  const athlete = await resolveAthlete(request, Number.isInteger(requested) ? requested : null);
+  if (!athlete) {
     return Response.json({ error: "Not authorized" }, { status: 401 });
   }
   if (!stravaConfigured()) {
@@ -20,8 +29,5 @@ export async function GET(request: Request) {
       { status: 400 }
     );
   }
-  if (!Number.isInteger(athleteId)) {
-    return Response.json({ error: "Missing athlete id" }, { status: 400 });
-  }
-  redirect(authorizeUrl(athleteId, url.origin));
+  redirect(authorizeUrl(athlete.id, url.origin));
 }
