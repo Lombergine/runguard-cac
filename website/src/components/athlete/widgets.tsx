@@ -3,7 +3,7 @@
 import { localDay } from "@/lib/day";
 import { BODY_PARTS, sorenessLabel, type Side } from "@/lib/bodyParts";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { severityColor } from "@/lib/severityColor";
 
 /* ---------- join / leave a team ---------- */
@@ -366,11 +366,68 @@ const SUGGESTED = [
   "Why is my pace getting slower even though I'm training more?",
 ];
 
+type ChatMsg = { role: string; text: string; safety: boolean };
+
+/**
+ * A safety-intercepted reply. See docs/visual-spec.md non-negotiable #1 and
+ * § "Components → Chat". The web counterpart of app/src/components/SafetyNotice.tsx,
+ * written in this file's token language rather than the app's.
+ *
+ * It shares nothing with the chat bubble — not a class, not a style object.
+ * Deliberately absent, each absence load-bearing: no bubble geometry (no radius,
+ * no max width, no left/right side), no avatar, no role label, no timestamp, and
+ * `select-none` so the text can't be lifted out and quoted back into the thread.
+ * Not an alert either: no red, no icon, no badge. The only emphasis is a 3px left
+ * rule in --ink-2, a printed sidebar rule that carries no colour meaning.
+ *
+ * It takes only `text`, so there is nothing to pass that would make it render as
+ * a participant in the conversation.
+ */
+function SafetyNotice({ text }: { text: string }) {
+  return (
+    <div
+      className="px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap select-none"
+      style={{ background: "var(--surface)", borderLeft: "3px solid var(--ink-2)", color: "var(--ink)" }}
+    >
+      {text}
+    </div>
+  );
+}
+
+/**
+ * One row of the transcript. The safety branch is STRUCTURAL, not cosmetic: a
+ * flagged row returns above, so the bubble below is unreachable for it and no
+ * prop combination can route one through the coach-facing renderer.
+ */
+function ChatRow({ m }: { m: ChatMsg }) {
+  if (m.safety) return <SafetyNotice text={m.text} />;
+  return (
+    <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+      <div
+        className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
+        style={
+          m.role === "user"
+            ? { background: "var(--brand)", color: "#000" }
+            : { background: "var(--surface-2)", color: "var(--ink-2)", border: "1px solid var(--hairline)" }
+        }
+      >
+        {m.text}
+      </div>
+    </div>
+  );
+}
+
 export function ChatBox({ athleteId }: { athleteId: number }) {
-  const [msgs, setMsgs] = useState<{ role: string; text: string }[]>([]);
+  const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Which surface this is. ChatTab is invoked identically on both pages, so the
+  // route is the signal: the athlete portal is /athlete, the coach's copy of the
+  // athlete app lives under /dashboard/athlete/[id]?view=athlete. POST now 403s
+  // on the coach path — this only keeps the UI honest about it. The server is
+  // the boundary; this is not.
+  const onCoachSurface = (usePathname() ?? "").startsWith("/dashboard");
 
   useEffect(() => {
     fetch(`/api/chat?athleteId=${athleteId}`)
@@ -384,8 +441,8 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
   }, [msgs]);
 
   async function send(text: string) {
-    if (!text.trim() || busy) return;
-    setMsgs((m) => [...m, { role: "user", text }]);
+    if (!text.trim() || busy || onCoachSurface) return;
+    setMsgs((m) => [...m, { role: "user", text, safety: false }]);
     setInput("");
     setBusy(true);
     try {
@@ -395,9 +452,18 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
         body: JSON.stringify({ athleteId, message: text }),
       });
       const d = await res.json();
-      setMsgs((m) => [...m, { role: "assistant", text: d.reply ?? d.error ?? "Something went wrong." }]);
+      // `safety === true` means "this came from safety.ts", and only then. An
+      // error string is never a safety reply, so it stays a bubble.
+      setMsgs((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text: d.reply ?? d.error ?? "Something went wrong.",
+          safety: d.reply != null && d.safety === true,
+        },
+      ]);
     } catch {
-      setMsgs((m) => [...m, { role: "assistant", text: "Couldn't reach the server." }]);
+      setMsgs((m) => [...m, { role: "assistant", text: "Couldn't reach the server.", safety: false }]);
     }
     setBusy(false);
   }
@@ -407,22 +473,15 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {msgs.length === 0 && (
           <div className="text-sm space-y-2 pt-2" style={{ color: "var(--ink-muted)" }}>
-            <p>Ask anything about your training — I&apos;m reading your last 14 days of data automatically, and I get smarter the longer you use me.</p>
+            <p>
+              {onCoachSurface
+                ? "Nothing to show from this athlete's chat."
+                : "Ask anything about your training — I'm reading your last 14 days of data automatically, and I get smarter the longer you use me."}
+            </p>
           </div>
         )}
         {msgs.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-              style={
-                m.role === "user"
-                  ? { background: "var(--brand)", color: "#000" }
-                  : { background: "var(--surface-2)", color: "var(--ink-2)", border: "1px solid var(--hairline)" }
-              }
-            >
-              {m.text}
-            </div>
-          </div>
+          <ChatRow key={i} m={m} />
         ))}
         {busy && (
           <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
@@ -432,48 +491,59 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex flex-wrap gap-1.5 py-2">
-        {SUGGESTED.map((s) => (
-          <button
-            key={s}
-            onClick={() => send(s)}
-            className="text-[11px] rounded-full border px-2.5 py-1 cursor-pointer hover:opacity-70"
-            style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      {/* No composer on the coach surface. POST rejects the coach path outright,
+          so rendering a box that 403s would only invite the attempt. This is the
+          athlete's private transcript; a coach reads a redacted copy of it. */}
+      {onCoachSurface ? (
+        <p className="text-xs pt-2" style={{ color: "var(--ink-muted)" }}>
+          Read-only. This is the athlete&apos;s own chat — you can&apos;t write to it.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1.5 py-2">
+            {SUGGESTED.map((s) => (
+              <button
+                key={s}
+                onClick={() => send(s)}
+                className="text-[11px] rounded-full border px-2.5 py-1 cursor-pointer hover:opacity-70"
+                style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-        className="flex gap-2"
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about your training…"
-          className="flex-1 rounded-xl border bg-transparent px-4 py-2.5 text-sm outline-none focus:border-amber-500"
-          style={{ borderColor: "var(--hairline)" }}
-        />
-        <button
-          disabled={busy || !input.trim()}
-          className="rounded-xl px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-50 cursor-pointer"
-          style={{ background: "var(--brand)" }}
-        >
-          Send
-        </button>
-      </form>
-      {/* Persistent, not in the empty state — it used to sit inside
-          {msgs.length === 0 && …} and vanish forever after the first message, so
-          a returning athlete never saw it. Reworded because the coach panel
-          shows the last five messages verbatim, in quotes, not a summary. */}
-      <p className="text-xs pt-2" style={{ color: "var(--ink-muted)" }}>
-        Your coach can read your last 5 messages here, word for word.
-      </p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              send(input);
+            }}
+            className="flex gap-2"
+          >
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask about your training…"
+              className="flex-1 rounded-xl border bg-transparent px-4 py-2.5 text-sm outline-none focus:border-amber-500"
+              style={{ borderColor: "var(--hairline)" }}
+            />
+            <button
+              disabled={busy || !input.trim()}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-50 cursor-pointer"
+              style={{ background: "var(--brand)" }}
+            >
+              Send
+            </button>
+          </form>
+          {/* Persistent, not in the empty state — it used to sit inside
+              {msgs.length === 0 && …} and vanish forever after the first message, so
+              a returning athlete never saw it. Reworded because the coach panel
+              shows the last five messages verbatim, in quotes, not a summary. */}
+          <p className="text-xs pt-2" style={{ color: "var(--ink-muted)" }}>
+            Your coach can read your last 5 messages here, word for word.
+          </p>
+        </>
+      )}
     </div>
   );
 }

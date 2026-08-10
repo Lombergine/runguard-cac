@@ -7,7 +7,9 @@
  * `website/src/lib/chat.ts`, surfaced as `safety: boolean` by GET /api/chat),
  * and `lib/api` carries that through to `ChatMessage.safety`. A flagged message
  * returns `SafetyNotice` before `ChatBubble` is ever constructed — see
- * visual-spec non-negotiable #1.
+ * visual-spec non-negotiable #1. That branch is not a convention: `ChatBubble`
+ * takes a branded string that only `bubbleText()` can mint, and it mints
+ * nothing for a flagged row.
  *
  * Because `SafetyNotice` is full-bleed, the list itself carries NO horizontal
  * inset; the bubble rows carry their own. Adding padding to the list would put
@@ -27,7 +29,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 
-import { ChatBubble } from "../components/ChatBubble";
+import { ChatBubble, bubbleText } from "../components/ChatBubble";
 import { SafetyNotice } from "../components/SafetyNotice";
 import { getChat, postChat } from "../lib/api";
 import type { ChatMessage } from "../lib/types";
@@ -36,14 +38,17 @@ import { text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
- * The one place a message becomes a component. A safety row returns here and
- * never reaches the line below it.
+ * The one place a message becomes a component. `bubbleText` is the only thing
+ * that can mint the branded string `ChatBubble` accepts, and it refuses a
+ * flagged message — so the null check below IS the safety branch, and a row
+ * that fails it has no way to reach the bubble renderer.
  */
 function Row({ message }: { message: ChatMessage }) {
-  if (message.safety) return <SafetyNotice text={message.text} />;
+  const body = bubbleText(message);
+  if (body === null) return <SafetyNotice text={message.text} />;
   return (
     <View style={styles.bubbleRow}>
-      <ChatBubble role={message.role} text={message.text} />
+      <ChatBubble role={message.role} text={body} />
     </View>
   );
 }
@@ -55,12 +60,27 @@ export default function ChatScreen() {
   const [pending, setPending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
   const list = useRef<FlatList<ChatMessage>>(null);
+  /**
+   * The composer is live while the mount fetch is still in flight, so a send
+   * can start before the history lands. Once it has, the history result is
+   * DISCARDED rather than merged: `setMessages(history)` would replace the
+   * whole array and take an already-rendered SafetyNotice and the athlete's
+   * flagged turn off the screen, and landing between send and reply would
+   * break the `m === mine` identity match so that turn is never reclassified.
+   *
+   * Discard rather than merge because the two lists cannot be reconciled
+   * safely — POST persists both rows server-side, so a history fetch that
+   * resolves late may or may not already contain the turn we are holding
+   * optimistically, and prepending it risks showing the crisis exchange twice.
+   * Losing older history until the next visit is the cheaper failure.
+   */
+  const sendStarted = useRef(false);
 
   useEffect(() => {
     let alive = true;
     getChat()
       .then((history) => {
-        if (alive) setMessages(history);
+        if (alive && !sendStarted.current) setMessages(history);
       })
       .catch(() => {
         if (alive) setLoadFailed(true);
@@ -73,6 +93,7 @@ export default function ChatScreen() {
   const send = useCallback(async () => {
     const q = draft.trim();
     if (!q || pending) return;
+    sendStarted.current = true;
     // Held by reference so the two setState callbacks below can find this exact
     // row again after other updates have landed.
     const mine: ChatMessage = { role: "user", text: q, safety: false };
@@ -120,43 +141,50 @@ export default function ChatScreen() {
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/*
+          The failure sits ABOVE the list rather than replacing it. The composer
+          stays live either way, and a message sent after a failed load must be
+          on screen: if it trips an intercept the reply is fetched and logged
+          server-side, so it can never be shown to nobody.
+        */}
         {loadFailed ? (
-          <View style={styles.notice}>
-            <Text style={styles.plain}>Your messages could not be loaded.</Text>
+          <View style={styles.loadFailed}>
+            <Text style={styles.plain}>Your earlier messages could not be loaded.</Text>
           </View>
-        ) : (
-          <FlatList<ChatMessage>
-            ref={list}
-            // Oldest first, so the newest sits at the bottom next to the
-            // composer. The rows have no server id and the list only ever
-            // appends (or drops the row it just appended), so the index is a
-            // stable identity for as long as a row is on screen.
-            data={messages ?? []}
-            keyExtractor={(_, i) => String(i)}
-            renderItem={({ item }) => <Row message={item} />}
-            ItemSeparatorComponent={Separator}
-            contentContainerStyle={styles.list}
-            ListEmptyComponent={
-              messages === null ? null : (
-                <View style={styles.notice}>
-                  <Text style={styles.plain}>
-                    No messages yet. Ask about a run, a workout, or how you have been
-                    feeling.
-                  </Text>
-                </View>
-              )
-            }
-            ListFooterComponent={
-              pending ? (
-                <View style={styles.bubbleRow}>
-                  <Text style={styles.pending}>Writing a reply…</Text>
-                </View>
-              ) : null
-            }
-            onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
-            keyboardShouldPersistTaps="handled"
-          />
-        )}
+        ) : null}
+        <FlatList<ChatMessage>
+          ref={list}
+          // Oldest first, so the newest sits at the bottom next to the
+          // composer. The rows have no server id and the list only ever
+          // appends (or drops the row it just appended), so the index is a
+          // stable identity for as long as a row is on screen.
+          data={messages ?? []}
+          keyExtractor={(_, i) => String(i)}
+          renderItem={({ item }) => <Row message={item} />}
+          ItemSeparatorComponent={Separator}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            // Nothing to say while the first load is still in flight, and
+            // nothing to say when it failed — the notice above covers that.
+            messages === null ? null : (
+              <View style={styles.notice}>
+                <Text style={styles.plain}>
+                  No messages yet. Ask about a run, a workout, or how you have been
+                  feeling.
+                </Text>
+              </View>
+            )
+          }
+          ListFooterComponent={
+            pending ? (
+              <View style={styles.bubbleRow}>
+                <Text style={styles.pending}>Writing a reply…</Text>
+              </View>
+            ) : null
+          }
+          onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
+          keyboardShouldPersistTaps="handled"
+        />
 
         <View style={styles.composer}>
           {sendFailed ? (
@@ -201,6 +229,7 @@ const styles = StyleSheet.create({
   bubbleRow: { paddingHorizontal: layout.page },
   separator: { height: space.md },
   notice: { paddingHorizontal: layout.page },
+  loadFailed: { paddingHorizontal: layout.page, paddingTop: space.xl },
   plain: { ...text.base, color: color.ink2 },
   /** Quiet and inline: no overlay, no spinner, no animation. */
   pending: { ...text.meta, color: color.muted },

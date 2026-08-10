@@ -1,4 +1,4 @@
-import { resolveAthlete, resolveAthleteWithPath } from "@/lib/apiAuth";
+import { resolveAthleteWithPath } from "@/lib/apiAuth";
 import { buildProfile } from "@/lib/profile";
 import { logChat, chatHistory, lastUserEngine, isFollowUp } from "@/lib/chat";
 import { safetyIntercept, replyFor } from "@/lib/safety";
@@ -8,8 +8,22 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const athlete = await resolveAthlete(request, body.athleteId ?? null);
-  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const auth = await resolveAthleteWithPath(request, body.athleteId ?? null);
+  if (!auth) return Response.json({ error: "Not authorized" }, { status: 401 });
+  // A coach may READ a redacted transcript (see GET) but may never WRITE to it.
+  // The coach path reaching this handler meant a coach could type into the
+  // athlete's chat tab, receive a crisis intercept on their own screen, and have
+  // both rows written into the athlete's private transcript tagged
+  // `safety:<id>` — as if the athlete had disclosed it. `includeSafety: false`
+  // does nothing here; only refusing the write does. Rejected before the message
+  // is even read, so no coach text ever reaches safetyIntercept or logChat.
+  if (auth.via === "coach") {
+    return Response.json(
+      { error: "This is the athlete's private chat. Coaches can't post to it." },
+      { status: 403 }
+    );
+  }
+  const athlete = auth.athlete;
   const q = typeof body.message === "string" ? body.message.trim().slice(0, 1000) : "";
   if (!q) return Response.json({ error: "Empty message" }, { status: 400 });
 

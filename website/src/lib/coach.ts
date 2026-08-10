@@ -292,9 +292,16 @@ export async function coachAnswer(q: string, p: CoreProfile): Promise<CoachReply
 
     // Discard the whole answer on either control. Editing it out would leave the
     // claim standing with its evidence removed.
-    if (outputUnsafe(text)) return { text: await ruleAnswer(q, p), engine: "safety:output-weight" };
+    //
+    // These are `rules:` and not `safety:` even though a safety control rejected
+    // the model's text: the reply we return is an ordinary rule-engine coaching
+    // answer, and `safety:` is reserved for deterministic intercepts from
+    // safety.ts. Tagging these `safety:` made downstream consumers — the wire
+    // `safety` flag chatHistory projects, the coach-facing `NOT LIKE 'safety:%'`
+    // filters — treat an ordinary answer as an intercept.
+    if (outputUnsafe(text)) return { text: await ruleAnswer(q, p), engine: "rules:output-weight" };
     const bad = unsourcedNumber(text, allowed);
-    if (bad) return { text: await ruleAnswer(q, p), engine: `safety:unsourced-${bad}` };
+    if (bad) return { text: await ruleAnswer(q, p), engine: `rules:unsourced-${bad}` };
 
     return { text, engine: "llm" };
   } catch {

@@ -6,27 +6,50 @@
  * floats.
  *
  * A safety-intercepted message must never reach this component (visual-spec
- * non-negotiable #1). Two things enforce that rather than a convention:
+ * non-negotiable #1). That is enforced by the TYPE OF THE TEXT, not by a
+ * convention and not by an excess-property check.
  *
- *   1. `ChatBubbleProps` carries `role` and `text` and nothing else, so there
- *      is no "safety mode" prop to set and no message object to inspect.
- *   2. The `safety?: never` intersection below makes `<ChatBubble {...msg} />`
- *      a compile error for any `ChatMessage`, since its `safety: boolean` is
- *      not assignable to `undefined`. Callers must destructure the two fields
- *      by hand, which is exactly the moment they have to decide what the flag
- *      means.
+ * `text` is a `BubbleText`: a string carrying a brand that no ordinary string
+ * has. TypeScript will not accept a plain `string` — including
+ * `message.text` — where a `BubbleText` is required, so there is no
+ * assignment, destructure or spread that produces a valid argument from a
+ * `ChatMessage`. (An excess-property check would not do this: `const p:
+ * ChatBubbleProps = message` is legal, because a supertype assignment simply
+ * ignores the extra `safety` field.)
  *
- * The branch to `SafetyNotice` happens in the list renderer, before this
- * function is ever called.
+ * The only way to mint a `BubbleText` is `bubbleText(message)` below, which
+ * returns `null` for a flagged message. The brand type itself is deliberately
+ * NOT exported, so a caller cannot even write `x as BubbleText`.
+ *
+ * DO NOT "simplify" this back to `text: string`. The brand is the whole
+ * mechanism; without it the safety branch is a comment.
  */
 import { View, Text, StyleSheet } from "react-native";
 
-import { ChatBubbleProps } from "../lib/types";
+import type { ChatBubbleProps, ChatMessage } from "../lib/types";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 import { space, radius, ruleWidth } from "../theme/space";
 
-export function ChatBubble({ role, text: body }: ChatBubbleProps & { safety?: never }) {
+declare const bubbleTextBrand: unique symbol;
+
+/** Module-private on purpose — see the header. */
+type BubbleText = string & { readonly [bubbleTextBrand]: true };
+
+/**
+ * The single mint. Returns `null` for a safety-tagged message, which is the
+ * caller's cue to render `SafetyNotice` instead — there is no second way to
+ * obtain the argument `ChatBubble` needs.
+ */
+export function bubbleText(message: ChatMessage): BubbleText | null {
+  if (message.safety) return null;
+  return message.text as BubbleText;
+}
+
+export function ChatBubble({
+  role,
+  text: body,
+}: Omit<ChatBubbleProps, "text"> & { text: BubbleText }) {
   const mine = role === "user";
   return (
     <View style={mine ? styles.rowMine : styles.rowTheirs}>
