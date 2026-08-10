@@ -11,19 +11,33 @@ Coaches get a whole-roster dashboard; athletes get their own app with a live "bo
 that lights up injured or sore areas, a readiness score, an intensity calendar, race
 predictions, and an AI coaching chat.
 
+## Repo layout
+
+Two sibling projects. Each is self-contained, with its own `package.json` — there
+is no root `package.json` and no workspace tooling.
+
+- **`website/`** — the Next.js web app. Despite the name it is the server for
+  *both* clients: the coach dashboard, the mobile API (`/api/mobile/*`), and the
+  scoring engine all live here.
+- **`app/`** — the mobile client. Talks to `website/` over HTTP and never
+  connects to the database directly.
+
 ## Quick start
 
 Requires [Node.js](https://nodejs.org) 20+.
 
 ```bash
+cd website
 npm install
 npm run dev
 ```
 
 Then open **http://localhost:3000**.
 
-> The demo database is already included, so you can run it right away. To regenerate
-> fresh demo data at any time, run `npm run seed`.
+> The database file lives at `website/data/` and is git-ignored, so a fresh clone
+> starts empty — run `npm run seed` once from `website/` to generate the demo team.
+> Be aware that `npm run seed` **wipes and rebuilds** the roster; don't run it
+> against data you want to keep.
 
 ## Try the demo
 
@@ -35,18 +49,26 @@ From the landing page:
 ## Tech stack
 
 - [Next.js](https://nextjs.org) (App Router) + React + TypeScript
-- SQLite via `better-sqlite3`
+- SQLite via `better-sqlite3` locally, Supabase Postgres when deployed —
+  chosen explicitly by `DB_DRIVER`, see [DEPLOY.md](DEPLOY.md)
 - Recharts for charts, Tailwind-style utility CSS
-- Sports-science engine (ACWR, TRIMP, monotony, readiness) in `src/lib/`
+- Sports-science engine (ACWR, TRIMP, monotony, readiness) in `website/src/lib/`
 
 ## Project layout
 
 ```
-src/
-  app/            Next.js routes (landing, coach dashboard, athlete portal, API)
-  components/     UI — AthleteModel (body scan), IntensityCalendar, charts, athlete tabs
-  lib/            data model, risk/fitness engine, profile builder, AI coach
-scripts/seed.ts   generates the demo team + a year of training data
+website/              the Next.js app — web UI, mobile API, and scoring engine
+  src/
+    app/              Next.js routes (landing, coach dashboard, athlete portal, API)
+    components/       UI — AthleteModel (body scan), IntensityCalendar, charts, athlete tabs
+    lib/              data model, risk/fitness engine, profile builder, AI coach
+    lib/db/driver.ts  the only file that knows which database is in play
+  scripts/seed.ts     generates the demo team + a year of training data
+  supabase/           Postgres DDL, applied by hand (see DEPLOY.md)
+  data/               local SQLite file (git-ignored)
+  Dockerfile          production image — build with website/ as the context
+app/                  the mobile client (see app/README.md)
+DEPLOY.md             how to put it online
 ```
 
 ---
