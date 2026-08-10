@@ -9,8 +9,13 @@
 -- ON CONFLICT clauses target, and identity columns. Nothing here drops or
 -- rewrites existing data.
 --
--- Two columns that exist here but not in SQLite are left alone: activities.route
--- and teams.auth_user_id, both nullable, both from the other repo lineage.
+-- teams.auth_user_id exists here but not in SQLite and is left alone: nullable,
+-- from the other repo lineage.
+--
+-- activities.route was in that same category until the two lineages merged. The
+-- activity detail screen now reads it, so schema.sqlite.ts adds it on the SQLite
+-- side too and both targets carry the column. Nothing to apply here — Supabase
+-- already had it.
 
 -- 1. Which path produced a chat row: 'rules' | 'safety:<id>'. Written on BOTH
 --    rows of a safety-intercepted exchange, which is what lets chatSummary keep

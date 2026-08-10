@@ -177,6 +177,8 @@ export type ActivityRow = {
   elevation_gain_m: number | null;
   calories: number | null;
   cadence: number | null;
+  /** Encoded polyline for the activity detail map. Null for most sources. */
+  route: string | null;
 };
 
 export async function listAthletes(): Promise<AthleteRow[]> {
@@ -195,6 +197,12 @@ export async function activitiesForAthlete(
     "SELECT * FROM activities WHERE athlete_id = ? AND start_time >= ? ORDER BY start_time",
     [athleteId, sinceIso]
   );
+}
+
+export async function getActivityById(
+  id: number
+): Promise<ActivityRow | undefined> {
+  return one<ActivityRow>("SELECT * FROM activities WHERE id = ?", [id]);
 }
 
 export type MetricRow = {

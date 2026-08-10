@@ -228,6 +228,7 @@ export function applySqliteSchema(db: Database.Database): void {
   addColumn("health_metrics", "sleep_awake REAL");
   addColumn("activities", "calories REAL");            // active kcal
   addColumn("activities", "cadence REAL");             // steps/min
+  addColumn("activities", "route TEXT");               // encoded polyline, for the detail map
   // real-account columns on athletes
   addColumn("athletes", "team_id INTEGER");
   addColumn("athletes", "email TEXT");

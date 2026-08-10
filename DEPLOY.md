@@ -1,4 +1,4 @@
-# Getting RunGuard live so real people can sign up
+# Deploying RunGuard
 
 RunGuard talks to one of two databases, chosen explicitly by `DB_DRIVER`:
 
@@ -29,7 +29,7 @@ simplest option** (Option A). With SQLite you still need a persistent disk, whic
 rules Vercel out — use Railway, Render or Fly (Options B–D) with the included
 `Dockerfile`.
 
----
+## 1. Prerequisites
 
 ## Option A — Vercel + Supabase (recommended)
 
@@ -77,22 +77,24 @@ DB_DRIVER=supabase DB_PASSWORD=... npx tsx scripts/migrate-to-pg.ts --yes
 
 ## Option C — Render (SQLite, persistent disk)
 
-1. https://render.com → **New → Web Service** → connect the repo.
-2. Runtime: **Docker**. Add a **Disk**: mount path `/data`, size 1 GB.
-3. Environment variables: same four as above (`DATABASE_PATH=/data/runguard.db`, etc.).
-4. Create Web Service → you get a `https://…onrender.com` URL.
+## 3. Environment variables (Vercel → Project → Settings → Environment Variables)
 
 ## Option D — Fly.io (SQLite, persistent volume)
 
-1. Install the Fly CLI, then in this folder: `fly launch` (it reads the Dockerfile).
-2. `fly volumes create core_data --size 1` then in `fly.toml` add a `[mounts]`
-   block: `source = "core_data"`, `destination = "/data"`.
-3. `fly secrets set SESSION_SECRET=$(openssl rand -hex 32) DATABASE_PATH=/data/runguard.db`
-4. `fly deploy`.
+| Name | Value | Secret? |
+|------|-------|---------|
+| `DB_PASSWORD` | your Supabase database password | yes |
+| `SESSION_SECRET` | any long random string (`openssl rand -hex 32`) | yes |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://lmhxdnqxtecwogmnrdxg.supabase.co` | no |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | your publishable/anon key | no |
 
----
+Optional:
 
-## First run
+| Name | Purpose |
+|------|---------|
+| `COACH_PASSWORD` | demo-team unlock password (defaults to `milemarker` — change it) |
+| `ANTHROPIC_API_KEY` | enables the live AI coaching chat |
+| `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_VERIFY_TOKEN` | Strava sync |
 
 - **SQLite:** the schema builds itself on first connect — no migration step.
 - **Supabase:** the schema is *not* built at runtime, deliberately — concurrent
@@ -105,22 +107,19 @@ DB_DRIVER=supabase DB_PASSWORD=... npx tsx scripts/migrate-to-pg.ts --yes
   `/athlete/signup`. To get the demo team into Supabase anyway, seed locally and
   run `scripts/migrate-to-pg.ts`.
 
-## Getting real Apple Health data in — the native app
+The database layer is already tuned for serverless (one connection per instance
+against the Supabase transaction pooler on port 6543), so it won't exhaust
+Supabase connection limits under Vercel's concurrency.
 
-Apple Health is the single hub. The **RunGuard iPhone app** (`milemarker-ios`) reads it
-and syncs in real time three ways: every time the app is opened, on a timer while
-open, and via **HealthKit background delivery** — iOS wakes the app the moment a new
-run or night of sleep is written to Health, even when RunGuard is closed. No uploads,
-ever. The web app is the companion dashboard for that same data.
+## 4. Point the iPhone app at it
 
-The web dashboard's "Set range" (Strava) and date fields (Apple export import)
-only bound an initial historical **backfill** — background HealthKit delivery
-and the Strava webhook keep syncing new activity afterward regardless of what
-range was chosen for that one-time backfill.
+In the RunGuard iOS app's setup screen, enter your deployed URL
+(`https://runguard.vercel.app`) and your athlete pairing token (web app →
+Profile → "Pair the RunGuard iPhone app"). Grant Apple Health access once and it
+syncs in the background. See `../coreios/RUN_ON_IPHONE.md` to build the app onto
+a phone or ship it via TestFlight / the App Store.
 
-**Garmin / Coros / Fitbit / WHOOP users** don't need a separate integration — they
-connect their device to Apple Health once (e.g. Garmin Connect → Settings → Apple
-Health), and everything flows into RunGuard automatically.
+## 5. Notes
 
 To put the app on real phones:
 
