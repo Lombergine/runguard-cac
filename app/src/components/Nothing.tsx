@@ -51,8 +51,12 @@ const absent = StyleSheet.create({
     borderRadius: radius.card,
     padding: layout.cardPadding,
   },
+  // 22px is under the 24px large-text threshold, so this needs the full 4.5:1
+  // against the `well` fill above, not the 3:1 large-text allowance.
+  // `unknown` on `well` measures 4.82:1 — see the token for the full working.
   value: { ...text.stat, color: color.unknown },
-  // ink2, not muted: muted clears 4.5:1 on `bg` but not on the sunken `well`.
+  // ink2, not muted: muted clears 4.5:1 on `bg` (4.50) but not on the sunken
+  // `well` (4.17). ink2 on `well` is 8.38:1.
   label: { ...text.meta, color: color.ink2, marginTop: space.xs },
 });
 

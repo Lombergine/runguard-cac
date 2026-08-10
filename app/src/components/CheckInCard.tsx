@@ -7,21 +7,30 @@
  * a gap to apologise for; it is the product's main call to action, and so it is
  * the largest, highest-contrast, most thumb-reachable thing on the screen.
  *
- * Two taps total — sleep, then soreness. The card holds which of the two
- * questions is showing; the SCREEN owns the network call and decides when to
- * swap this for CheckInReceipt. No step counter, no "next", no confirmation:
- * the second tap is the submit.
+ * Two taps for the common case — sleep, then soreness. The card holds which of
+ * the two questions is showing; the SCREEN owns the network call and decides
+ * when to swap this for CheckInReceipt. No step counter, no "next", no
+ * confirmation: on "No" the second tap is the submit.
+ *
+ * WHERE, NOT JUST HOW MUCH. "A bit" or "A lot" reveals the BodyMap inline,
+ * because POST /api/checkin stores soreness per part (`sorenessPart` +
+ * `sorenessSeverity`) and there is nowhere for a partless answer to go — an
+ * abstract severity with no region is data the server cannot keep. The level
+ * row is the quick triage; the map is the specced soreness picker that makes
+ * the answer storable at all.
  *
  * The answer row is anchored to the bottom of the card by a flexible spacer, so
  * it sits in the bottom third within one-handed reach and does not move when
- * the question above it wraps to a different number of lines.
+ * the question above it wraps to a different number of lines. The spacer
+ * collapses to its minimum once the map is showing and the card overflows.
  */
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { radius, ruleWidth, space, target } from "../theme/space";
 import { color } from "../theme/tokens";
-import { text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
+import { BodyMap } from "./BodyMap";
 
 /** The sleep question's three answers. */
 export type SleepAnswer = "bad" | "ok" | "good";
@@ -29,7 +38,24 @@ export type SleepAnswer = "bad" | "ok" | "good";
 /** The soreness question's three answers. */
 export type SorenessAnswer = "none" | "some" | "lot";
 
-export type CheckInAnswers = { sleep: SleepAnswer; soreness: SorenessAnswer };
+export type CheckInAnswers = {
+  sleep: SleepAnswer;
+  soreness: SorenessAnswer;
+  /**
+   * Body-part keys from lib/bodyParts, one per region the athlete marked.
+   * Always empty when `soreness` is "none". The screen stores one per request.
+   */
+  parts: string[];
+};
+
+/**
+ * A count of marked regions with its noun welded on, e.g. "1 area", "3 areas".
+ * Exported because the receipt has to name the same number this card showed,
+ * and the two must not word it differently.
+ */
+export function areaLabel(n: number): string {
+  return `${n} ${n === 1 ? "area" : "areas"}`;
+}
 
 type Option<T extends string> = { value: T; label: string };
 
@@ -67,7 +93,10 @@ type CheckInCardProps = {
    * derived here — see lib/dates.
    */
   header: string;
-  /** Fired on the second tap, with both answers. */
+  /**
+   * Fired with every answer at once: on the second tap when soreness is "No",
+   * otherwise once the athlete has marked where and confirmed.
+   */
   onComplete: (answers: CheckInAnswers) => void;
   /** True while the answers are in flight. Targets stay put but go inert. */
   submitting: boolean;
@@ -78,18 +107,37 @@ type CheckInCardProps = {
 export function CheckInCard({ header, onComplete, submitting, failed }: CheckInCardProps) {
   const [sleep, setSleep] = useState<SleepAnswer | null>(null);
   const [soreness, setSoreness] = useState<SorenessAnswer | null>(null);
+  const [parts, setParts] = useState<string[]>([]);
 
   /**
-   * Second tap submits. On a failure the soreness row stays on screen with the
-   * answer still selected, so tapping again is a retry rather than a restart.
+   * "No" submits on the second tap — nothing to locate, so the fast path stays
+   * two taps. "A bit" and "A lot" open the map instead, because a severity with
+   * no region cannot be stored. On a failure everything stays on screen with
+   * the answers still selected, so tapping again is a retry, not a restart.
    */
   function pickSoreness(value: SorenessAnswer) {
     if (sleep === null) return;
     setSoreness(value);
-    onComplete({ sleep, soreness: value });
+    if (value === "none") {
+      setParts([]);
+      onComplete({ sleep, soreness: value, parts: [] });
+    }
+  }
+
+  function togglePart(partKey: string) {
+    setParts((prev) =>
+      prev.includes(partKey) ? prev.filter((k) => k !== partKey) : [...prev, partKey]
+    );
+  }
+
+  function submitSore() {
+    if (sleep === null || soreness === null || parts.length === 0) return;
+    onComplete({ sleep, soreness, parts });
   }
 
   const askingSoreness = sleep !== null;
+  const askingWhere = soreness === "some" || soreness === "lot";
+  const ready = parts.length > 0;
 
   return (
     <View style={styles.card}>
@@ -106,6 +154,7 @@ export function CheckInCard({ header, onComplete, submitting, failed }: CheckInC
           options={SORENESS_OPTIONS}
           selected={soreness}
           disabled={submitting}
+          expanded={askingWhere}
           onPick={pickSoreness}
         />
       ) : (
@@ -117,6 +166,40 @@ export function CheckInCard({ header, onComplete, submitting, failed }: CheckInC
         />
       )}
 
+      {askingWhere ? (
+        <View>
+          <Text style={styles.whereLabel}>Where</Text>
+          <View style={styles.map}>
+            <BodyMap selected={parts} onToggle={togglePart} />
+          </View>
+
+          {/* One line either way, so confirming a region moves nothing. */}
+          <Text style={styles.chosen}>
+            {ready ? (
+              <>
+                <Text style={styles.chosenCount}>{areaLabel(parts.length)}</Text> chosen.
+              </>
+            ) : (
+              "No areas chosen yet."
+            )}
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !ready || submitting }}
+            disabled={!ready || submitting}
+            onPress={submitSore}
+            style={({ pressed }) => [
+              styles.done,
+              ready && styles.doneReady,
+              pressed && styles.doneReady,
+            ]}
+          >
+            <Text style={[styles.doneLabel, !ready && styles.doneLabelIdle]}>Done</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {failed ? <Text style={styles.failed}>That didn't send. Tap again.</Text> : null}
     </View>
   );
@@ -126,6 +209,8 @@ type AnswerRowProps<T extends string> = {
   options: readonly Option<T>[];
   selected: T | null;
   disabled: boolean;
+  /** True when the selected option has disclosed something below the row. */
+  expanded?: boolean;
   onPick: (value: T) => void;
 };
 
@@ -133,6 +218,7 @@ function AnswerRow<T extends string>({
   options,
   selected,
   disabled,
+  expanded,
   onPick,
 }: AnswerRowProps<T>) {
   return (
@@ -143,7 +229,11 @@ function AnswerRow<T extends string>({
           <Pressable
             key={option.value}
             accessibilityRole="button"
-            accessibilityState={{ selected: isSelected, disabled }}
+            accessibilityState={{
+              selected: isSelected,
+              disabled,
+              ...(expanded === undefined ? {} : { expanded: isSelected && expanded }),
+            }}
             disabled={disabled}
             onPress={() => onPick(option.value)}
             style={({ pressed }) => [
@@ -180,6 +270,29 @@ const styles = StyleSheet.create({
   /** The one place accent is spent on this screen: the thing you tap. */
   answerActive: { backgroundColor: color.accentSoft, borderColor: color.accent },
   answerLabel: { ...text.baseSemi, color: color.ink, textAlign: "center" },
+
+  whereLabel: { ...text.micro, color: color.muted, marginTop: space.xl },
+  map: { marginTop: space.md },
+  chosen: { ...text.meta, color: color.muted, marginTop: space.md },
+  /** Numerals are mono everywhere, and the count keeps its noun welded on. */
+  chosenCount: { ...tabular, fontFamily: font.mono, color: color.ink2 },
+  done: {
+    minHeight: checkInMetrics.answer,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    marginTop: space.md,
+    backgroundColor: color.card,
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+  },
+  /** Accent, because unlike the map this one IS a system action. */
+  doneReady: { backgroundColor: color.accentSoft, borderColor: color.accent },
+  doneLabel: { ...text.baseSemi, color: color.ink },
+  doneLabelIdle: { color: color.muted },
+
   failed: { ...text.meta, color: color.ink2, marginTop: space.md },
 });
 

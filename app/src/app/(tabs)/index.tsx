@@ -33,6 +33,7 @@ import Svg, { Line } from "react-native-svg";
 
 import { Advisory } from "../../components/Advisory";
 import {
+  areaLabel,
   CheckInCard,
   checkInMetrics,
   type CheckInAnswers,
@@ -41,12 +42,18 @@ import {
 } from "../../components/CheckInCard";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
 import { getProfile, isUnauthorized, postCheckin } from "../../lib/api";
+import { sorenessLabel } from "../../lib/bodyParts";
+import {
+  readinessColor,
+  readinessValue,
+  readinessVerdict,
+} from "../../lib/readinessVerdict";
 import { checkinHeader, dayLabel, localDay, receiptLabel } from "../../lib/dates";
 import { displayFlag, readinessState } from "../../lib/readiness";
 import type { Flag, Profile } from "../../lib/types";
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { font, tabular, text } from "../../theme/type";
 
 /**
  * "How did you sleep?" maps to `energy`, which is the only self-report field
@@ -55,11 +62,25 @@ import { text } from "../../theme/type";
  */
 const ENERGY_BY_SLEEP: Record<SleepAnswer, number> = { bad: 3, ok: 6, good: 9 };
 
-/** How the soreness answer is described back to the athlete. */
-const SORENESS_WORD: Record<SorenessAnswer, string | null> = {
-  none: null,
-  some: "a bit sore",
-  lot: "very sore",
+/**
+ * The triage word becomes a 0–10 severity, because that is the only shape
+ * `sorenessSeverity` has.
+ *
+ * The two numbers are prePracticeFlag's own thresholds (website/src/lib/
+ * engine.ts: `>= 4` → watch, `>= 7` → unusual). Choosing them means the flag
+ * the athlete reads back is the one their answer names: "a bit" lands exactly
+ * on watch, "a lot" exactly on unusual. Any other pair would let the app show
+ * `clear` to someone who just said they were sore.
+ */
+const SEVERITY_BY_SORENESS: Record<Exclude<SorenessAnswer, "none">, number> = {
+  some: 4,
+  lot: 7,
+};
+
+/** How the stored soreness level is described back to the athlete. */
+const SORENESS_WORD: Record<Exclude<SorenessAnswer, "none">, string> = {
+  some: "A bit sore",
+  lot: "Very sore",
 };
 
 /**
@@ -75,15 +96,30 @@ const FALLBACK_REASON: Record<Flag, string> = {
 };
 
 const STAT_LINE = text.stat.lineHeight as number;
+/**
+ * The flag row, then TWO lines of reason. Every `athleteReason` the engine
+ * writes wraps past one line at 360px, so reserving one made the answer targets
+ * above jump upward the moment the profile landed — a layout shift under a
+ * thumb that is already reaching, which the spec forbids. Reserving the common
+ * height costs nothing: the footer is the last block on the screen.
+ */
 const ADVISORY_BLOCK =
-  (text.base.lineHeight as number) + space.xs + (text.meta.lineHeight as number);
+  (text.base.lineHeight as number) + space.xs + (text.meta.lineHeight as number) * 2;
 
 export default function CheckInScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadError, setLoadError] = useState<"none" | "unpaired" | "failed">("none");
   /** Set only when this session submitted the check-in — the one time we know. */
   const [submittedAt, setSubmittedAt] = useState<Date | null>(null);
-  const [sorenessSaid, setSorenessSaid] = useState<SorenessAnswer | null>(null);
+  /**
+   * What the server actually took, set only after every call succeeded. The
+   * receipt describes this and nothing else — it must never name soreness the
+   * server does not hold.
+   */
+  const [stored, setStored] = useState<{
+    soreness: SorenessAnswer;
+    parts: number;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitFailed, setSubmitFailed] = useState(false);
   /** The post-submit refetch never landed, so the new readiness is unknown. */
@@ -113,17 +149,32 @@ export default function CheckInScreen() {
     };
   }, [reveal]);
 
-  async function submit({ sleep, soreness }: CheckInAnswers) {
+  async function submit({ sleep, soreness, parts }: CheckInAnswers) {
     setSubmitting(true);
     setSubmitFailed(false);
     try {
       await postCheckin({ energy: ENERGY_BY_SLEEP[sleep] });
+      if (soreness !== "none") {
+        // ONE PART PER REQUEST — the route stores a single `sorenessPart` per
+        // call (lib/api.ts, CheckinInput). Sequential, because every one of
+        // these upserts the same check-in row. Any failure throws out of the
+        // whole submit: a receipt is only allowed to follow a complete write.
+        for (const partKey of parts) {
+          await postCheckin({
+            // The map toggles a lateral part as one state, so which side is
+            // genuinely unknown. `sorenessLabel(key, null)` stores the bare
+            // part rather than inventing "left" or "both".
+            sorenessPart: sorenessLabel(partKey, null),
+            sorenessSeverity: SEVERITY_BY_SORENESS[soreness],
+          });
+        }
+      }
     } catch {
       setSubmitFailed(true);
       setSubmitting(false);
       return;
     }
-    setSorenessSaid(soreness);
+    setStored({ soreness, parts: parts.length });
     setSubmittedAt(new Date());
     setSubmitting(false);
     reveal.setValue(0);
@@ -167,8 +218,6 @@ export default function CheckInScreen() {
     receipt = `Checked in · ${dayLabel(profile.todayCheckin.date)}`;
   }
 
-  const sorenessNote = sorenessSaid ? SORENESS_WORD[sorenessSaid] : null;
-
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       {/* Scrolls only when text scaling demands it; the targets stay hittable. */}
@@ -181,11 +230,7 @@ export default function CheckInScreen() {
         ) : receipt ? (
           <Animated.View style={[styles.body, { opacity: reveal }]}>
             <CheckInReceipt label={receipt} />
-            {sorenessNote ? (
-              <Text style={styles.sorenessNote}>
-                {`${sorenessNote} · where isn't recorded yet`}
-              </Text>
-            ) : null}
+            <SorenessNote stored={stored} />
           </Animated.View>
         ) : (
           <CheckInCard
@@ -199,6 +244,33 @@ export default function CheckInScreen() {
         <ReadinessFooter profile={awaitingReadiness ? null : profile} />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * One line naming exactly what the soreness half of the check-in put on the
+ * server, and nothing beyond it. It renders only for a check-in this session
+ * submitted, because that is the only one whose soreness this screen witnessed.
+ *
+ * "No" is a reported fact and says so; anything else names the count of regions
+ * that were stored. It never mentions what was not captured — an earlier
+ * version read "where isn't recorded yet", which implied the severity HAD been
+ * kept when in fact nothing had been sent at all.
+ */
+function SorenessNote({
+  stored,
+}: {
+  stored: { soreness: SorenessAnswer; parts: number } | null;
+}) {
+  if (!stored) return null;
+  if (stored.soreness === "none") {
+    return <Text style={styles.sorenessNote}>No soreness reported.</Text>;
+  }
+  return (
+    <Text style={styles.sorenessNote}>
+      {`${SORENESS_WORD[stored.soreness]}, recorded in `}
+      <Text style={styles.sorenessCount}>{areaLabel(stored.parts)}</Text>.
+    </Text>
   );
 }
 
@@ -236,7 +308,17 @@ function ReadinessFooter({ profile }: { profile: Profile | null }) {
       <View style={styles.readinessRow}>
         <Text style={styles.readinessLabel}>Readiness</Text>
         {state.known ? (
-          <Text style={styles.readinessValue}>{String(state.value)}</Text>
+          <>
+            {/* Mirrors the web athlete portal: the numeral with "/100" welded
+                on, then the verdict. See lib/readinessVerdict for the bands and
+                wording, which are copied from tabs.tsx rather than invented. */}
+            <Text style={styles.readinessValue}>{readinessValue(state.value)}</Text>
+            <Text
+              style={[styles.readinessVerdict, { color: readinessColor(state.value) }]}
+            >
+              {readinessVerdict(state.value)}
+            </Text>
+          </>
         ) : (
           <>
             <Text style={styles.readinessDash}>—</Text>
@@ -294,7 +376,10 @@ const styles = StyleSheet.create({
   },
   body: { flex: 1 },
   loadError: { ...text.base, color: color.ink2 },
+  readinessVerdict: { ...text.baseSemi },
   sorenessNote: { ...text.meta, color: color.muted, marginTop: space.sm },
+  /** Numerals are mono everywhere, and the count keeps its noun welded on. */
+  sorenessCount: { ...tabular, fontFamily: font.mono, color: color.ink2 },
 
   footer: { marginTop: layout.section },
   solidRule: { height: ruleWidth, backgroundColor: color.rule },

@@ -44,8 +44,19 @@ export const color = {
   ok: "#2F6B4F",
   watch: "#8A6A1F",
   unusual: "#A33A2E",
-  /** ALWAYS paired with a dashed border and a label. Never colour alone. */
-  unknown: "#8A9098",
+  /**
+   * ALWAYS paired with a dashed border and a label. Never colour alone.
+   *
+   * The `—` renders at 22px — under the 24px large-text threshold — so 4.5:1
+   * applies, on the sunken `well` as well as on `bg`. Measured (WCAG 2.x):
+   * 4.82:1 on `well`, 5.20:1 on `bg`, 5.69:1 on `card`. `well` is the binding
+   * surface; keep it ≥4.5 there and the rest follow.
+   *
+   * Same hue and saturation as before, only darker, so absence still reads as
+   * grey rather than ink — and deliberately still much lighter than `ink2`
+   * (2.4× its relative luminance), because absence must not outweigh data.
+   */
+  unknown: "#63676D",
 } as const;
 
 export type ColorToken = keyof typeof color;

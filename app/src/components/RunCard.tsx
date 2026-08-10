@@ -23,7 +23,7 @@ import { Absent } from "./Nothing";
 import { Stat } from "./Stat";
 import type { RunCardProps } from "../lib/types";
 import { formatDistance, formatDuration, formatPace } from "../lib/units";
-import { ruleWidth, space } from "../theme/space";
+import { layout, ruleWidth, space } from "../theme/space";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
@@ -37,14 +37,43 @@ const GLYPH = 24;
 const MICRO_LINE = Math.round((text.micro.fontSize ?? 0) * 1.4);
 
 /**
- * The geometry of a spike-free card's content box, exported for the run-log
- * skeleton alone. `statsRow` is enforced as a `minHeight` below, so the
- * reservation holds regardless of how Stat measures internally.
+ * The geometry of a card's content box, exported for the run-log skeleton
+ * alone. The card lays itself out from these same values below, so there is one
+ * set of numbers rather than two that drift.
+ *
+ * Two of the heights are data-dependent and so cannot be known before the
+ * payload lands: a run with no pace swaps a figure for a bordered `Absent`
+ * slot, and a run that spiked adds an advisory. The skeleton therefore reserves
+ * BOTH — the tallest card the log can produce. Over-reserving settles into
+ * whitespace nobody notices; under-reserving moves content under a thumb at
+ * 6am, which is the failure "skeletons reserve exact final height" exists to
+ * stop.
  */
 export const runCardMetrics = {
   eyebrowLine: MICRO_LINE,
   gap: space.md,
+  /** A stat column: micro label, then the figure. Enforced as a `minHeight`
+   *  below, so the reservation holds regardless of how Stat measures. */
   statsRow: MICRO_LINE + space.xs + (text.stat.lineHeight ?? 0),
+  /**
+   * The same row when pace is missing and `Absent` takes the third column:
+   * eyebrow, then a slot with a rule and `layout.cardPadding` on both axes
+   * around its `—` and label. Mirrors Absent's box in Nothing.tsx — built from
+   * the same tokens, and must track it if that box changes.
+   */
+  statsRowAbsent:
+    MICRO_LINE +
+    space.sm +
+    2 * ruleWidth +
+    2 * layout.cardPadding +
+    (text.stat.lineHeight ?? 0) +
+    space.xs +
+    (text.meta.lineHeight ?? 0),
+  /** Gap between the stats and a spike advisory. */
+  spikeGap: space.md,
+  /** The advisory itself: the dot-and-flag row, then one reason line. */
+  spikeAdvisory:
+    (text.base.lineHeight ?? 0) + space.xs + (text.meta.lineHeight ?? 0),
 } as const;
 
 /**
@@ -138,5 +167,5 @@ const styles = StyleSheet.create({
   },
   /** Equal columns so figures line up down the log, not just across a card. */
   stat: { flex: 1 },
-  spike: { marginTop: space.md },
+  spike: { marginTop: runCardMetrics.spikeGap },
 });

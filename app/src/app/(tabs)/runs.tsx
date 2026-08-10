@@ -16,7 +16,7 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
-import { NoRun } from "../../components/Nothing";
+import { Absent } from "../../components/Nothing";
 import { RunCard, runCardMetrics } from "../../components/RunCard";
 import { getProfile } from "../../lib/api";
 import { dayLabel } from "../../lib/dates";
@@ -28,12 +28,19 @@ import { text } from "../../theme/type";
 /** How many placeholder cards to hold while the profile is in flight. */
 const SKELETON_ROWS = 3;
 
-/** Reserves a spike-free card's exact height so the list cannot shift. */
+/**
+ * Reserves the height of the tallest card the log can produce, so the list
+ * cannot shift as data lands. Neither of the two things that make a card taller
+ * — a missing pace, which renders a bordered `Absent` slot, and a spike, which
+ * adds an advisory — is knowable before the payload arrives, so room is held
+ * for both. See `runCardMetrics` for why over-reserving is the right trade.
+ */
 function RunSkeleton() {
   return (
     <Card>
       <View style={styles.skeletonEyebrow} />
       <View style={styles.skeletonStats} />
+      <View style={styles.skeletonSpike} />
     </Card>
   );
 }
@@ -100,7 +107,14 @@ export default function RunsScreen() {
         keyExtractor={(run) => String(run.id)}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={Separator}
-        ListEmptyComponent={<NoRun label="No runs logged yet." />}
+        /*
+         * Absent, not NoRun. An empty log means the payload carried no runs —
+         * "we have nothing", not "the athlete rested". `plan.days` cannot
+         * upgrade it either: it is always the current Mon–Sun week and never
+         * all rest, while `recentRuns` spans the whole synced history. Rest is
+         * a property of one day; it can never be a property of the log.
+         */
+        ListEmptyComponent={<Absent label="No runs synced yet." />}
         renderItem={({ item }) => (
           <RunCard
             run={item}
@@ -139,8 +153,14 @@ const styles = StyleSheet.create({
     backgroundColor: color.well,
   },
   skeletonStats: {
-    height: runCardMetrics.statsRow,
+    height: runCardMetrics.statsRowAbsent,
     marginTop: runCardMetrics.gap,
+    borderRadius: radius.control,
+    backgroundColor: color.well,
+  },
+  skeletonSpike: {
+    height: runCardMetrics.spikeAdvisory,
+    marginTop: runCardMetrics.spikeGap,
     borderRadius: radius.control,
     backgroundColor: color.well,
   },
