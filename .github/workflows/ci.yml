@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same branch instead of queueing them.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # `npm ci` (not `npm install`) so the lockfile is what gets installed.
+      # It fails loudly if package.json and package-lock.json have drifted.
+      - name: Install
+        run: npm ci
+
+      # The one that matters most for PR #8: ~107 call sites became async.
+      # A missed `await` on a now-Promise-returning db call is a type error
+      # in almost every case, so this is the cheapest way to catch them.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # Non-blocking for now: PR #7 notes 2 pre-existing lint errors
+      # (dashboard/page.tsx:16, Gauge.tsx). Drop `continue-on-error`
+      # once those two are fixed so lint becomes a real gate.
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
+        env:
+          # Build must never touch the real database. The default SQLite
+          # driver keeps it on a local file; all data pages are
+          # force-dynamic, so nothing queries at build time anyway.
+          DB_DRIVER: sqlite
+          SESSION_SECRET: ci-only-not-a-real-secret-000000000000
