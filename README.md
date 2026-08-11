@@ -36,15 +36,22 @@ Then open **http://localhost:3000**.
 
 > The database file lives at `website/data/` and is git-ignored, so a fresh clone
 > starts empty — run `npm run seed` once from `website/` to generate the demo team.
-> Be aware that `npm run seed` **wipes and rebuilds** the roster; don't run it
-> against data you want to keep.
+> Be aware that `npm run seed` **wipes and rebuilds** the roster; it refuses to run
+> if it finds data it didn't create (real accounts, Strava pairings, chats), and
+> `--force` overrides that. It only ever seeds the local SQLite file, never a
+> deployed database.
+>
+> Seeding prints one device token per athlete at the end. **Those are credentials** —
+> each one reads that athlete's full profile and writes health data through
+> `/api/mobile/*`. They are random by default and change on every seed, so copy them
+> out if you need them; they are not stored anywhere else.
 
 ## Try the demo
 
 From the landing page:
 
 - **Coach demo** — click "Coach demo" (or "Coach login") and enter the password **`milemarker`** (leave email blank). You'll land on the team roster — click any athlete (try **Ethan Park**, who's returning from a shin injury) to see their detail page and body scan.
-- **Athlete demo** — click "Athlete demo" → **"Try the demo athlete (Ethan Park)"**. This opens the athlete's own RunGuard app: Home, Training, Stats (body scan + intensity calendar), Recovery, Race, and AI Chat.
+- **Athlete demo** — click "Athlete demo" → **"Try the demo athlete (Ethan Park)"**. This opens the athlete's own RunGuard app: Home, Training, Stats (body scan + intensity calendar), Recovery, Race, and AI Chat. That button signs in with a fixed token, so it needs the roster seeded with `npm run seed -- --demo-tokens` (local SQLite only — those tokens are derivable from the athlete names in `scripts/seed.ts`, so never use them anywhere shared). With a default seed, sign in with a token printed by the seeder instead.
 
 ## Tech stack
 

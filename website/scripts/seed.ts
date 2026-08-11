@@ -7,8 +7,27 @@ import { localDay, localDayOffset } from "../src/lib/day";
  *  - 1 athlete: returning from time off, chronic base collapsed (caution/red)
  *  - 1 athlete: high monotony grinder (caution)
  */
-import { insertActivity, upsertMetric, upsertCheckin, upsertCheckinSoreness, hashPassword } from "../src/lib/db";
+import {
+  insertActivity,
+  upsertMetric,
+  upsertCheckin,
+  upsertCheckinSoreness,
+  hashPassword,
+  newDeviceToken,
+} from "../src/lib/db";
 import { sqliteOnlyHandle, close } from "../src/lib/db/driver";
+
+const ARGS = process.argv.slice(2);
+/** `--force` (or SEED_FORCE=1) is required to wipe a database holding non-seed data. */
+const FORCE = ARGS.includes("--force") || !!process.env.SEED_FORCE;
+/**
+ * `--demo-tokens` restores the old guessable `demo_<name>` device tokens for local
+ * demos. A device token is a full credential — it reads that athlete's profile and
+ * writes HealthKit data — so anything derivable from this file must never exist
+ * anywhere but a local SQLite file. That is guaranteed by the DB_DRIVER refusal in
+ * seed(), which has no override.
+ */
+const DEMO_TOKENS = ARGS.includes("--demo-tokens");
 
 type Pattern = "steady" | "spiking" | "returning" | "monotone" | "building" | "light";
 
@@ -74,20 +93,61 @@ function weekMultiplier(p: Pattern, weeksAgo: number): number {
   }
 }
 
+/**
+ * Rows this seeder could not have written. The old guard only counted athletes with
+ * an email/password_hash, and seed-created athletes never have one — so on a database
+ * whose real users had all signed in through some other path (a device token, a Strava
+ * pairing, a second team) the count was 0 and the DELETE below ran unguarded. Anything
+ * here that is non-zero means the wipe would destroy data no reseed can regenerate.
+ */
+function nonSeedData(db: ReturnType<typeof sqliteOnlyHandle>): string[] {
+  const probes: [string, string][] = [
+    ["athlete account(s) with a login (email/password set)",
+      "SELECT COUNT(*) c FROM athletes WHERE email IS NOT NULL OR password_hash IS NOT NULL"],
+    ["athlete(s) paired to Strava",
+      "SELECT COUNT(*) c FROM athletes WHERE strava_athlete_id IS NOT NULL OR strava_access_token IS NOT NULL"],
+    ["athlete(s) outside the demo team",
+      "SELECT COUNT(*) c FROM athletes WHERE team_id IS NULL OR team_id <> 1"],
+    ["team(s) other than the demo team", "SELECT COUNT(*) c FROM teams WHERE id <> 1"],
+    ["activity/activities not written by this seeder",
+      "SELECT COUNT(*) c FROM activities WHERE source IS NULL OR source <> 'seed'"],
+    ["health metric row(s) not written by this seeder",
+      "SELECT COUNT(*) c FROM health_metrics WHERE source IS NULL OR source <> 'seed'"],
+    ["chat message(s)", "SELECT COUNT(*) c FROM chat_messages"],
+    ["logged workout(s)", "SELECT COUNT(*) c FROM workout_status"],
+  ];
+  const found: string[] = [];
+  for (const [label, sql] of probes) {
+    const { c } = db.prepare(sql).get() as { c: number };
+    if (c > 0) found.push(`${c} ${label}`);
+  }
+  return found;
+}
+
 async function seed() {
+  // Seeding wipes and rebuilds the roster, so it must never be pointed at a shared
+  // database. sqliteOnlyHandle() enforces the same rule; this fires first so the
+  // message names DB_DRIVER. There is deliberately no --force override: the script
+  // has no Postgres path (it uses raw sqlite handles and sqlite_sequence).
+  const target = (process.env.DB_DRIVER ?? "").trim().toLowerCase();
+  if (target !== "" && target !== "sqlite") {
+    throw new Error(
+      `Refusing to seed with DB_DRIVER=${process.env.DB_DRIVER}. This script only ever ` +
+        `runs against the local SQLite file. To populate a deployed database, seed ` +
+        `locally and run scripts/migrate-to-pg.ts.`
+    );
+  }
+
   const db = sqliteOnlyHandle();
   const existing = db.prepare("SELECT COUNT(*) c FROM athletes").get() as { c: number };
   if (existing.c > 0) {
-    // real signed-up accounts always have an email/password_hash; seed-created demo
-    // athletes never do. Refuse to wipe the DB if any real accounts would be lost.
-    const real = db
-      .prepare("SELECT COUNT(*) c FROM athletes WHERE email IS NOT NULL OR password_hash IS NOT NULL")
-      .get() as { c: number };
-    if (real.c > 0 && !process.env.SEED_FORCE) {
+    const real = nonSeedData(db);
+    if (real.length > 0 && !FORCE) {
       throw new Error(
-        `Refusing to reseed: found ${real.c} real signed-up athlete account(s) (email/password set) ` +
-          `that would be permanently deleted. This script wipes ALL athletes, not just demo data. ` +
-          `If you're sure, re-run with SEED_FORCE=1 npm run seed.`
+        `Refusing to reseed: this database holds data this script did not create — ` +
+          `${real.join("; ")}. Seeding wipes ALL athletes, teams, activities and chats, ` +
+          `not just demo data, and none of that is recoverable. ` +
+          `If you are sure, re-run with: npm run seed -- --force`
       );
     }
     console.log("Already seeded, clearing first…");
@@ -113,9 +173,15 @@ async function seed() {
   now.setHours(16, 30, 0, 0); // afternoons
 
   const seeded: { id: number; base: number; sex: string }[] = [];
+  const issued: { athlete: string; device_token: string }[] = [];
 
   for (const spec of ATHLETES) {
-    const token = `demo_${spec.name.toLowerCase().replace(/[^a-z]/g, "")}`;
+    // Default: an unguessable token, same shape as a real pairing. `--demo-tokens`
+    // brings back the derivable form, which is only reachable against local SQLite.
+    const token = DEMO_TOKENS
+      ? `demo_${spec.name.toLowerCase().replace(/[^a-z]/g, "")}`
+      : newDeviceToken();
+    issued.push({ athlete: spec.name, device_token: token });
     const res = insertAthlete.run(spec.name, spec.grade, spec.sex, spec.hue, token, DEMO_TEAM);
     const athleteId = Number(res.lastInsertRowid);
     seeded.push({ id: athleteId, base: spec.baseKmWeek, sex: spec.sex });
@@ -383,6 +449,20 @@ async function seed() {
   console.table(counts);
   const raceCount = db.prepare("SELECT COUNT(*) c FROM race_results").get() as { c: number };
   console.log("Seeded", ATHLETES.length, "athletes,", raceCount.c, "race results.");
+
+  // Printed once, here, because there is no other way to recover them.
+  console.log(
+    "\nDevice tokens — these are CREDENTIALS. Each one reads that athlete's full " +
+      "profile and writes health data via /api/mobile/*. Do not commit or share them."
+  );
+  console.table(issued);
+  console.log(
+    DEMO_TOKENS
+      ? "--demo-tokens: these are derived from the athlete names in this file, so anyone " +
+          "with the source can guess them. Local demos only — never seed a shared database this way."
+      : "These are random and change on every seed. Re-run with `npm run seed -- --demo-tokens` " +
+          "for the fixed demo_<name> tokens the athlete demo button expects (local SQLite only)."
+  );
 }
 
 seed().then(close);

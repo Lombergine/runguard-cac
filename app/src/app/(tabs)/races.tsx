@@ -23,17 +23,18 @@
  * screen reads — local on purpose; types.ts stays untouched.
  */
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
 import { Stat } from "../../components/Stat";
-import { getProfile } from "../../lib/api";
+import { getProfile, isUnauthorized } from "../../lib/api";
 import { dayLabel } from "../../lib/dates";
+import { useSession } from "../../lib/session";
 import type { Profile, UpcomingRace } from "../../lib/types";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
+import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
@@ -223,6 +224,9 @@ function ResultRow({ result }: { result: RaceResult }) {
 export default function RacesScreen() {
   const [profile, setProfile] = useState<WithRaces | null>(null);
   const [failed, setFailed] = useState(false);
+  /** Bumped by the retry button; the only reason this effect runs twice. */
+  const [attempt, setAttempt] = useState(0);
+  const { signOut } = useSession();
 
   useEffect(() => {
     let alive = true;
@@ -230,13 +234,22 @@ export default function RacesScreen() {
       .then((p) => {
         if (alive) setProfile(p);
       })
-      .catch(() => {
-        if (alive) setFailed(true);
+      .catch((err: unknown) => {
+        if (!alive) return;
+        // A 401 is not an outage and retrying cannot fix it — the token is
+        // gone, wrong, or belongs to a deleted athlete. Hand it to the gate,
+        // which clears every stored key and unmounts this navigator; this
+        // screen must not offer a "try again" that can only ever 401 again.
+        if (isUnauthorized(err)) {
+          void signOut();
+          return;
+        }
+        setFailed(true);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [attempt, signOut]);
 
   /** Soonest first. YYYY-MM-DD sorts lexically. */
   const upcoming = useMemo(
@@ -263,6 +276,17 @@ export default function RacesScreen() {
           <Header count={null} />
           <Card>
             <Text style={styles.failed}>Your races could not be loaded.</Text>
+            <Pressable
+              onPress={() => {
+                setFailed(false);
+                setAttempt((n) => n + 1);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Try loading your races again"
+              style={styles.retry}
+            >
+              <Text style={styles.retryLabel}>Try again</Text>
+            </Pressable>
           </Card>
         </View>
       </SafeAreaView>
@@ -349,6 +373,17 @@ const styles = StyleSheet.create({
   eyebrow: { ...text.micro, color: color.muted },
   title: { ...text.title, color: color.ink, flexShrink: 1 },
   failed: { ...text.base, color: color.ink2 },
+  /** Ember fill, ink glyph — `brand` is a fill token, so no word sits on it. */
+  retry: {
+    marginTop: space.xl,
+    alignSelf: "flex-start",
+    minHeight: target.min,
+    justifyContent: "center",
+    paddingHorizontal: space.xl,
+    borderRadius: radius.control,
+    backgroundColor: color.brand,
+  },
+  retryLabel: { ...text.baseSemi, color: color.ink },
 
   header: { marginBottom: layout.section },
   /** The Panel row: title left, note right, baselines shared, wraps at 360px. */

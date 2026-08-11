@@ -11,6 +11,7 @@ import {
 } from "@expo-google-fonts/source-sans-3";
 import { SplineSansMono_500Medium } from "@expo-google-fonts/spline-sans-mono";
 
+import { SessionProvider, useSession } from "../lib/session";
 import { color } from "../theme/tokens";
 
 /**
@@ -42,15 +43,60 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: color.bg },
-          animation: "fade",
-        }}
-      />
-    </SafeAreaProvider>
+    <SessionProvider>
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <Gate />
+      </SafeAreaProvider>
+    </SessionProvider>
+  );
+}
+
+/**
+ * The gate. Which navigator exists at all is decided here, once.
+ *
+ * Signed out, `Stack.Protected` leaves the whole authed group UNMOUNTED — the
+ * tab bar, every tab screen, chat, profile, settings and connect simply do not
+ * exist in the tree. That is stronger than hiding them: a screen that never
+ * mounts cannot fetch, cannot hold state, and cannot leave the last athlete's
+ * data on the glass. It also means a deep link to `/settings` while signed out
+ * has nothing to resolve to and falls through to the auth group.
+ *
+ * `status === "loading"` renders neither group, because guessing wrong for one
+ * frame is exactly how a signed-out phone flashes someone else's readiness.
+ */
+function Gate() {
+  const { status } = useSession();
+
+  if (status === "loading") return null;
+
+  const signedIn = status === "in";
+
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: color.bg },
+        animation: "fade",
+      }}
+    >
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="chat" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="connect" />
+      </Stack.Protected>
+
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="signup" />
+        <Stack.Screen name="pair" />
+      </Stack.Protected>
+
+      {/* Reachable either way: required by App Review, and contains nothing
+          athlete-derived. */}
+      <Stack.Screen name="privacy" />
+    </Stack>
   );
 }

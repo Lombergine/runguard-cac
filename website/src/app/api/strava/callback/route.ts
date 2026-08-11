@@ -6,7 +6,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state") || "";
-  const athleteId = verifyState(state);
+  // Consumes the state: expired, forged, or already-redeemed all give null.
+  const athleteId = await verifyState(state);
 
   if (!code || athleteId === null) {
     redirect("/dashboard/connect?error=strava_denied");

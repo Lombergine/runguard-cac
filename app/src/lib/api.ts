@@ -51,7 +51,7 @@ export function isUnauthorized(err: unknown): boolean {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "DELETE";
   body?: unknown;
   timeoutMs?: number;
 };
@@ -153,6 +153,59 @@ export async function getProfile(): Promise<Profile> {
  */
 export async function getHome(): Promise<ProfileWithNextRace> {
   return stripDeviceToken(await request<ProfileWithNextRace>("/api/mobile/home"));
+}
+
+/* ------------------------------------------------------------------ *
+ * Profile writes
+ * ------------------------------------------------------------------ */
+
+/**
+ * The three writes that change what `/me` and `/home` return.
+ *
+ * None of them hands anything back. Every one of these routes recomputes
+ * something the caller cannot derive — membership changes `teamName`, HRmax
+ * rescores every run's intensity — so the screen that made the change refetches
+ * the profile rather than patching its copy. Returning the route's `{ ok, team }`
+ * would invite exactly the optimistic local update that then disagrees with the
+ * server.
+ *
+ * The server's own 4xx message is what reaches the athlete, because these routes
+ * write the sentence that is actually useful — the HRmax bounds
+ * (website/src/app/api/hrmax/route.ts) and "That team code doesn't match any
+ * team." (website/src/app/api/athlete/join-team/route.ts). `request()` already
+ * carries it through as `ApiError.message`; restating either one here is how the
+ * two copies drift.
+ */
+
+/** POST /api/athlete/join-team — join by the coach's code. */
+export async function joinTeam(code: string): Promise<void> {
+  await request<{ ok: true }>("/api/athlete/join-team", {
+    method: "POST",
+    body: { joinCode: code },
+  });
+}
+
+/** DELETE /api/athlete/join-team — leave the current team and go solo. */
+export async function leaveTeam(): Promise<void> {
+  await request<{ ok: true }>("/api/athlete/join-team", { method: "DELETE" });
+}
+
+/**
+ * POST /api/hrmax — set the max heart rate, or pass **null** to clear it back to
+ * automatic. The route rounds and range-checks the number itself.
+ *
+ * The non-finite guard is not defensive padding, it is the difference between
+ * two opposite writes. `JSON.stringify({ hrMax: NaN })` emits `{"hrMax":null}`,
+ * and null is the route's CLEAR signal — so a caller doing `setHrMax(Number(entry))`
+ * on an unparseable text field would silently erase a measured HRmax and get
+ * `{ ok: true }` for it. Refused here, before the request, with a 400 the caller
+ * can show the same way it shows the server's.
+ */
+export async function setHrMax(value: number | null): Promise<void> {
+  if (value !== null && !Number.isFinite(value)) {
+    throw new ApiError(400, "Enter your max heart rate as a number.");
+  }
+  await request<{ ok: true }>("/api/hrmax", { method: "POST", body: { hrMax: value } });
 }
 
 /* ------------------------------------------------------------------ *

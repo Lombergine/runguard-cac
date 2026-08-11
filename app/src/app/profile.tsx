@@ -19,10 +19,11 @@
  *     and cannot be revoked (lib/auth.ts), so rendering it would put a
  *     permanent credential for a minor's health data on a screen that can be
  *     shoulder-read or screenshotted. This file therefore never reads the
- *     Keychain for display — `clearToken()` is the only auth call it makes, and
- *     `lib/api` has already stripped `athlete.deviceToken` from the payload
- *     before it arrives. What replaces the panel is a statement of fact
- *     ("paired") and a way out (Unpair).
+ *     Keychain for display — the token is read only to sign a request, and
+ *     `signOut()` erases it without ever holding it — and `lib/api` has already
+ *     stripped `athlete.deviceToken` from the payload before it arrives. What
+ *     replaces the panel is a statement of fact (paired, or not) and a way out
+ *     (Unpair).
  *
  *  2. The school name is shown in full. The web renders
  *     `p.athlete.school.split(" ")[0]` with the full name as a sub-line, which
@@ -54,11 +55,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { ApiError, BASE_URL, getProfile, isUnauthorized } from "../lib/api";
-import { clearToken, getToken } from "../lib/auth";
+import { getToken } from "../lib/auth";
+import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
 import { color, shadow } from "../theme/tokens";
 import { font, text } from "../theme/type";
@@ -517,14 +519,30 @@ function HrMaxPanel({
  * What the web's "Pair the RunGuard iPhone app" panel becomes on the phone
  * itself: a statement, not a credential. See the file header.
  *
+ * The statement is CONDITIONAL on `useSession()`, which is the only thing in the
+ * app that knows. It used to read "Paired" unconditionally, so a phone with no
+ * token was told it was paired directly beneath the panel that had just said it
+ * was not. Note that "in" means the keychain holds a pairing, not that the
+ * server accepts it — a rejected token is still a token, and a device holding
+ * one is exactly the device that needs the control below, so this renders
+ * whether or not the profile loaded.
+ *
  * Unpairing is confirmed because it is not reversible from here — the token
  * cannot be re-derived on the device, so getting back in means fetching it from
  * the web app again, which an athlete standing on a track at 6am cannot do.
- * Renders whether or not the profile loaded: a device whose token the server
- * rejects is exactly a device that needs this control.
+ *
+ * It goes through `signOut()` rather than deleting the key itself: that clears
+ * every stored key rather than the token alone, and it FAILS CLOSED — the gate
+ * shuts even when the keychain refuses, so nobody is left looking at athlete
+ * data after asking to leave. The old path did the opposite, swallowing the
+ * rejection and routing to `/pair` with the token still on the device.
+ *
+ * `erased: false` is surfaced in an Alert rather than inline: closing the gate
+ * unmounts this entire screen on the very next render, so a message rendered
+ * here would never be read.
  */
 function DevicePanel() {
-  const router = useRouter();
+  const { status, signOut } = useSession();
 
   function confirm() {
     Alert.alert(
@@ -537,18 +555,28 @@ function DevicePanel() {
           style: "destructive",
           onPress: () => {
             void (async () => {
-              try {
-                await clearToken();
-              } catch {
-                // SecureStore can reject on a locked keychain, and the error
-                // object may carry the value — swallowed, exactly as lib/auth
-                // swallows it. Pairing again overwrites the entry anyway.
-              }
-              router.replace("/pair");
+              const { erased } = await signOut();
+              if (erased) return;
+              Alert.alert(
+                "This device is still paired",
+                "This phone's keychain would not release the pairing, so nothing changed — this device is still paired, and it will sign back in the next time the app starts. Try again once the phone is unlocked."
+              );
             })();
           },
         },
       ]
+    );
+  }
+
+  if (status !== "in") {
+    return (
+      <Panel title="This device" note={status === "out" ? "Not paired" : "Checking"}>
+        <Text style={styles.body}>
+          {status === "out"
+            ? "This phone isn't paired to a RunGuard account, so nothing is syncing from it and there is no pairing here to remove."
+            : "Checking whether this phone is paired."}
+        </Text>
+      </Panel>
     );
   }
 

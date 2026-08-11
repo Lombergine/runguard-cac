@@ -203,6 +203,17 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
       ON risk_snapshots(athlete_id, date);
+
+    -- One row per outstanding Strava OAuth handshake. The row IS the permission
+    -- to write tokens onto an athlete: /api/strava/connect creates it after
+    -- authenticating the caller, and the callback deletes it as it redeems it.
+    -- A replayed callback URL therefore finds nothing and is refused. See the
+    -- state notes in src/lib/strava.ts.
+    CREATE TABLE IF NOT EXISTS strava_oauth_states (
+      nonce TEXT PRIMARY KEY,
+      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      expires_at INTEGER NOT NULL     -- unix seconds
+    );
   `);
 
   // Additive migrations for columns introduced after first release.

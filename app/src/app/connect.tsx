@@ -22,6 +22,18 @@
  *    the web app.
  *  - Anything unknown renders through <Absent/>. A source list that failed to
  *    load must never look like an empty one.
+ *
+ * WHY THIS SCREEN ASKS THE SESSION GATE.
+ *
+ * Half of this screen never talks to the server: the last-sync line and the
+ * READ / NEW figures come out of `runguard.health.state` in SecureStore, so
+ * before the gate existed they rendered the PREVIOUS athlete's numbers to
+ * whoever held the phone next. `clearAllStoredState()` now erases that key on
+ * sign-out, which closes the leak at its source; the checks below are the
+ * second layer. Every athlete-derived value here is gated on
+ * `useSession().status === "in"` at RENDER time, not merely at fetch time, so
+ * no in-flight read that resolves after the gate shuts can put anything back
+ * on the glass.
  */
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -42,6 +54,7 @@ import {
   type Availability,
   type HealthState,
 } from "../lib/health";
+import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
@@ -109,6 +122,9 @@ function explainFailure(err: unknown): string {
 }
 
 export default function ConnectScreen() {
+  const { status, signOut } = useSession();
+  const signedIn = status === "in";
+
   const [health, setHealth] = useState<HealthState | null>(null);
   const [sources, setSources] = useState<string[] | null>(null);
   const [sourcesFailed, setSourcesFailed] = useState(false);
@@ -127,22 +143,39 @@ export default function ConnectScreen() {
       // thinks", and both must render absent rather than as an empty list.
       setSources(null);
       setSourcesFailed(true);
-      if (isUnauthorized(err)) setFailure(explainFailure(new HealthError("unauthorized")));
+      if (isUnauthorized(err)) {
+        setFailure(explainFailure(new HealthError("unauthorized")));
+        // The server has stopped recognising this device, so nothing on this
+        // screen is ours to show any more — including the half that never asks
+        // it. signOut() erases the stored sync state and shuts the gate, which
+        // unmounts this screen with the rest of the authed group.
+        await signOut();
+      }
     }
-  }, []);
+  }, [signOut]);
 
   useEffect(() => {
+    if (!signedIn) {
+      // Not a fetch guard — a scrub. The gate normally unmounts this screen
+      // outright, so this branch covers the frames before that lands: drop
+      // every athlete-derived value rather than let one outlive the session.
+      setHealth(null);
+      setSources(null);
+      setSourcesFailed(false);
+      setFailure(null);
+      return;
+    }
     // Inside an async closure rather than the effect body: both of these settle
     // after an await, so neither renders synchronously off the mount.
     void (async () => {
       setHealth(await getState());
       await loadSources();
     })();
-  }, [loadSources]);
+  }, [signedIn, loadSources]);
 
   /** Connect = ask, then immediately read. The read is the only real evidence. */
   const connect = useCallback(async () => {
-    if (busy) return;
+    if (busy || !signedIn) return;
     setBusy(true);
     setFailure(null);
     try {
@@ -154,10 +187,10 @@ export default function ConnectScreen() {
     setHealth(await getState());
     await loadSources();
     setBusy(false);
-  }, [busy, loadSources]);
+  }, [busy, signedIn, loadSources]);
 
   const syncNow = useCallback(async () => {
-    if (busy) return;
+    if (busy || !signedIn) return;
     setBusy(true);
     setFailure(null);
     try {
@@ -168,9 +201,12 @@ export default function ConnectScreen() {
     setHealth(await getState());
     await loadSources();
     setBusy(false);
-  }, [busy, loadSources]);
+  }, [busy, signedIn, loadSources]);
 
-  const last = health?.lastSync ?? null;
+  // The gate, applied where it cannot be raced: a stale `health` — one read
+  // before the session ended, or resolved after it — cannot reach the screen,
+  // because `last` is only ever derived while signed in.
+  const last = signedIn ? (health?.lastSync ?? null) : null;
   const lastAt = last ? syncLabel(last.at) : null;
   const readNothing = last !== null && last.read.workouts === 0 && last.read.metrics === 0;
 
@@ -189,8 +225,11 @@ export default function ConnectScreen() {
           <Card>
             <View style={styles.head}>
               <Text style={styles.title}>Apple Health</Text>
+              {/* "Never synced" is a claim about an athlete's history and must
+                  not be made on their behalf once they are gone; with no
+                  session the line says what it actually knows. */}
               <Text style={styles.note}>
-                {lastAt ? `Last synced ${lastAt}` : "Never synced"}
+                {lastAt ? `Last synced ${lastAt}` : signedIn ? "Never synced" : "Signed out"}
               </Text>
             </View>
 
@@ -199,45 +238,51 @@ export default function ConnectScreen() {
             ) : (
               <>
                 <Text style={styles.body}>
-                  {!health?.requestedAt
-                    ? "Not connected. RunGuard has not asked for access to Apple Health on this phone yet."
-                    : last === null
-                      ? "Access has been requested, but nothing has been read yet. Sync to find out what Apple Health will hand over."
-                      : readNothing
-                        ? "Apple Health returned nothing. That is either an empty Health app, or access that was declined — Apple does not tell an app which, so RunGuard cannot claim to be connected."
-                        : "Reading from Apple Health on this phone."}
+                  {!signedIn
+                    ? "Sign in on this phone to see what RunGuard has read from Apple Health."
+                    : !health?.requestedAt
+                      ? "Not connected. RunGuard has not asked for access to Apple Health on this phone yet."
+                      : last === null
+                        ? "Access has been requested, but nothing has been read yet. Sync to find out what Apple Health will hand over."
+                        : readNothing
+                          ? "Apple Health returned nothing. That is either an empty Health app, or access that was declined — Apple does not tell an app which, so RunGuard cannot claim to be connected."
+                          : "Reading from Apple Health on this phone."}
                 </Text>
 
-                <Pressable
-                  style={styles.action}
-                  onPress={() => void (health?.requestedAt ? syncNow() : connect())}
-                  disabled={busy}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: busy }}
-                >
-                  {({ pressed }) => (
-                    <>
-                      {/* Pressing drops the gradient to the flat `brandStrong`
-                          ground beneath it, exactly as app/pair.tsx does. */}
-                      {pressed ? null : (
-                        <LinearGradient
-                          colors={color.ember}
-                          locations={EMBER_STOPS}
-                          start={EMBER_START}
-                          end={EMBER_END}
-                          style={StyleSheet.absoluteFill}
-                        />
-                      )}
-                      <Text style={styles.actionLabel}>
-                        {busy
-                          ? "Syncing…"
-                          : health?.requestedAt
-                            ? "Sync now"
-                            : "Connect Apple Health"}
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
+                {/* No session, no button: a sync reads this phone's Health data
+                    and posts it under whatever token is still on the device. */}
+                {signedIn ? (
+                  <Pressable
+                    style={styles.action}
+                    onPress={() => void (health?.requestedAt ? syncNow() : connect())}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy }}
+                  >
+                    {({ pressed }) => (
+                      <>
+                        {/* Pressing drops the gradient to the flat `brandStrong`
+                            ground beneath it, exactly as app/pair.tsx does. */}
+                        {pressed ? null : (
+                          <LinearGradient
+                            colors={color.ember}
+                            locations={EMBER_STOPS}
+                            start={EMBER_START}
+                            end={EMBER_END}
+                            style={StyleSheet.absoluteFill}
+                          />
+                        )}
+                        <Text style={styles.actionLabel}>
+                          {busy
+                            ? "Syncing…"
+                            : health?.requestedAt
+                              ? "Sync now"
+                              : "Connect Apple Health"}
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                ) : null}
 
                 {last ? (
                   <View style={styles.figures}>
@@ -262,14 +307,21 @@ export default function ConnectScreen() {
                     </Text>
                   </View>
                 ) : null}
-
-                {failure ? (
-                  <Text style={styles.problem} accessibilityLiveRegion="polite">
-                    {failure}
-                  </Text>
-                ) : null}
               </>
             )}
+
+            {/* OUTSIDE the availability branch, deliberately. The 401 wording
+                ("no longer paired") is set by a call to the server, which this
+                screen makes on every device — including the ones where Apple
+                Health is unavailable. Nested inside `avail.ok` it was
+                unreachable on Android, in Expo Go and on the Simulator: the
+                one message that explains why nothing loads, invisible on the
+                devices most likely to see it. */}
+            {failure ? (
+              <Text style={styles.problem} accessibilityLiveRegion="polite">
+                {failure}
+              </Text>
+            ) : null}
           </Card>
         </View>
 
@@ -281,11 +333,13 @@ export default function ConnectScreen() {
               <Text style={styles.note}>Set up on the web app</Text>
             </View>
             <Text style={styles.body}>
-              {sources === null
-                ? "RunGuard could not check whether your Strava is linked."
-                : sources.includes("Strava")
-                  ? "Linked. Your Strava runs arrive through the RunGuard server, not through this app."
-                  : "Not linked."}
+              {!signedIn
+                ? "RunGuard cannot check a Strava link with no athlete signed in on this phone."
+                : sources === null
+                  ? "RunGuard could not check whether your Strava is linked."
+                  : sources.includes("Strava")
+                    ? "Linked. Your Strava runs arrive through the RunGuard server, not through this app."
+                    : "Not linked."}
             </Text>
             {/*
               The web flow is a server redirect to /api/strava/connect, which
@@ -309,7 +363,11 @@ export default function ConnectScreen() {
               <Text style={styles.title}>Connected sources</Text>
               <Text style={styles.note}>As your server sees them</Text>
             </View>
-            {sources === null ? (
+            {!signedIn ? (
+              // Not "nothing has reported data" — that would be a claim about an
+              // athlete we are not entitled to describe. Dashed: we don't know.
+              <Absent label="Not signed in on this phone" />
+            ) : sources === null ? (
               <Absent
                 label={
                   sourcesFailed

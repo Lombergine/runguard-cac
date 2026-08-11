@@ -74,6 +74,74 @@ reach the browser bundle.
 > soreness and injury history to `api.anthropic.com`. See the comment above
 > `answer()` in `website/src/lib/chat.ts`.
 
+## Credentials
+
+These six things are credentials. Handling is the same for all of them.
+
+| Credential | What it opens |
+|---|---|
+| `athletes.device_token` | a minor's whole account — reads their profile, writes HealthKit data on their behalf. Never expires; rotation (below) is the only thing that invalidates one. |
+| the athlete session cookie (`core_athlete`) | the raw `device_token`, not a signed reference to one — a second copy of the same secret. `website/src/lib/session.ts` explains that choice. |
+| `SESSION_SECRET` | signs coach sessions; whoever holds it can mint one for any team |
+| `DB_PASSWORD` / `DATABASE_URL` | the database, and every athlete in it |
+| `COACH_PASSWORD` | the demo team's roster |
+| `STRAVA_CLIENT_SECRET` | the Strava integration |
+
+**The rules: never logged, never rendered, never in an error message, never in a
+commit.** Two of those get broken by accident rather than by decision. *Never in
+an error message* dies to a caught exception printed whole, or a
+`JSON.stringify(profile)` in a report. *Never rendered* dies at sign-out: a
+screen still showing athlete data is a screen still holding the token that
+fetched it, so signing out has to clear the store, not just navigate away.
+
+### Why the app deletes the token rather than declaring it absent
+
+`/api/mobile/me` and `/api/mobile/home` both return the server's `athlete`
+object wholesale, `deviceToken` included — they share a builder with the coach
+dashboard, which legitimately needs the field. `stripDeviceToken()` in
+`app/src/lib/api.ts` `delete`s the key from the parsed JSON before any caller
+sees it.
+
+Omitting `deviceToken` from the `Profile` type would not do that. A type is a
+compile-time claim, not a fence: the runtime object still carries every key the
+server sent, so an undeclared field survives any cast and is still there for a
+log line to serialise, for a `{...athlete}` spread to copy into a debug view,
+and for a later `<Text>` to render. Deleting the field is the version a future
+edit cannot quietly undo — a component cannot render what the object does not
+have. Use the same move anywhere a secret would otherwise cross a boundary
+protected only by a type.
+
+### Demo tokens
+
+Seeded athletes get random device tokens by default, and `npm run seed` prints
+them once — that print is the only copy, since the next seed issues different
+ones. `npm run seed -- --demo-tokens` brings back the guessable `demo_<name>`
+form that the athlete demo button expects; the seed refuses to run against
+anything but local SQLite, with no override, so a guessable token cannot reach a
+deployment.
+
+If you lost the print, read the token from the running app rather than the
+database: the athlete sees their own under **Profile → Pair the RunGuard iPhone
+app**, a coach sees the roster's at `/dashboard/connect`. Both are UI built to
+hand one token to one person — not a licence to paste it anywhere else.
+
+### Rotation
+
+`POST /api/athlete/rotate-token`, authenticated as the athlete themself
+(`Authorization: Bearer` or their own session cookie — the coach path is
+rejected). It overwrites `athletes.device_token` and returns the new value.
+
+**Rotation is revocation.** Auth is an equality lookup on that one column, so
+the moment it returns, every previously issued copy of the old token is dead:
+old phone, web cookie, a token pasted into a support thread, tokens in a log.
+There is no per-device record and no grace period — which is also its limit, as
+it cannot revoke one device and spare another. After rotating, the athlete
+re-pairs their phone; a rotation done from the web portal re-issues that tab's
+cookie so they are not signed out mid-click.
+
+Anything that spills a token — a log, a screenshot, a commit — is handled by
+rotating it, once per token exposed.
+
 ## Option A — Vercel + Supabase (recommended)
 
 1. Push this repo to GitHub. `.gitignore` covers `.env*`, so no secret is
@@ -167,8 +235,8 @@ your Strava callback domain to match if you use Strava.
 ## Before a real deployment
 
 - `/api/chat` has **no per-athlete rate limit**, so a logged-in athlete can loop
-  questions for unbounded model spend. Device tokens never expire and cannot be
-  revoked. Add a limiter before going live with a hosted model.
+  questions for unbounded model spend. Add a limiter before going live with a
+  hosted model.
 - Supabase tables have RLS enabled, but the app connects as the `postgres` role
   through the pooler, which **bypasses RLS**. Access control is
   `website/src/lib/apiAuth.ts` and nothing else. Do not add an anon-key client

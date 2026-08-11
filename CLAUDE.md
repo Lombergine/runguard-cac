@@ -43,4 +43,7 @@ diagnosis. `website/src/lib/safety.ts` intercepts crisis, purging and dosing
 messages before the intent engine and before any model, and those exchanges are
 tagged so they stay off the coach's screen. Do not route chat around that.
 
+A token is never rendered, never logged, and `signOut()` must clear every stored
+key, not just the token. `DEPLOY.md` → *Credentials* lists what counts as one.
+
 @website/AGENTS.md

@@ -12,17 +12,18 @@
  *      guess.
  */
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
 import { Absent } from "../../components/Nothing";
 import { RunCard, runCardMetrics } from "../../components/RunCard";
-import { getProfile } from "../../lib/api";
+import { getProfile, isUnauthorized } from "../../lib/api";
 import { dayLabel } from "../../lib/dates";
+import { useSession } from "../../lib/session";
 import type { Profile, RecentRun } from "../../lib/types";
-import { layout, radius, space } from "../../theme/space";
+import { layout, radius, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
@@ -108,8 +109,11 @@ function RunSkeleton() {
 }
 
 export default function RunsScreen() {
+  const { signOut } = useSession();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [failed, setFailed] = useState(false);
+  /** Bumped by "Try again"; re-runs the load below. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -117,13 +121,28 @@ export default function RunsScreen() {
       .then((p) => {
         if (alive) setProfile(p);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        /*
+         * A 401 is not an outage, and it is not retryable: the device token is
+         * gone, wrong, or revoked server-side. End the session — the gate then
+         * unmounts this whole group and shows sign-in — rather than printing a
+         * transport error the athlete can do nothing about beside a "Try again"
+         * that can only ever fail.
+         *
+         * Deliberately NOT guarded by `alive`. A revoked token has to end the
+         * session whether or not this screen is still on the glass, and
+         * `signOut` sets state on the provider, not on this component.
+         */
+        if (isUnauthorized(err)) {
+          void signOut();
+          return;
+        }
         if (alive) setFailed(true);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [attempt, signOut]);
 
   /** Newest first. Dates are YYYY-MM-DD, so they sort lexically. */
   const runs = useMemo(
@@ -147,6 +166,21 @@ export default function RunsScreen() {
           <Header count={null} />
           <Card>
             <Text style={styles.failed}>Your runs could not be loaded.</Text>
+            {/*
+             * Only ever reached by a transport failure, which is exactly the
+             * kind that a second attempt can clear. Dropping back to the
+             * skeleton is honest about the state: nothing is known yet.
+             */}
+            <Pressable
+              onPress={() => {
+                setFailed(false);
+                setAttempt((n) => n + 1);
+              }}
+              accessibilityRole="button"
+              style={styles.retry}
+            >
+              <Text style={styles.retryLabel}>Try again</Text>
+            </Pressable>
           </Card>
         </View>
       </Screen>
@@ -245,6 +279,17 @@ const styles = StyleSheet.create({
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   failed: { ...text.base, color: color.ink2 },
+  /** The same button the home screen offers on the same failure. */
+  retry: {
+    marginTop: space.lg,
+    alignSelf: "flex-start",
+    minHeight: target.min,
+    justifyContent: "center",
+    paddingHorizontal: space.xl,
+    borderRadius: radius.control,
+    backgroundColor: color.brand,
+  },
+  retryLabel: { ...text.baseSemi, color: color.ink },
   skeletonHeader: {
     height: runCardMetrics.headerLine,
     width: "58%",

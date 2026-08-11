@@ -67,8 +67,7 @@ import { Absent } from "../../components/Nothing";
 import { Tile } from "../../components/Tile";
 import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
 import { WeekProgress } from "../../components/WeekProgress";
-import { ApiError, BASE_URL, isUnauthorized, postCheckin } from "../../lib/api";
-import { getToken } from "../../lib/auth";
+import { getHome, isUnauthorized, postCheckin } from "../../lib/api";
 import { sorenessLabel } from "../../lib/bodyParts";
 import {
   readinessBand,
@@ -86,45 +85,6 @@ import type {
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
-
-/**
- * GET /api/mobile/home — the home screen's own slice of the profile: readiness,
- * pre-practice, today's check-in, the plan, the full recovery snapshot, the
- * weekly target, the insight line and the next race. 5.3 KB against /me's 57 KB,
- * because /me also ships a 366-day calendar and two long series this screen
- * renders none of.
- *
- * It lives HERE rather than in lib/api.ts because this segment does not own that
- * file and `getHome()` did not exist in it. It is a copy of that module's
- * `request()` narrowed to one GET; move it across and delete this when the
- * client grows the method.
- */
-const HOME_TIMEOUT_MS = 15_000;
-
-async function getHome(): Promise<ProfileWithNextRace> {
-  const token = await getToken();
-  // Fail closed rather than sending an unauthenticated request.
-  if (!token) throw new ApiError(401, "No device token. Pair this device first.");
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HOME_TIMEOUT_MS);
-
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}/api/mobile/home`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    });
-  } catch {
-    // The thrown value can echo the request, token and all; never re-use it.
-    throw new ApiError(0, `Could not reach the RunGuard server at ${BASE_URL}.`);
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (!res.ok) throw new ApiError(res.status, `Request failed (${res.status}).`);
-  return (await res.json()) as ProfileWithNextRace;
-}
 
 /**
  * "How did you sleep?" maps to `energy`, which is the only self-report field

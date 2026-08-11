@@ -4,6 +4,18 @@ import crypto from "crypto";
 const COOKIE = "mm_session";
 
 /**
+ * True where the app is reachable as a deployment rather than as local dev.
+ * The same signal `secret()` fails closed on, reused so the two cannot drift:
+ * where a public dev secret would be unsafe, plain HTTP is unsafe too.
+ *
+ * It gates `secure` rather than hardcoding `true` because a `secure` cookie is
+ * simply not stored over http://localhost, which would break local dev sign-in.
+ */
+function deployed(): boolean {
+  return process.env.DB_DRIVER === "supabase" || process.env.NODE_ENV === "production";
+}
+
+/**
  * The dev fallback is only safe while it cannot reach a deployment. This file is
  * public on GitHub, so a deployed instance running on the literal string below
  * signs its session cookies with a secret anyone can read — meaning anyone can
@@ -17,7 +29,7 @@ const COOKIE = "mm_session";
 export function secret(): string {
   const s = process.env.SESSION_SECRET;
   if (s) return s;
-  if (process.env.DB_DRIVER === "supabase" || process.env.NODE_ENV === "production") {
+  if (deployed()) {
     throw new Error(
       "SESSION_SECRET is not set. Refusing to sign sessions with the public " +
         "dev default. Generate one with `openssl rand -hex 32` and set it in " +
@@ -66,6 +78,7 @@ export async function logIn(teamId: number): Promise<void> {
   const store = await cookies();
   store.set(COOKIE, signTeam(teamId), {
     httpOnly: true,
+    secure: deployed(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
@@ -81,10 +94,21 @@ export async function logOut(): Promise<void> {
 
 const ATHLETE_COOKIE = "core_athlete";
 
+/**
+ * The value is the raw device_token, deliberately. Unlike the coach cookie —
+ * whose payload is a guessable integer team id and so must be signed to stop
+ * anyone editing it into another team's — this cookie carries a secret that is
+ * checked against the database by `getAthleteByToken`. A signature would add
+ * nothing an attacker could not already bypass: forging the cookie still
+ * requires knowing a real device token, and knowing one already authenticates
+ * via `Authorization: Bearer`. What actually protects it is httpOnly (no JS
+ * read) plus `secure` (no plaintext transmission), both set here.
+ */
 export async function athleteLogIn(token: string): Promise<void> {
   const store = await cookies();
   store.set(ATHLETE_COOKIE, token, {
     httpOnly: true,
+    secure: deployed(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 180,

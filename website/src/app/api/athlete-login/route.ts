@@ -1,5 +1,6 @@
 import { getAthleteByEmail, getAthleteByToken, verifyPassword } from "@/lib/db";
 import { athleteLogIn, athleteLogOut } from "@/lib/session";
+import { checkAuthRate, recordAuthFailure, tooManyAttempts } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -9,8 +10,17 @@ export async function POST(request: Request) {
 
   // Email + password (real accounts)
   if (email && password) {
+    // Checked before the lookup, so a throttled attempt never reaches scrypt and
+    // its 429 says nothing about whether the address exists.
+    const gate = await checkAuthRate(request, email);
+    if (!gate.allowed) return tooManyAttempts(gate.retryAfter);
+
     const athlete = await getAthleteByEmail(email);
-    if (!athlete || !verifyPassword(password, athlete.password_hash)) {
+    // Not `!athlete || verifyPassword(...)`: || would skip scrypt when no such
+    // account exists, and the fast 401 tells an attacker the email is unused.
+    const ok = verifyPassword(password, athlete?.password_hash);
+    if (!athlete || !ok) {
+      await recordAuthFailure(request, email);
       return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
     }
     // athletes still authenticate downstream via their device token cookie
@@ -24,8 +34,15 @@ export async function POST(request: Request) {
 
   // Legacy / demo app-token path
   if (token) {
+    // The bucket is keyed on the literal "device-token", never on the token that
+    // was submitted: keying on the guess would open a fresh counter per guess and
+    // count nothing, which is exactly the oracle this path was.
+    const gate = await checkAuthRate(request, "device-token");
+    if (!gate.allowed) return tooManyAttempts(gate.retryAfter);
+
     const athlete = await getAthleteByToken(token);
     if (!athlete) {
+      await recordAuthFailure(request, "device-token");
       return Response.json(
         { error: "That token doesn't match any athlete. Try your email + password, or the demo token." },
         { status: 401 }

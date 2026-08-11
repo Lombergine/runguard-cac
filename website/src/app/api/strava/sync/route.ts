@@ -9,7 +9,8 @@ export async function POST(request: Request) {
   }
   // Was isLoggedIn() alone, which asked only whether A coach session existed and
   // then synced whatever athlete id it was handed, on any team.
-  if (!(await resolveAthlete(request, athleteId))) {
+  const athlete = await resolveAthlete(request, athleteId);
+  if (!athlete) {
     return Response.json({ error: "Not authorized" }, { status: 401 });
   }
   const dateSec = (s: unknown) =>
@@ -19,7 +20,9 @@ export async function POST(request: Request) {
   const after = dateSec(body.startDate);
   const before = dateSec(body.endDate);
   try {
-    const imported = await syncAthlete(athleteId, after !== undefined ? { after, before } : {});
+    // athlete.id, never the body's — the resolver has already scoped it, and
+    // syncing is a write, so it must not depend on the resolver being strict.
+    const imported = await syncAthlete(athlete.id, after !== undefined ? { after, before } : {});
     return Response.json({ ok: true, imported });
   } catch (e) {
     return Response.json(

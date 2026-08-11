@@ -32,7 +32,8 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { ChatBubble, bubbleText } from "../components/ChatBubble";
 import { SafetyNotice } from "../components/SafetyNotice";
-import { getChat, postChat } from "../lib/api";
+import { getChat, isUnauthorized, postChat } from "../lib/api";
+import { useSession } from "../lib/session";
 import type { ChatMessage } from "../lib/types";
 import { color, shadow } from "../theme/tokens";
 import { font, text } from "../theme/type";
@@ -85,8 +86,17 @@ function Panel({
 }
 
 export default function ChatScreen() {
+  const { signOut } = useSession();
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  /**
+   * A 401 is not a load failure and not a blip — the token is gone, so no send
+   * from this screen can ever land. Held locally as well as handed to
+   * `signOut()` because the gate flips a tick later: until the authed group
+   * unmounts, this flag is what stops the composer inviting a send that is
+   * already impossible.
+   */
+  const [signedOut, setSignedOut] = useState(false);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
@@ -107,23 +117,35 @@ export default function ChatScreen() {
    */
   const sendStarted = useRef(false);
 
+  /**
+   * The single response to a 401, from either request. `signOut()` is the only
+   * sanctioned way out and it fails closed, so nothing here waits on it or
+   * branches on the result: the local flag has already made the composer honest.
+   */
+  const endSession = useCallback(() => {
+    setSignedOut(true);
+    void signOut();
+  }, [signOut]);
+
   useEffect(() => {
     let alive = true;
     getChat()
       .then((history) => {
         if (alive && !sendStarted.current) setMessages(history);
       })
-      .catch(() => {
-        if (alive) setLoadFailed(true);
+      .catch((err: unknown) => {
+        if (!alive) return;
+        if (isUnauthorized(err)) return endSession();
+        setLoadFailed(true);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [endSession]);
 
   const send = useCallback(async () => {
     const q = draft.trim();
-    if (!q || pending) return;
+    if (!q || pending || signedOut) return;
     sendStarted.current = true;
     // Held by reference so the two setState callbacks below can find this exact
     // row again after other updates have landed.
@@ -140,18 +162,20 @@ export default function ChatScreen() {
         ...(prev ?? []).map((m) => (m === mine && reply.safety ? { ...m, safety: true } : m)),
         reply,
       ]);
-    } catch {
+    } catch (err: unknown) {
       // Nothing was said to anyone, so nothing should look said: drop the
       // optimistic row and hand the words back to the composer.
       setMessages((prev) => (prev ?? []).filter((m) => m !== mine));
       setDraft(q);
-      setSendFailed(true);
+      // "Try again" would be a lie on a 401 — there is nothing to retry with.
+      if (isUnauthorized(err)) endSession();
+      else setSendFailed(true);
     } finally {
       setPending(false);
     }
-  }, [draft, pending]);
+  }, [draft, pending, signedOut, endSession]);
 
-  const canSend = draft.trim().length > 0 && !pending;
+  const canSend = draft.trim().length > 0 && !pending && !signedOut;
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -173,16 +197,32 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/*
-          The failure sits ABOVE the list rather than replacing it. The composer
-          stays live either way, and a message sent after a failed load must be
-          on screen: if it trips an intercept the reply is fetched and logged
-          server-side, so it can never be shown to nobody.
+          The failure sits ABOVE the list rather than replacing it, in both
+          cases: a message that DID send must stay on screen — if it tripped an
+          intercept the reply was fetched and logged server-side, so it can
+          never be shown to nobody.
+
+          What differs is whether sending is still possible. A transport failure
+          is a blip and the composer stays live; a 401 is the end of the session
+          and the composer is off, because inviting a send that cannot land is
+          how someone types a crisis message into a box that will erase it.
+          The copy has to match, and neither line may promise more than that.
         */}
-        {loadFailed ? (
+        {signedOut ? (
+          <View style={styles.loadFailed}>
+            <Panel title="Coach chat" note="Signed out">
+              <Text style={styles.plain}>
+                This device is no longer signed in, so nothing can be sent from
+                here. Sign in again to reach your coach.
+              </Text>
+            </Panel>
+          </View>
+        ) : loadFailed ? (
           <View style={styles.loadFailed}>
             <Panel title="Earlier messages" note="Could not load">
               <Text style={styles.plain}>
-                Anything you send now will still appear here.
+                Earlier messages will be back when the connection is. You can
+                still send one now — it stays on screen only if it sends.
               </Text>
             </Panel>
           </View>
@@ -221,7 +261,8 @@ export default function ChatScreen() {
         />
 
         <View style={styles.composer}>
-          {sendFailed ? (
+          {/* "Try again" is only true while trying again is possible. */}
+          {sendFailed && !signedOut ? (
             <Text style={styles.sendFailed}>That did not send. Try again.</Text>
           ) : null}
           <View style={styles.composerRow}>

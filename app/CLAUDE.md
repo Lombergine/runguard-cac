@@ -18,6 +18,11 @@ any aesthetic judgement. The ones most easily broken by accident:
   with a prop. Dashed means "we don't know", everywhere, with no exceptions.
 - **Safety replies never touch the chat bubble component.** `SafetyNotice`
   shares no styles and no code path with `ChatBubble`.
+- **A token is never rendered, never logged, and `signOut()` must clear every
+  stored key, not just the token.** `lib/api.ts` deletes `athlete.deviceToken`
+  from the response before any caller sees it; leaving a screen mounted with
+  athlete data after sign-out is the same failure. See `../DEPLOY.md` →
+  *Credentials*.
 - **Units are welded to numbers** in a single text node. The API ships
   kilometres; every distance goes through `src/lib/units.ts`.
 - **Dates are pre-formatted local strings** passed in as props. Components never

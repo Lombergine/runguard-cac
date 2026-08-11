@@ -21,6 +21,11 @@
  * The token rule from lib/auth.ts applies here in full: this file never reads,
  * renders, logs or hints at the device token. "Unpair" deletes it without ever
  * holding it.
+ *
+ * This screen sits inside the session gate (lib/session.tsx), so it exists only
+ * while someone is signed in. It therefore states the signed-in case plainly and
+ * carries no signed-out branch: there is no frame in which this file renders to
+ * a signed-out phone.
  */
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -38,7 +43,7 @@ import Svg, { Path } from "react-native-svg";
 
 import { Absent } from "../components/Nothing";
 import { getHome, isUnauthorized } from "../lib/api";
-import { clearToken } from "../lib/auth";
+import { useSession } from "../lib/session";
 import { color, shadow } from "../theme/tokens";
 import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
@@ -59,11 +64,14 @@ const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
  * The athlete's name is the only server value on this screen. Three states, not
  * two: "still loading" is not "we asked and there is nothing", and neither of
  * them may render as an empty line that reads as fine.
+ *
+ * There is no "unpaired" state any more. It used to be inferred from a caught
+ * 401, which made this screen a second, weaker auth gate that disagreed with the
+ * real one; a 401 now ends the session instead, and this screen goes with it.
  */
 type NameState =
   | { kind: "loading" }
   | { kind: "known"; name: string }
-  | { kind: "unpaired" }
   | { kind: "failed" };
 
 /* ------------------------------------------------------------------ *
@@ -173,9 +181,9 @@ function StaticRow({
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { signOut } = useSession();
   const [name, setName] = useState<NameState>({ kind: "loading" });
   const [unpairing, setUnpairing] = useState(false);
-  const [unpairFailed, setUnpairFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -185,39 +193,53 @@ export default function SettingsScreen() {
         if (alive) setName({ kind: "known", name: profile.athlete.name });
       })
       .catch((err: unknown) => {
-        // A 401 is not a network blip and must not be described as one — it
-        // means this device is not paired, which is actionable and is the one
-        // thing the danger zone below is about.
-        if (alive) setName({ kind: isUnauthorized(err) ? "unpaired" : "failed" });
+        if (!alive) return;
+        // The gate is keychain-deep: it knows a token is stored, not that the
+        // server still honours it. A 401 is a dead token, and the answer is the
+        // one chat.tsx gives — end the session. Nothing is rendered for it,
+        // because ending the session unmounts the surface that would render it.
+        if (isUnauthorized(err)) {
+          void signOut();
+          return;
+        }
+        setName({ kind: "failed" });
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [signOut]);
 
   /**
-   * Delete the token, then leave. The order matters: routing first would land
-   * the athlete on the pairing screen while the old token was still in the
-   * keychain, so a back-swipe would put them into a paired app that says it is
-   * not paired. If SecureStore refuses, nothing is claimed — the screen stays
-   * put and says so.
+   * Leave. `signOut()` is the only sanctioned way out, and it does the two
+   * things this screen used to do badly: it erases EVERY stored key — the token
+   * and the cached health state that used to outlive it on the Connect screen —
+   * and it fails closed, so the gate shuts whether or not the keychain obeyed.
+   * No `router.replace` here: which navigator exists is the gate's decision, and
+   * routing from a screen that is being unmounted only races it.
+   *
+   * A refused erase is reported in an Alert rather than in a line of text on
+   * this panel, because by then there is no panel: the session is already "out"
+   * and the authed group, this screen included, is on its way out of the tree.
+   * An Alert is presented by the OS above whatever is on screen, so it survives
+   * that and the athlete reads it wherever they land.
+   *
+   * The wording had to move with it. "Nothing changed — the device is still
+   * paired" was true when this screen stayed put; it is a lie now, because the
+   * app really is signed out. What did not change is the keychain, and the part
+   * the athlete needs is the consequence: the pairing is still on the phone, so
+   * it can sign them back in.
    */
   const unpair = useCallback(() => {
     setUnpairing(true);
-    setUnpairFailed(false);
     void (async () => {
-      try {
-        await clearToken();
-      } catch {
-        // The rejection can carry the key it was operating on, so it is
-        // swallowed rather than surfaced — the same rule lib/auth.ts follows.
-        setUnpairFailed(true);
-        setUnpairing(false);
-        return;
-      }
-      router.replace("/pair");
+      const { erased } = await signOut();
+      if (erased) return;
+      Alert.alert(
+        "Signed out, but the pairing is still on this phone",
+        "This phone's keychain would not release it, so RunGuard may sign itself back in the next time you open the app. Try unpairing again, or restart the phone."
+      );
     })();
-  }, [router]);
+  }, [signOut]);
 
   const confirmUnpair = useCallback(() => {
     if (unpairing) return;
@@ -268,14 +290,7 @@ export default function SettingsScreen() {
             </View>
           ) : (
             <View style={styles.absentRow}>
-              <Absent
-                eyebrow="SIGNED IN AS"
-                label={
-                  name.kind === "unpaired"
-                    ? "This device is not paired."
-                    : "Could not reach the server."
-                }
-              />
+              <Absent eyebrow="SIGNED IN AS" label="Could not reach the server." />
             </View>
           )}
 
@@ -392,14 +407,6 @@ export default function SettingsScreen() {
               {unpairing ? "Unpairing…" : "Unpair this device"}
             </Text>
           </Pressable>
-
-          {unpairFailed ? (
-            // Plain description, as pair.tsx does it: no banner, no alarm fill.
-            <Text style={styles.reason} accessibilityLiveRegion="polite">
-              This phone&apos;s keychain would not release the pairing. Nothing
-              changed — the device is still paired.
-            </Text>
-          ) : null}
         </Panel>
       </ScrollView>
     </SafeAreaView>

@@ -26,15 +26,31 @@ export function hashPassword(pw: string): string {
   return `${salt}:${hash}`;
 }
 
+/** Same shape as a real `salt:hash` (16-byte salt, 32-byte hash, both hex) so a
+ *  missing account runs the identical scrypt. The comparison result is thrown
+ *  away — this exists only to spend the time. */
+const ABSENT_ACCOUNT_HASH = `${"0".repeat(32)}:${"0".repeat(64)}`;
+
+/**
+ * Constant-cost in whether the account exists: a null or malformed stored hash
+ * still pays a full scrypt before returning false, so login latency no longer
+ * answers "is this email registered".
+ *
+ * That only holds if callers reach here on the miss, so they must pass
+ * `row?.password_hash` rather than short-circuiting on the row being absent.
+ */
 export function verifyPassword(pw: string, stored: string | null | undefined): boolean {
-  if (!stored || !stored.includes(":")) return false;
-  const [salt, hash] = stored.split(":");
+  const usable = stored && stored.includes(":") ? stored : null;
+  const [salt, hash] = (usable ?? ABSENT_ACCOUNT_HASH).split(":");
   const check = crypto.scryptSync(pw, salt, 32).toString("hex");
+  let match: boolean;
   try {
-    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(check, "hex"));
+    match = crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(check, "hex"));
   } catch {
-    return false;
+    match = false;
   }
+  // No stored hash is never a pass, whatever the throwaway comparison said.
+  return usable !== null && match;
 }
 
 /* readable join code like "LELAND-7QK4" */
@@ -127,8 +143,36 @@ export async function getAthleteByEmail(email: string): Promise<AthleteRow | und
   return one<AthleteRow>("SELECT * FROM athletes WHERE lower(email) = lower(?)", [email.trim()]);
 }
 
+// The one credential compared non-constant-time, and deliberately so. Making it
+// constant-time means splitting the token into a non-secret lookup prefix and a
+// timingSafeEqual'd remainder — a schema change plus a backfill on both drivers.
+// Against 160 bits of CSPRNG (newDeviceToken) the channel is a B-tree descent
+// under pooler and network jitter, not a byte-at-a-time string compare, so it
+// buys nothing measurable. Revisit if tokens ever get shorter or structured.
 export async function getAthleteByToken(token: string): Promise<AthleteRow | undefined> {
   return one<AthleteRow>("SELECT * FROM athletes WHERE device_token = ?", [token]);
+}
+
+/**
+ * Mint a fresh device token for one athlete and return it.
+ *
+ * Because `getAthleteByToken` is a plain equality lookup on this column, the
+ * overwrite IS the revocation: every previously issued copy of the old token —
+ * phone, athlete web cookie, anything leaked into a log — stops resolving to any
+ * row the moment this returns. There is no separate revocation list to keep in
+ * step, and no window where both values work.
+ *
+ * Throws if no such athlete, rather than returning a token that authenticates
+ * nothing: a caller storing that string would believe it had rotated.
+ */
+export async function rotateDeviceToken(athleteId: number): Promise<string> {
+  const token = newDeviceToken();
+  const row = await one<{ device_token: string }>(
+    "UPDATE athletes SET device_token = ? WHERE id = ? RETURNING device_token",
+    [token, athleteId]
+  );
+  if (!row) throw new Error(`rotateDeviceToken: no athlete ${athleteId}`);
+  return row.device_token;
 }
 
 export async function setAthleteTeam(athleteId: number, teamId: number | null): Promise<void> {

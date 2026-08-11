@@ -47,16 +47,17 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent, NoRun, Zero } from "../../components/Nothing";
 import { Stat } from "../../components/Stat";
-import { getProfile } from "../../lib/api";
+import { getProfile, isUnauthorized } from "../../lib/api";
 import { dayLabel, localDay, parseLocalDay } from "../../lib/dates";
+import { useSession } from "../../lib/session";
 import { formatDistance } from "../../lib/units";
 import type { Profile } from "../../lib/types";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
+import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
@@ -262,8 +263,11 @@ function buildGrid(entries: CalendarDay[], restDays: Set<string>): Grid | null {
 }
 
 export default function CalendarScreen() {
+  const { signOut } = useSession();
   const [profile, setProfile] = useState<WithCalendar | null>(null);
   const [failed, setFailed] = useState(false);
+  /** Bumped by "Try again"; re-runs the fetch without remounting the screen. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -271,13 +275,23 @@ export default function CalendarScreen() {
       .then((p) => {
         if (alive) setProfile(p);
       })
-      .catch(() => {
-        if (alive) setFailed(true);
+      .catch((err: unknown) => {
+        if (!alive) return;
+        // A 401 is NOT an outage. The token is missing, wrong, or belongs to a
+        // deleted athlete, and no amount of retrying fixes it — so it must not
+        // borrow the outage sentence. Hand it to the session gate, which
+        // unmounts this whole group; this screen renders nothing in the
+        // meantime rather than flashing copy the athlete cannot act on.
+        if (isUnauthorized(err)) {
+          void signOut();
+          return;
+        }
+        setFailed(true);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [signOut, attempt]);
 
   const grid = useMemo(() => {
     if (!profile) return null;
@@ -288,10 +302,29 @@ export default function CalendarScreen() {
   }, [profile]);
 
   if (failed) {
+    // Transport only, now that 401 leaves through the gate: the server is
+    // unreachable or timed out, which a retry genuinely can fix. The screen
+    // keeps its name so the athlete knows what is missing, and the button is a
+    // real target rather than a sentence on an otherwise empty page.
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
-        <View style={styles.page}>
-          <Text style={styles.failed}>Your calendar could not be loaded.</Text>
+        <View style={styles.failedPage}>
+          <Text style={styles.failedTitle}>Calendar</Text>
+          <Text style={styles.failed}>
+            Your calendar could not be loaded. The RunGuard server could not be
+            reached.
+          </Text>
+          <Pressable
+            onPress={() => {
+              setFailed(false);
+              setAttempt((n) => n + 1);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Try loading the calendar again"
+            style={styles.failedAction}
+          >
+            <Text style={styles.failedActionLabel}>Try again</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -481,7 +514,26 @@ const styles = StyleSheet.create({
     backgroundColor: color.well,
   },
 
+  failedPage: {
+    paddingHorizontal: layout.page,
+    paddingTop: space.xl,
+    gap: space.md,
+  },
+  failedTitle: { ...text.title, color: color.ink },
   failed: { ...text.base, color: color.ink2 },
+  /* Matches the home screen's retry: brand FILL with `ink` on it, never
+     brandText on cream — a filled control is a shape, and the glyph rides the
+     fill. `target.min` keeps it tappable with cold hands. */
+  failedAction: {
+    marginTop: space.sm,
+    alignSelf: "flex-start",
+    minHeight: target.min,
+    justifyContent: "center",
+    paddingHorizontal: space.xl,
+    borderRadius: radius.control,
+    backgroundColor: color.brand,
+  },
+  failedActionLabel: { ...text.baseSemi, color: color.ink },
   note: { ...text.meta, color: color.muted, marginTop: space.md },
 
   skeleton: {
