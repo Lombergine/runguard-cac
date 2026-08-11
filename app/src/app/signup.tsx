@@ -401,15 +401,30 @@ export default function SignupScreen() {
               </Text>
             ) : null}
 
-            <Pressable
-              style={styles.alt}
-              onPress={() => router.replace("/login")}
-              disabled={busy}
-              accessibilityRole="link"
-              accessibilityState={{ disabled: busy }}
-            >
-              <Text style={styles.altLabel}>Already have an account? Log in</Text>
-            </Pressable>
+            {/* The other two doors. `replace`, not `push`, because the three
+                entry points are equivalent rather than nested — a back stack of
+                half-filled sign-in forms is not worth preserving. */}
+            <View style={styles.footer}>
+              <Pressable
+                style={styles.alt}
+                onPress={() => router.replace("/login")}
+                disabled={busy}
+                accessibilityRole="link"
+                accessibilityState={{ disabled: busy }}
+              >
+                <Text style={styles.altLabel}>Already have an account? Log in</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.alt}
+                onPress={() => router.replace("/pair")}
+                disabled={busy}
+                accessibilityRole="link"
+                accessibilityState={{ disabled: busy }}
+              >
+                <Text style={styles.altLabel}>Use a pairing code</Text>
+              </Pressable>
+            </View>
           </Card>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -542,10 +557,8 @@ const styles = StyleSheet.create({
   actionLabel: { ...text.baseSemi, color: color.ink },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
-  alt: {
-    minHeight: target.min,
-    justifyContent: "center",
-    marginTop: target.gap,
-  },
+  /** `target.gap` between the two links, so neither steals the other's tap. */
+  footer: { marginTop: target.gap, gap: target.gap },
+  alt: { minHeight: target.min, justifyContent: "center" },
   altLabel: { ...text.baseSemi, color: color.brandText },
 });

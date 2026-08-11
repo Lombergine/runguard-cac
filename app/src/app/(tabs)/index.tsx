@@ -256,14 +256,36 @@ export default function CheckInScreen() {
   }
 
   if (loadError !== "none") {
+    // An unpaired device is not an error state, it is a first run — and until
+    // this button existed it was a dead end: the copy explained the problem and
+    // offered nothing to do about it, on the one screen a fresh install opens.
+    const unpaired = loadError === "unpaired";
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
           <Text style={styles.loadError}>
-            {loadError === "unpaired"
-              ? "This device isn't paired to an athlete yet, so there is nothing to show."
+            {unpaired
+              ? "This device isn't signed in yet, so there is nothing to show."
               : "Your check-in couldn't be loaded."}
           </Text>
+          {unpaired ? (
+            <Pressable
+              onPress={() => router.replace("/login")}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in to RunGuard"
+              style={styles.loadErrorAction}
+            >
+              <Text style={styles.loadErrorActionLabel}>Sign in</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => setLoadError("none")}
+              accessibilityRole="button"
+              style={styles.loadErrorAction}
+            >
+              <Text style={styles.loadErrorActionLabel}>Try again</Text>
+            </Pressable>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -649,6 +671,16 @@ const styles = StyleSheet.create({
     paddingTop: space.xl,
     paddingBottom: layout.section,
   },
+  loadErrorAction: {
+    marginTop: space.xl,
+    alignSelf: "flex-start",
+    minHeight: target.min,
+    justifyContent: "center",
+    paddingHorizontal: space.xl,
+    borderRadius: radius.control,
+    backgroundColor: color.brand,
+  },
+  loadErrorActionLabel: { ...text.baseSemi, color: color.ink },
   loadError: { ...text.base, color: color.ink2 },
   sorenessNote: { ...text.meta, color: color.muted, marginTop: space.md },
   /** Numerals are mono everywhere, and the count keeps its noun welded on. */

@@ -239,6 +239,33 @@ export default function PairScreen() {
                 <Text style={styles.devLabel}>Use development token</Text>
               </Pressable>
             ) : null}
+
+            {/* The other two doors. An athlete who arrives here holding an email
+                and a password rather than a token is otherwise stranded: this
+                screen can only accept a token. `replace`, not `push`, because
+                the three entry points are equivalent rather than nested — a back
+                stack of half-filled sign-in forms is not worth preserving. */}
+            <View style={styles.footer}>
+              <Pressable
+                style={styles.alt}
+                onPress={() => router.replace("/login")}
+                disabled={checking}
+                accessibilityRole="link"
+                accessibilityState={{ disabled: checking }}
+              >
+                <Text style={styles.altLabel}>Sign in with email instead</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.alt}
+                onPress={() => router.replace("/signup")}
+                disabled={checking}
+                accessibilityRole="link"
+                accessibilityState={{ disabled: checking }}
+              >
+                <Text style={styles.altLabel}>Create an account</Text>
+              </Pressable>
+            </View>
           </Card>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -307,4 +334,8 @@ const styles = StyleSheet.create({
     marginTop: target.gap,
   },
   devLabel: { ...text.baseSemi, color: color.muted },
+  /** `target.gap` between the two links, so neither steals the other's tap. */
+  footer: { marginTop: target.gap, gap: target.gap },
+  alt: { minHeight: target.min, justifyContent: "center" },
+  altLabel: { ...text.baseSemi, color: color.brandText },
 });
