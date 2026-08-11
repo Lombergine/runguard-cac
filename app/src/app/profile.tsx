@@ -35,19 +35,14 @@
  *     rather than a measurement of them, and the enum is a database value, not
  *     an explanation. `source` is read here only to decide whether "Use
  *     automatic" is offered and whether the estimate caveat is shown.
- *
- * On the data layer: this screen mutates, and `lib/api` — which this segment
- * does not own — exposes no join-team, no leave-team, no HRmax call, and no
- * DELETE at all. `mutate()` below is that module's `request()` narrowed to the
- * three writes this screen makes; fold it into the client and delete it once
- * the client grows them.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -58,8 +53,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { ApiError, BASE_URL, getProfile, isUnauthorized } from "../lib/api";
-import { getToken } from "../lib/auth";
+import {
+  Achievements,
+  ConnectedApps,
+  InjuryHistory,
+  SeasonGoals,
+} from "../components/ProfilePanels";
+import { MentalChart } from "../components/charts/MentalChart";
+import { ApiError, joinTeam, leaveTeam, setHrMax } from "../lib/api";
+import { useProfile } from "../lib/profileStore";
 import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
 import { color, shadow } from "../theme/tokens";
@@ -82,61 +84,6 @@ import { layout, radius, ruleWidth, space, target } from "../theme/space";
 type AppProfile = Profile & {
   athlete: Profile["athlete"] & { joinCode?: string | null };
 };
-
-/** Matches lib/api: no health endpoint exists, so a wrong base URL just hangs. */
-const TIMEOUT_MS = 15_000;
-
-/**
- * The three writes, sharing `request()`'s contract: Bearer from the Keychain,
- * fail closed with no token, one timeout, and NEVER a token in an error.
- *
- * The server's own message is carried through verbatim, because these routes
- * write the sentence the athlete needs — the HRmax bounds
- * (website/src/app/api/hrmax/route.ts) and "That team code doesn't match any
- * team." (website/src/app/api/athlete/join-team/route.ts). Restating either one
- * client-side is how the two drift.
- */
-async function mutate(
-  path: string,
-  method: "POST" | "DELETE",
-  body?: unknown
-): Promise<void> {
-  const token = await getToken();
-  if (!token) throw new ApiError(401, "This device isn't paired to an athlete.");
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch {
-    // The thrown value can echo the request, Authorization header included.
-    throw new ApiError(0, `Could not reach the RunGuard server at ${BASE_URL}.`);
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (!res.ok) {
-    const detail = await res
-      .json()
-      .then((j: unknown) =>
-        j && typeof j === "object" && typeof (j as { error?: unknown }).error === "string"
-          ? (j as { error: string }).error
-          : null
-      )
-      .catch(() => null);
-    throw new ApiError(res.status, detail ?? `Request failed (${res.status}).`);
-  }
-}
 
 function explain(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
@@ -299,17 +246,17 @@ function QuietButton({
  *
  * The web finishes each with `router.refresh()`, which re-runs the server
  * component. There is no equivalent here: membership changes what `/me` returns
- * for `teamName`, so the screen refetches instead. Until that refetch lands the
- * panel stays in its old state rather than optimistically claiming a team —
- * `setAthleteTeam` is the server's write, and this screen does not know it
- * happened until the server says so.
+ * for `teamName`, so the screen invalidates the shared profile instead. Until
+ * that refetch lands the panel stays in its old state rather than optimistically
+ * claiming a team — `setAthleteTeam` is the server's write, and this screen does
+ * not know it happened until the server says so.
  */
 function TeamPanel({
   athlete,
   onChanged,
 }: {
   athlete: AppProfile["athlete"];
-  onChanged: () => Promise<void>;
+  onChanged: () => void;
 }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -321,9 +268,9 @@ function TeamPanel({
     setBusy(true);
     setProblem(null);
     try {
-      await mutate("/api/athlete/join-team", "POST", { joinCode: entered });
+      await joinTeam(entered);
       setCode("");
-      await onChanged();
+      onChanged();
     } catch (err) {
       setProblem(explain(err, "Could not join that team."));
     } finally {
@@ -336,8 +283,8 @@ function TeamPanel({
     setBusy(true);
     setProblem(null);
     try {
-      await mutate("/api/athlete/join-team", "DELETE");
-      await onChanged();
+      await leaveTeam();
+      onChanged();
     } catch (err) {
       setProblem(explain(err, "Could not leave that team."));
     } finally {
@@ -421,13 +368,19 @@ function TeamPanel({
  * verbatim rather than being pre-empted with a client-side range check: the
  * constants live in website/src/lib/hrmax.ts, and a second copy here would keep
  * telling the athlete the old range for as long as it took anyone to notice.
+ *
+ * The one check that IS client-side lives in `setHrMax`, not here:
+ * `JSON.stringify({ hrMax: NaN })` emits `{"hrMax":null}`, and null is the
+ * route's CLEAR signal — so an unparseable entry would silently erase a measured
+ * HRmax and come back `{ ok: true }`. `setHrMax` refuses it with a 400 that
+ * `explain()` shows exactly the way it shows the server's.
  */
 function HrMaxPanel({
   hrMax,
   onChanged,
 }: {
   hrMax: AppProfile["risk"]["hrMax"];
-  onChanged: () => Promise<void>;
+  onChanged: () => void;
 }) {
   const [entry, setEntry] = useState(hrMax ? String(hrMax.value) : "");
   const [busy, setBusy] = useState(false);
@@ -438,8 +391,8 @@ function HrMaxPanel({
     setBusy(true);
     setProblem(null);
     try {
-      await mutate("/api/hrmax", "POST", { hrMax: value });
-      await onChanged();
+      await setHrMax(value);
+      onChanged();
     } catch (err) {
       setProblem(explain(err, "Could not save that."));
     } finally {
@@ -596,27 +549,21 @@ function DevicePanel() {
  * ------------------------------------------------------------------ */
 
 export default function ProfileScreen() {
-  const [profile, setProfile] = useState<AppProfile | null>(null);
-  const [loadError, setLoadError] = useState<"none" | "unpaired" | "failed">("none");
-
   /**
-   * The whole profile, refetched after every write. `/me` is the only endpoint
-   * carrying `events`, `fitness.tier` and `risk.hrMax`, and it is 57 KB — a
-   * cost this screen pays once on entry and once per change, which is a handful
-   * of times in a season.
+   * The shared `/me` (lib/profileStore). It is the only endpoint carrying
+   * `events`, `fitness.tier` and `risk.hrMax`, and it is 57 KB — a cost the
+   * whole app now pays once rather than once per screen. Every write below
+   * finishes with `invalidate()`, which refetches it in place: the panels keep
+   * their old values until the server says what the new ones are.
+   *
+   * There is no "unpaired" branch any more. A 401 signs out from inside the
+   * store and the gate unmounts this screen, so the only failure that can reach
+   * the render below is a transport one.
    */
-  const load = useCallback(async () => {
-    try {
-      setProfile((await getProfile()) as AppProfile);
-      setLoadError("none");
-    } catch (err) {
-      setLoadError(isUnauthorized(err) ? "unpaired" : "failed");
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { profile: shared, state, refreshing, refresh, invalidate } = useProfile();
+  /** The join code the server does not send yet — see AppProfile. */
+  const profile: AppProfile | null = shared;
+  const failed = state === "failed";
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -640,7 +587,19 @@ export default function ProfileScreen() {
         <ScrollView
           contentContainerStyle={styles.page}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+          }
         >
+          {/* One quiet line, and nothing else changes: the panels below are
+              still showing what the server last said, which is still true. */}
+          {failed && profile ? (
+            <Text style={styles.stale}>
+              Could not reach your server just now. This is your profile as it was
+              last loaded.
+            </Text>
+          ) : null}
+
           {profile ? (
             <>
               <Panel title={profile.athlete.name} note={profile.athlete.school}>
@@ -662,22 +621,47 @@ export default function ProfileScreen() {
                 </View>
               </Panel>
 
-              <TeamPanel athlete={profile.athlete} onChanged={load} />
-              <HrMaxPanel hrMax={profile.risk.hrMax} onChanged={load} />
+              <TeamPanel athlete={profile.athlete} onChanged={invalidate} />
+              <HrMaxPanel hrMax={profile.risk.hrMax} onChanged={invalidate} />
+
+              {/*
+                Energy & motivation, where the website keeps it. It owns its own
+                panel head — do not wrap it.
+
+                Worth knowing: on the web this chart plots two things the athlete
+                has no control to enter, so it is always half empty there. The
+                app's check-in posts `energy`, so here it is a picture of the
+                athlete's own reporting handed back to them — which is the best
+                argument the app has for checking in at all.
+              */}
+              <MentalChart mental30={profile.mental30} />
+
+              <Panel title="How your data syncs" note="Read from your watch">
+                <ConnectedApps sources={profile.connectedSources} />
+              </Panel>
+
+              <Panel title="Season goals" note="Target against today's forecast">
+                <SeasonGoals goals={profile.goals} />
+              </Panel>
+
+              <Panel title="Achievements" note="What you have done so far">
+                <Achievements badges={profile.badges} />
+              </Panel>
+
+              {/* Read-only: writing an injury is a coach action, and
+                  POST/PATCH /api/injury are mounted only on the dashboard. */}
+              <Panel title="Injury history" note="Recorded by your coach">
+                <InjuryHistory injuries={profile.injuries} />
+              </Panel>
             </>
-          ) : loadError === "none" ? (
+          ) : !failed ? (
             // Nothing to say while the first fetch is in flight. No spinner:
             // the panels below it must not shift when the data lands.
             null
           ) : (
-            <Panel
-              title="Your profile"
-              note={loadError === "unpaired" ? "Not paired" : "Could not load"}
-            >
+            <Panel title="Your profile" note="Could not load">
               <Text style={styles.body}>
-                {loadError === "unpaired"
-                  ? "This device isn't paired to an athlete, so there is nothing to show."
-                  : "Your profile couldn't be loaded. Nothing here has changed."}
+                Your profile couldn&apos;t be loaded. Nothing here has changed.
               </Text>
             </Panel>
           )}
@@ -722,6 +706,8 @@ const styles = StyleSheet.create({
 
   body: { ...text.base, color: color.ink2 },
   bodyStrong: { ...text.baseSemi, color: color.ink },
+  /** The stale-data line. Quiet by construction: the size and colour of a note. */
+  stale: { ...text.meta, color: color.muted },
 
   fields: { gap: space.lg },
   field: { gap: space.xs },

@@ -24,11 +24,35 @@ export async function POST(request: Request) {
 
   if (typeof body.sorenessPart === "string" && body.sorenessPart.trim()) {
     const bodyPart = body.sorenessPart.slice(0, 60);
-    const severity = num(body.sorenessSeverity, 0, 10);
-    if (severity === null) {
+    const raw = body.sorenessSeverity;
+
+    // `null` CLEARS this part. Anything else that is not a real 0–10 is a bad
+    // request and is refused.
+    //
+    // This used to be `num(raw, 0, 10)` with `null` meaning clear, which folded
+    // "clear this" and "that value is nonsense" into the same branch — so
+    // `{sorenessSeverity: 11}` DELETED the athlete's score and answered
+    // `{ok: true}`. `JSON.stringify` emits `null` for `NaN`, so
+    // `Number(someUnparseableField)` did the same thing. A client cannot tell
+    // the difference between a save and a silent destruction, which is exactly
+    // how this project lost a soreness answer once already.
+    //
+    // Clearing is now something a caller has to ASK for, not something they can
+    // fall into.
+    if (raw === null) {
       await clearCheckinSoreness({ athlete_id: athlete.id, date, body_part: bodyPart });
+    } else if (typeof raw === "number" && Number.isInteger(raw) && raw >= 0 && raw <= 10) {
+      await upsertCheckinSoreness({
+        athlete_id: athlete.id,
+        date,
+        body_part: bodyPart,
+        severity: raw,
+      });
     } else {
-      await upsertCheckinSoreness({ athlete_id: athlete.id, date, body_part: bodyPart, severity });
+      return Response.json(
+        { error: "Soreness severity must be a whole number from 0 to 10, or null to clear it." },
+        { status: 400 }
+      );
     }
   }
   return Response.json({ ok: true });

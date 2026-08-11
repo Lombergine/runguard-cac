@@ -8,13 +8,12 @@
  * a gap to apologise for; it is the product's main call to action, and so it is
  * the largest, highest-contrast, most thumb-reachable thing on the screen.
  *
- * SUNRISE. The card is now a real Panel, in the website's sense
+ * SUNRISE. The card is a real Panel, in the website's sense
  * (`website/src/components/athlete/tabs.tsx:22`): a white ground on warm cream,
  * `shadow.card` for elevation, a hairline rule, and a head row of TITLE on the
- * left with a muted note on the right. The eyebrow the old layout stacked above
- * the prompt has become that head — "Before practice · Tue 14 Oct" split across
- * the two halves of the row — so the prompt is the first thing under it and the
- * signature stays as focused as it was.
+ * left with a muted note on the right — "Before practice · Tue 14 Oct" split
+ * across the two halves, which is where non-negotiable #2's explicit local day
+ * lives.
  *
  * EMBER. Two appearances, both load-bearing: the gradient hairline across the
  * top of the panel (the port of the website's `.card-ember`, reserved there for
@@ -22,27 +21,56 @@
  * this card. Its label stays `color.ink`, never white — the three ember stops
  * run 5.9:1 to 10.0:1 against ink, and only 1.7:1 to 2.8:1 against white.
  *
- * Two taps for the common case — sleep, then soreness. The card holds which of
- * the two questions is showing; the SCREEN owns the network call and decides
- * when to swap this for CheckInReceipt. No step counter, no "next", no
- * confirmation: on "No" the second tap is the submit.
+ * ─────────────────────────────────────────────────────────────────────────
+ * TWO TAPS FOR THE MAJORITY STATE, AND A REAL NUMBER FOR THE REST
  *
- * WHERE, NOT JUST HOW MUCH. "A bit" or "A lot" reveals the BodyMap inline,
- * because POST /api/checkin stores soreness per part (`sorenessPart` +
- * `sorenessSeverity`) and there is nowhere for a partless answer to go — an
- * abstract severity with no region is data the server cannot keep. The level
- * row is the quick triage; the map is the specced soreness picker that makes
- * the answer storable at all.
+ * The card asked "Anything sore?" as No / A bit / A lot and the SCREEN turned
+ * those words into severity 4 and 7. That is a number the athlete never gave,
+ * filed under a part with no side, and it is gone: the two invented levels are
+ * deleted rather than kept as a shortcut, because a shortcut that fabricates a
+ * figure is the failure this file exists to avoid.
  *
- * The answer row is anchored to the bottom of the card by a flexible spacer, so
- * it sits in the bottom third within one-handed reach and does not move when
- * the question above it wraps to a different number of lines. The spacer
- * collapses to its minimum once the map is showing and the card overflows.
+ * In their place is the website's own model (`widgets.tsx:118-307`):
+ *
+ *     part  →  side (lateral parts only)  →  severity 0–10
+ *
+ * The fast path is unchanged and still TWO TAPS — sleep, then "No", which
+ * submits on the second tap. Only an athlete who actually is sore pays for the
+ * precision, and what they pay for is the difference between "a bit" and
+ * "left knee, 6 out of 10". Nothing here reaches the server unasked: a
+ * severity is written the moment it is tapped, so the figure and the map are a
+ * picture of what is STORED, never of what was merely entered.
+ *
+ * WHY THE SCALE IS LAID OUT 1 + 5 + 5. Eleven targets is a lot, and at the
+ * 360pt floor the card's content box is 285pt wide, so six 48pt targets in a
+ * row (328pt with gaps) do not fit and five (272pt) do. The scale therefore
+ * cannot be one or two rows whatever we would prefer — and given that, 0 takes
+ * the full-width row of its own rather than heading a ragged one. That is the
+ * layout doing what non-negotiable #4 asks: zero is not the low end of the
+ * scale, it is a different KIND of answer — "I checked, and it doesn't hurt" —
+ * so it is worded rather than left as a digit that could be read as "skip".
+ *
+ * NO ALARM RAMP ON THE SCALE. The website tints its severity buttons red as
+ * they climb. This one does not: every value wears the same selected treatment,
+ * because a control that turns red under the thumb is the app telling the
+ * athlete their answer is bad news (non-negotiable #5). Intensity is carried
+ * where the spec sanctions colour — the body map's own support-coloured fill,
+ * which ramps 0.45 → 1.0 with severity.
+ *
+ * WHAT THE FIGURE CAN AND CANNOT SAY. `BodyMapProps`' picker member keys both
+ * `selected` and `severity` by PART, so a part recorded on one side lights both
+ * halves of the drawing. That is the same resolution the website's twelve chips
+ * have, and it is why the side never lives on the figure: the readout under it
+ * names "left knee 6/10" in full, and the side control names each side's own
+ * score. The figure answers *where and roughly how much*; the text answers
+ * *which side and exactly how much*.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { BODY_PARTS, getBodyPart, sorenessLabel, type Side } from "../lib/bodyParts";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 import { color, shadow } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
@@ -51,26 +79,75 @@ import { BodyMap } from "./BodyMap";
 /** The sleep question's three answers. */
 export type SleepAnswer = "bad" | "ok" | "good";
 
-/** The soreness question's three answers. */
-export type SorenessAnswer = "none" | "some" | "lot";
+/**
+ * The soreness question's two answers.
+ *
+ * Deliberately NOT stored anywhere. It is a disclosure gate: "no" submits, and
+ * "yes" reveals the picker. The only soreness the server ever hears about is a
+ * part with a side and a number attached — see `CheckinInput` in lib/api, whose
+ * union makes a partless severity unsendable.
+ */
+type SoreGate = "no" | "yes";
 
-export type CheckInAnswers = {
-  sleep: SleepAnswer;
-  soreness: SorenessAnswer;
-  /**
-   * Body-part keys from lib/bodyParts, one per region the athlete marked.
-   * Always empty when `soreness` is "none". The screen stores one per request.
-   */
-  parts: string[];
-};
+/** The soreness rows the server holds for today, keyed "left knee" → 0–10. */
+export type LoggedSoreness = Record<string, number>;
+
+const SIDES = ["left", "right", "both"] as const satisfies readonly Side[];
+
+/** The scale's top. Every reading is welded to it, e.g. "6/10". */
+const SCALE_MAX = 10;
+
+/** 1–10, five to a row. Zero is not here; it gets its own worded target. */
+const SEVERITY_ROWS: readonly (readonly number[])[] = [
+  [1, 2, 3, 4, 5],
+  [6, 7, 8, 9, SCALE_MAX],
+];
 
 /**
- * A count of marked regions with its noun welded on, e.g. "1 area", "3 areas".
- * Exported because the receipt has to name the same number this card showed,
- * and the two must not word it differently.
+ * The worst score recorded for each part, across every side it may be filed
+ * under — the website's own chip logic (`widgets.tsx:206-209`). This is what
+ * tints the figure, and it is also what decides whether a part is filled at
+ * all: a part with a 0 IS in this map and IS filled, a part never answered for
+ * is absent from it and draws as a bare outline.
  */
-export function areaLabel(n: number): string {
-  return `${n} ${n === 1 ? "area" : "areas"}`;
+function worstByPart(logged: LoggedSoreness): Record<string, number> {
+  const worst: Record<string, number> = {};
+  for (const part of BODY_PARTS) {
+    const scores = [part.key, ...SIDES.map((s) => sorenessLabel(part.key, s))]
+      .map((key) => logged[key])
+      .filter((v): v is number => v !== undefined);
+    if (scores.length > 0) worst[part.key] = Math.max(...scores);
+  }
+  return worst;
+}
+
+/**
+ * The stored soreness, read back as a sentence fragment.
+ *
+ * Exported because the receipt has to name exactly what this card showed, in
+ * exactly the same words — the two drifting apart is how a receipt ends up
+ * claiming more than was written. Every score keeps "/10" welded to it in a
+ * single mono node; a bare numeral would leave the scale to be inferred.
+ */
+export function SorenessList({
+  lead,
+  entries,
+}: {
+  lead: string;
+  entries: readonly (readonly [string, number])[];
+}) {
+  return (
+    <Text style={styles.readout}>
+      {lead}
+      {entries.map(([key, severity], i) => (
+        <Text key={key}>
+          {i > 0 ? " · " : ""}
+          {`${key} `}
+          <Text style={styles.score}>{`${severity}/${SCALE_MAX}`}</Text>
+        </Text>
+      ))}
+    </Text>
+  );
 }
 
 type Option<T extends string> = { value: T; label: string };
@@ -81,10 +158,9 @@ const SLEEP_OPTIONS: readonly Option<SleepAnswer>[] = [
   { value: "good", label: "Good" },
 ];
 
-const SORENESS_OPTIONS: readonly Option<SorenessAnswer>[] = [
-  { value: "none", label: "No" },
-  { value: "some", label: "A bit" },
-  { value: "lot", label: "A lot" },
+const SORE_OPTIONS: readonly Option<SoreGate>[] = [
+  { value: "no", label: "No" },
+  { value: "yes", label: "Yes" },
 ];
 
 const PROMPT_LINE = text.prompt.lineHeight as number;
@@ -143,55 +219,106 @@ type CheckInCardProps = {
    */
   dateLabel: string;
   /**
-   * Fired with every answer at once: on the second tap when soreness is "No",
-   * otherwise once the athlete has marked where and confirmed.
+   * What the server holds for today. The card renders this and never a local
+   * draft of it, so the figure, the readout and the side chips can only ever
+   * show soreness that has actually been written.
    */
-  onComplete: (answers: CheckInAnswers) => void;
-  /** True while the answers are in flight. Targets stay put but go inert. */
+  logged: LoggedSoreness;
+  /**
+   * Keys whose supersede clear did NOT land. They are still in `logged`,
+   * because they are still on the server; this names them so the athlete can
+   * see that a score they thought they replaced is still there.
+   */
+  uncleared: readonly string[];
+  /**
+   * Writes one soreness row. `severity: null` is the explicit CLEAR — see
+   * `CheckinInput` in lib/api. The screen owns the request, the supersede
+   * follow-ups, and the mirror in `logged`.
+   */
+  onLogSoreness: (part: string, side: Side | null, severity: number | null) => void;
+  /** Finishes the check-in: the screen posts the sleep answer and collapses. */
+  onComplete: (sleep: SleepAnswer) => void;
+  /** True while any write is in flight. Targets stay put but go inert. */
   submitting: boolean;
-  /** True when the last attempt did not reach the server. */
+  /** Why the last soreness write did not do what it said. Null when it did. */
+  sorenessError: string | null;
+  /** True when the finishing write did not reach the server. */
   failed: boolean;
 };
 
 export function CheckInCard({
   dateLabel,
+  logged,
+  uncleared,
+  onLogSoreness,
   onComplete,
   submitting,
+  sorenessError,
   failed,
 }: CheckInCardProps) {
   const [sleep, setSleep] = useState<SleepAnswer | null>(null);
-  const [soreness, setSoreness] = useState<SorenessAnswer | null>(null);
-  const [parts, setParts] = useState<string[]>([]);
+  const [gate, setGate] = useState<SoreGate | null>(null);
+  const [part, setPart] = useState<string | null>(null);
+  const [side, setSide] = useState<Side | null>(null);
+
+  const region = part === null ? null : getBodyPart(part) ?? null;
+  const needsSide = region?.lateral === true;
+  /**
+   * The row this tap would write, or null when there is not enough to write
+   * one. A lateral part with no side chosen has no key — the website refuses
+   * bare "shin" entries the same way (`widgets.tsx:133`), and the union in
+   * lib/api refuses a severity with no part at all.
+   */
+  const sorenessKey =
+    part === null ? null : needsSide && side === null ? null : sorenessLabel(part, side);
+  const currentSeverity = sorenessKey === null ? null : logged[sorenessKey] ?? null;
+
+  const entries = Object.entries(logged);
+  const severityByPart = worstByPart(logged);
+  const selectedParts = Object.keys(severityByPart);
 
   /**
    * "No" submits on the second tap — nothing to locate, so the fast path stays
-   * two taps. "A bit" and "A lot" open the map instead, because a severity with
-   * no region cannot be stored. On a failure everything stays on screen with
-   * the answers still selected, so tapping again is a retry, not a restart.
+   * two taps. "Yes" opens the picker instead, because a severity with no part
+   * cannot be stored and a part with no severity is not an answer.
    */
-  function pickSoreness(value: SorenessAnswer) {
+  function pickGate(value: SoreGate) {
     if (sleep === null) return;
-    setSoreness(value);
-    if (value === "none") {
-      setParts([]);
-      onComplete({ sleep, soreness: value, parts: [] });
+    setGate(value);
+    if (value === "no") onComplete(sleep);
+  }
+
+  /** Tapping a part selects it for scoring; tapping it again puts it down. */
+  function pickPart(partKey: string) {
+    setSide(null);
+    setPart((prev) => (prev === partKey ? null : partKey));
+  }
+
+  /**
+   * Tapping the already-selected side clears THAT side's score, which is the
+   * website's own gesture (`widgets.tsx:244-252`) and the only way to take an
+   * answer back. Tapping a side that holds nothing just selects or deselects it.
+   */
+  function pickSide(value: Side) {
+    if (part === null) return;
+    const scored = logged[sorenessLabel(part, value)] !== undefined;
+    if (side === value && scored) {
+      onLogSoreness(part, value, null);
+      setSide(null);
+      return;
     }
+    setSide(side === value ? null : value);
   }
 
-  function togglePart(partKey: string) {
-    setParts((prev) =>
-      prev.includes(partKey) ? prev.filter((k) => k !== partKey) : [...prev, partKey]
-    );
-  }
-
-  function submitSore() {
-    if (sleep === null || soreness === null || parts.length === 0) return;
-    onComplete({ sleep, soreness, parts });
+  /** Tapping the active value again clears it, exactly as on the website. */
+  function pickSeverity(value: number) {
+    if (part === null || sorenessKey === null) return;
+    onLogSoreness(part, side, currentSeverity === value ? null : value);
   }
 
   const askingSoreness = sleep !== null;
-  const askingWhere = soreness === "some" || soreness === "lot";
-  const ready = parts.length > 0;
+  const askingWhere = gate === "yes";
+  const ready = entries.length > 0;
 
   return (
     <View style={styles.panel}>
@@ -214,11 +341,11 @@ export function CheckInCard({
 
         {askingSoreness ? (
           <AnswerRow
-            options={SORENESS_OPTIONS}
-            selected={soreness}
+            options={SORE_OPTIONS}
+            selected={gate}
             disabled={submitting}
             expanded={askingWhere}
-            onPick={pickSoreness}
+            onPick={pickGate}
           />
         ) : (
           <AnswerRow
@@ -230,28 +357,76 @@ export function CheckInCard({
         )}
 
         {askingWhere ? (
-          <View>
-            <Text style={styles.whereLabel}>Where</Text>
-            <View style={styles.map}>
-              <BodyMap selected={parts} onToggle={togglePart} />
-            </View>
+          // One gap container, so every block below spaces itself the same way
+          // and nothing carries a margin that doubles up inside a nested one.
+          <View style={styles.disclosed}>
+            <Text style={styles.micro}>Where</Text>
+            {/*
+              `selected` and `severity` are both the RECORDED state and nothing
+              else: a lit region means a score exists for that part, and its
+              fill ramps with that score. A part being scored right now but not
+              yet answered is deliberately NOT passed as selected — with no
+              severity to go with it the figure would fill it at full intensity,
+              which is a blank drawn as the worst possible reading.
+            */}
+            <BodyMap
+              selected={selectedParts}
+              onToggle={pickPart}
+              severity={severityByPart}
+            />
 
-            {/* One line either way, so confirming a region moves nothing. */}
-            <Text style={styles.chosen}>
-              {ready ? (
-                <>
-                  <Text style={styles.chosenCount}>{areaLabel(parts.length)}</Text> chosen.
-                </>
-              ) : (
-                "No areas chosen yet."
-              )}
-            </Text>
+            {part === null ? (
+              <Text style={styles.hint}>Tap where it hurts to score it.</Text>
+            ) : (
+              <View style={styles.editor}>
+                <Text style={styles.editorTitle}>{region?.label ?? part}</Text>
+
+                {needsSide ? (
+                  <SideRow
+                    part={part}
+                    side={side}
+                    logged={logged}
+                    disabled={submitting}
+                    onPick={pickSide}
+                  />
+                ) : null}
+
+                {sorenessKey === null ? (
+                  <Text style={styles.hint}>Choose a side to score it.</Text>
+                ) : (
+                  <SeverityScale
+                    label={sorenessKey}
+                    severity={currentSeverity}
+                    disabled={submitting}
+                    onPick={pickSeverity}
+                  />
+                )}
+
+                {sorenessError ? (
+                  <Text style={styles.writeError}>{sorenessError}</Text>
+                ) : null}
+              </View>
+            )}
+
+            {ready ? (
+              <SorenessList lead="Logged: " entries={entries} />
+            ) : (
+              <Text style={styles.hint}>Nothing logged yet.</Text>
+            )}
+
+            {uncleared.length > 0 ? (
+              <Text style={styles.writeError}>
+                {`An earlier score for ${uncleared.join(" and ")} could not be removed, and is still recorded above.`}
+              </Text>
+            ) : null}
 
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ disabled: !ready || submitting }}
               disabled={!ready || submitting}
-              onPress={submitSore}
+              onPress={() => {
+                if (sleep !== null) onComplete(sleep);
+              }}
               style={[styles.done, ready && styles.doneReady]}
             >
               {/* Ember, because this is the card's one system action. The label
@@ -274,7 +449,7 @@ export function CheckInCard({
         ) : null}
 
         {failed ? (
-          <Text style={styles.failed}>That didn't send. Tap again.</Text>
+          <Text style={styles.failed}>That didn&apos;t send. Tap again.</Text>
         ) : null}
       </View>
     </View>
@@ -309,6 +484,157 @@ export function CheckInCardSkeleton() {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * Side
+ * ------------------------------------------------------------------ */
+
+/**
+ * Left / right / both, for lateral parts only.
+ *
+ * Each side carries its OWN score, shown welded to it, because the three are
+ * three separate rows on the server and an athlete with a sore left calf and a
+ * fine right one has to be able to see that. A side with no score shows no
+ * number at all rather than a zero — those are the two states non-negotiable #4
+ * forbids collapsing.
+ */
+function SideRow({
+  part,
+  side,
+  logged,
+  disabled,
+  onPick,
+}: {
+  part: string;
+  side: Side | null;
+  logged: LoggedSoreness;
+  disabled: boolean;
+  onPick: (value: Side) => void;
+}) {
+  return (
+    <View style={styles.row} accessibilityRole="radiogroup">
+      {SIDES.map((value) => {
+        const score = logged[sorenessLabel(part, value)];
+        const isSelected = side === value;
+        const word = value[0].toUpperCase() + value.slice(1);
+        return (
+          <Pressable
+            key={value}
+            accessibilityRole="radio"
+            accessibilityLabel={
+              score === undefined ? word : `${word}, ${score} out of ${SCALE_MAX}`
+            }
+            accessibilityState={{ checked: isSelected, selected: isSelected, disabled }}
+            disabled={disabled}
+            onPress={() => onPick(value)}
+            style={({ pressed }) => [
+              styles.sideChip,
+              score !== undefined && styles.sideChipScored,
+              (pressed || isSelected) && styles.answerActive,
+            ]}
+          >
+            <Text style={styles.sideLabel}>{word}</Text>
+            {score === undefined ? null : (
+              <Text style={styles.score}>{`${score}/${SCALE_MAX}`}</Text>
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Severity 0–10
+ * ------------------------------------------------------------------ */
+
+/**
+ * Eleven values, as 1 + 5 + 5. See the file header for why the rows are five
+ * wide and why 0 stands apart.
+ *
+ * No value is styled more urgently than any other: the selected treatment is
+ * the one the answer row uses, whatever the number. Alarm belongs to nothing on
+ * this screen (non-negotiable #5).
+ */
+function SeverityScale({
+  label,
+  severity,
+  disabled,
+  onPick,
+}: {
+  /** The row being scored, e.g. "left knee" — named so the reading is unambiguous. */
+  label: string;
+  severity: number | null;
+  disabled: boolean;
+  onPick: (value: number) => void;
+}) {
+  return (
+    <View style={styles.scaleBlock}>
+      <Text style={styles.micro}>{`How sore · 0–${SCALE_MAX}`}</Text>
+
+      {severity === null ? (
+        // NOT "0". Nothing has been answered for this row, and the one thing
+        // this card may never do is let that read as a measured zero.
+        <Text style={styles.hint}>Not scored yet.</Text>
+      ) : (
+        <Text style={styles.readout}>
+          {`${label} `}
+          <Text style={styles.score}>{`${severity}/${SCALE_MAX}`}</Text>
+          {" — tap it again to clear."}
+        </Text>
+      )}
+
+      <View style={styles.scale} accessibilityRole="radiogroup">
+        <Pressable
+          accessibilityRole="radio"
+          accessibilityLabel={`0 out of ${SCALE_MAX}, nothing sore there`}
+          accessibilityState={{
+            checked: severity === 0,
+            selected: severity === 0,
+            disabled,
+          }}
+          disabled={disabled}
+          onPress={() => onPick(0)}
+          style={({ pressed }) => [
+            styles.zeroTarget,
+            (pressed || severity === 0) && styles.answerActive,
+          ]}
+        >
+          <Text style={styles.digit}>0</Text>
+          <Text style={styles.zeroNote}>nothing sore there</Text>
+        </Pressable>
+
+        {SEVERITY_ROWS.map((values) => (
+          <View key={values[0]} style={styles.row}>
+            {values.map((value) => {
+              const isSelected = severity === value;
+              return (
+                <Pressable
+                  key={value}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`${value} out of ${SCALE_MAX}`}
+                  accessibilityState={{
+                    checked: isSelected,
+                    selected: isSelected,
+                    disabled,
+                  }}
+                  disabled={disabled}
+                  onPress={() => onPick(value)}
+                  style={({ pressed }) => [
+                    styles.severity,
+                    (pressed || isSelected) && styles.answerActive,
+                  ]}
+                >
+                  <Text style={styles.digit}>{value}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 type AnswerRowProps<T extends string> = {
   options: readonly Option<T>[];
   selected: T | null;
@@ -327,7 +653,7 @@ function AnswerRow<T extends string>({
 }: AnswerRowProps<T>) {
   return (
     /**
-     * A radiogroup, not a row of buttons: these are three answers to ONE
+     * A radiogroup, not a row of buttons: these are the answers to ONE
      * question, exactly one of which holds. A screen reader should say "1 of 3"
      * and announce the swap when the athlete changes their mind — a button
      * announces neither.
@@ -411,7 +737,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
   },
   /**
-   * The chosen answer. `accentSoft` and `well` are all but identical in
+   * The chosen answer, and the chosen severity, and the chosen side. One
+   * treatment for all three: `accentSoft` and `well` are all but identical in
    * greyscale — 1.08:1 between the two fills — so the state is carried by the
    * border stepping from the translucent rule to `brandStrong`, which is 1.7:1
    * against it. That survives glare and colour-blindness; a warmer fill alone
@@ -420,18 +747,84 @@ const styles = StyleSheet.create({
   answerActive: { backgroundColor: color.accentSoft, borderColor: color.brandStrong },
   answerLabel: { ...text.baseSemi, color: color.ink, textAlign: "center" },
 
-  whereLabel: { ...text.micro, color: color.muted, marginTop: space.xl },
-  map: { marginTop: space.md },
-  chosen: { ...text.meta, color: color.muted, marginTop: space.md },
-  /** Numerals are mono everywhere, and the count keeps its noun welded on. */
-  chosenCount: { ...tabular, fontFamily: font.mono, color: color.ink2 },
+  /** Everything "Yes" discloses. One rhythm, set once. */
+  disclosed: { marginTop: space.xl, gap: space.md },
+  micro: { ...text.micro, color: color.muted },
+
+  /** The part being scored, named in full above its controls. */
+  editor: { gap: space.md },
+  editorTitle: { ...text.title, color: color.ink },
+
+  sideChip: {
+    flex: 1,
+    minHeight: target.min,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xs,
+    backgroundColor: color.well,
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+  },
+  /** A side that holds a score wears the body map's support colour, not the
+   *  brand: this is the athlete's body being described, not a control firing. */
+  sideChipScored: { backgroundColor: color.trackSoft, borderColor: color.track },
+  sideLabel: { ...text.baseSemi, color: color.ink, textAlign: "center" },
+
+  scaleBlock: { gap: space.sm },
+  scale: { gap: target.gap },
+  /**
+   * Zero takes a full-width target with words on it. At 360pt the five-wide
+   * rows below leave it no other home, and the words are what stop a measured
+   * zero being tapped as a way of skipping the question.
+   */
+  zeroTarget: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: target.min,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    backgroundColor: color.well,
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+  },
+  zeroNote: { ...text.meta, color: color.ink2, flexShrink: 1 },
+  severity: {
+    flex: 1,
+    minHeight: target.min,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xs,
+    backgroundColor: color.well,
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+  },
+  /** Every numeral is mono, and columns of them line up. */
+  digit: { ...text.stat, color: color.ink },
+
+  readout: { ...text.meta, color: color.muted },
+  /** A score never appears without its scale welded on, in one node. */
+  score: { ...tabular, fontFamily: font.mono, color: color.ink2 },
+  hint: { ...text.meta, color: color.muted },
+
+  /**
+   * A write that did not do what it said. Body weight and `ink2`, with no
+   * banner, no icon and no red fill — it is a plain sentence about the network,
+   * and nothing on this screen shouts.
+   */
+  writeError: { ...text.meta, color: color.ink2 },
+
   done: {
     minHeight: metrics.answer,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    marginTop: space.md,
     backgroundColor: color.well,
     borderWidth: ruleWidth,
     borderColor: color.rule,

@@ -25,6 +25,7 @@
  */
 import { View, Text, StyleSheet } from "react-native";
 
+import { InfoDot } from "./InfoDot";
 import { color, shadow } from "../theme/tokens";
 import { text, font, tabular } from "../theme/type";
 import { layout, radius, ruleWidth, space } from "../theme/space";
@@ -53,6 +54,17 @@ export type TileProps = {
    * wants to read as the headline number.
    */
   accent?: string;
+  /**
+   * Optional explainer, revealed by a circled "i" beside the label — what the
+   * figure actually is and where it came from. One of `EXPLAINERS` in
+   * ./InfoDot, which is where the copy lives.
+   *
+   * Purely additive: omit it and this tile renders exactly the markup it did
+   * before, down to the label being a bare `<Text>` rather than a row. The dot
+   * is drawn at 16px, which is the micro line height, so even when it IS passed
+   * the label row does not get taller and no tile in a grid changes height.
+   */
+  info?: string;
 };
 
 /**
@@ -71,11 +83,24 @@ export type TileProps = {
  * sits at the value's size and position, so the row still aligns, and the
  * "Not recorded" label moves to the sub-line where a real tile's delta goes.
  */
-export function Tile({ label, value, sub, accent }: TileProps) {
+export function Tile({ label, value, sub, accent, info }: TileProps) {
   const absent = value === null;
   return (
     <View style={styles.tile}>
-      <Text style={styles.label}>{label}</Text>
+      {info ? (
+        <View style={styles.labelRow}>
+          <Text style={[styles.label, styles.labelWraps]}>{label}</Text>
+          {/* A fixed-height column, so the dot stays level with the FIRST line
+              when a long label wraps — the same trick recovery.tsx uses to
+              centre a tip's marker. `alignItems: "center"` on the row would
+              float it into the middle of a two-line label instead. */}
+          <View style={styles.labelDot}>
+            <InfoDot label={label} text={info} />
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.label}>{label}</Text>
+      )}
       <Text
         style={[
           styles.value,
@@ -104,6 +129,14 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   label: { ...text.micro, color: color.muted },
+  /** Only reached when `info` is passed — see the note on the prop. */
+  labelRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
+  /** Without this the label pushes the dot off the tile rather than wrapping. */
+  labelWraps: { flexShrink: 1 },
+  labelDot: {
+    height: text.micro.lineHeight as number,
+    justifyContent: "center",
+  },
   value: { ...text.stat, color: color.ink, marginTop: space.xs },
   /** Same size and position as a real value, so rows stay aligned. */
   valueAbsent: { color: color.unknown },

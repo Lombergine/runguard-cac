@@ -36,14 +36,20 @@
  * on the glass.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Absent } from "../components/Nothing";
 import { Card } from "../components/Card";
 import { Stat } from "../components/Stat";
-import { getProfile, isUnauthorized } from "../lib/api";
 import { dayLabel, localDay, timeLabel } from "../lib/dates";
 import {
   availability,
@@ -54,6 +60,7 @@ import {
   type Availability,
   type HealthState,
 } from "../lib/health";
+import { useProfile } from "../lib/profileStore";
 import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
 import { color } from "../theme/tokens";
@@ -122,37 +129,34 @@ function explainFailure(err: unknown): string {
 }
 
 export default function ConnectScreen() {
-  const { status, signOut } = useSession();
+  const { status } = useSession();
   const signedIn = status === "in";
 
+  /*
+   * `connectedSources` comes off the shared `/me` (lib/profileStore) rather
+   * than a fetch of this screen's own — including the 401 branch, which used to
+   * be spelled out here and in four other screens. The store signs out on 401
+   * and the gate unmounts this screen with the rest of the authed group.
+   */
+  const { profile, state, refreshing, refresh } = useProfile();
+
   const [health, setHealth] = useState<HealthState | null>(null);
-  const [sources, setSources] = useState<string[] | null>(null);
-  const [sourcesFailed, setSourcesFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
   const avail = availability();
 
-  const loadSources = useCallback(async () => {
-    try {
-      const profile = (await getProfile()) as ProfileWithSources;
-      setSources(profile.connectedSources ?? []);
-      setSourcesFailed(false);
-    } catch (err) {
-      // A 401 and a dead LAN address are both "we do not know what the server
-      // thinks", and both must render absent rather than as an empty list.
-      setSources(null);
-      setSourcesFailed(true);
-      if (isUnauthorized(err)) {
-        setFailure(explainFailure(new HealthError("unauthorized")));
-        // The server has stopped recognising this device, so nothing on this
-        // screen is ours to show any more — including the half that never asks
-        // it. signOut() erases the stored sync state and shuts the gate, which
-        // unmounts this screen with the rest of the authed group.
-        await signOut();
-      }
-    }
-  }, [signOut]);
+  /*
+   * Still gated on `signedIn` at RENDER time, not merely at fetch time — the
+   * reason is in the file header, and it holds for a shared store exactly as it
+   * held for a local fetch. `sources === null` covers both "not loaded yet" and
+   * "could not be loaded", and both must render absent rather than as an empty
+   * list: a source list that failed must never look like a source list that is
+   * empty.
+   */
+  const sources: string[] | null =
+    signedIn && profile ? ((profile as ProfileWithSources).connectedSources ?? []) : null;
+  const sourcesFailed = state === "failed";
 
   useEffect(() => {
     if (!signedIn) {
@@ -160,18 +164,15 @@ export default function ConnectScreen() {
       // outright, so this branch covers the frames before that lands: drop
       // every athlete-derived value rather than let one outlive the session.
       setHealth(null);
-      setSources(null);
-      setSourcesFailed(false);
       setFailure(null);
       return;
     }
-    // Inside an async closure rather than the effect body: both of these settle
-    // after an await, so neither renders synchronously off the mount.
+    // Inside an async closure rather than the effect body: this settles after
+    // an await, so it does not render synchronously off the mount.
     void (async () => {
       setHealth(await getState());
-      await loadSources();
     })();
-  }, [signedIn, loadSources]);
+  }, [signedIn]);
 
   /** Connect = ask, then immediately read. The read is the only real evidence. */
   const connect = useCallback(async () => {
@@ -185,9 +186,11 @@ export default function ConnectScreen() {
       setFailure(explainFailure(err));
     }
     setHealth(await getState());
-    await loadSources();
+    // `refresh()`, not `invalidate()`: a sync can add the very first source, so
+    // this has to fetch even when `/me` has never landed on this device.
+    await refresh();
     setBusy(false);
-  }, [busy, signedIn, loadSources]);
+  }, [busy, signedIn, refresh]);
 
   const syncNow = useCallback(async () => {
     if (busy || !signedIn) return;
@@ -199,9 +202,9 @@ export default function ConnectScreen() {
       setFailure(explainFailure(err));
     }
     setHealth(await getState());
-    await loadSources();
+    await refresh();
     setBusy(false);
-  }, [busy, signedIn, loadSources]);
+  }, [busy, signedIn, refresh]);
 
   // The gate, applied where it cannot be raced: a stale `health` — one read
   // before the session ended, or resolved after it — cannot reach the screen,
@@ -212,13 +215,25 @@ export default function ConnectScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.page}>
+      <ScrollView
+        contentContainerStyle={styles.page}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+        }
+      >
         <Text style={styles.eyebrow}>DATA SOURCES</Text>
         <Text style={styles.heading}>Where your numbers come from</Text>
         <Text style={styles.lede}>
           RunGuard reads your workouts and your overnight recovery figures from Apple
           Health on this phone, and sends them to your team&apos;s RunGuard server.
         </Text>
+        {/* One quiet line. The source list below it is the last one the server
+            confirmed, and it is still what the server last said. */}
+        {sourcesFailed && sources !== null ? (
+          <Text style={styles.stale}>
+            Could not reach your server just now. This is what it last reported.
+          </Text>
+        ) : null}
 
         {/* ── Apple Health ─────────────────────────────────────────────── */}
         <View style={styles.section}>
@@ -402,6 +417,8 @@ const styles = StyleSheet.create({
   eyebrow: { ...text.micro, color: color.muted },
   heading: { ...text.title, color: color.ink, marginTop: space.sm },
   lede: { ...text.base, color: color.ink2, marginTop: space.md },
+  /** The stale-data line. Quiet by construction: the size and colour of a note. */
+  stale: { ...text.meta, color: color.muted, marginTop: space.md },
   section: { marginTop: layout.section },
 
   /** The Panel head: title left, note right, both on the same baseline. */

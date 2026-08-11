@@ -1,5 +1,12 @@
 /**
- * The run log.
+ * The Training tab — this week's plan, then the runs already done.
+ *
+ * The route keeps its `runs` name (the tab bar relabels it); what changed is
+ * that the plan now sits above the log. That is the order the parenthetical in
+ * the brief asks for and it is the order the screen reads best in: what you are
+ * meant to do today, then what you have actually done. NOTE that the web portal
+ * puts its "Recent runs" panel FIRST (tabs.tsx:360) and the plan last — the two
+ * surfaces deliberately differ here, and only here.
  *
  * Two limitations in the payload are visible here rather than papered over:
  *
@@ -11,24 +18,40 @@
  *      nothing for that day the card carries the date alone rather than a
  *      guess.
  */
-import { ReactNode, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ReactNode, useMemo } from "react";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
 import { Absent } from "../../components/Nothing";
+import { PlanWeek, planWeekMetrics } from "../../components/PlanWeek";
 import { RunCard, runCardMetrics } from "../../components/RunCard";
-import { getProfile, isUnauthorized } from "../../lib/api";
 import { dayLabel } from "../../lib/dates";
-import { useSession } from "../../lib/session";
-import type { Profile, RecentRun } from "../../lib/types";
-import { layout, radius, space, target } from "../../theme/space";
+import { useProfile } from "../../lib/profileStore";
+import type { PlanAdjustment, RecentRun } from "../../lib/types";
+import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /** How many placeholder cards to hold while the profile is in flight. */
 const SKELETON_ROWS = 3;
+
+/**
+ * What the plan looks like when nothing was eased. `/api/mobile/home` sends
+ * `plan` without an `adjustment`, so the type makes it optional and this is the
+ * value that stands in — scale 1, and no reason, which is exactly "nothing to
+ * say". It is NOT a claim that the plan was checked and found unadjusted; it is
+ * the absence of the field, and the banner it feeds simply does not render.
+ */
+const NO_ADJUSTMENT: PlanAdjustment = { scale: 1, reason: null };
 
 /**
  * The sunrise ground: the warm top fading into the page over 420dp, ported
@@ -74,8 +97,12 @@ function Screen({ children }: { children: ReactNode }) {
  *
  * The note takes its own line rather than the Panel's right-hand slot: it is a
  * whole sentence, and at 360dp beside a 19px title it would have nowhere to go.
+ *
+ * `stale` adds ONE quiet line when a refetch failed over runs that are already
+ * on screen. The full-page failure below is reserved for having nothing at all:
+ * a timed-out refresh is no reason to take away a log that loaded fine.
  */
-function Header({ count }: { count: number | null }) {
+function Header({ count, stale }: { count: number | null; stale?: boolean }) {
   return (
     <View style={styles.header}>
       <Text style={styles.eyebrow}>Run log</Text>
@@ -88,6 +115,11 @@ function Header({ count }: { count: number | null }) {
       <Text style={styles.note}>
         Long runs well past your usual are flagged.
       </Text>
+      {stale ? (
+        <Text style={styles.note}>
+          Could not reach your server just now. These are the runs last loaded.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -108,41 +140,37 @@ function RunSkeleton() {
   );
 }
 
-export default function RunsScreen() {
-  const { signOut } = useSession();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [failed, setFailed] = useState(false);
-  /** Bumped by "Try again"; re-runs the load below. */
-  const [attempt, setAttempt] = useState(0);
+/**
+ * Holds the plan's shape while the payload is in flight — the head, then seven
+ * collapsed rows, from `planWeekMetrics`.
+ *
+ * This exists for a tap, not for tidiness. Without it the seven rows arrive all
+ * at once ABOVE the run cards and shove them most of a screen down; a thumb
+ * already on its way to a run would land on a different one. The reservation is
+ * approximate by construction (see `planWeekMetrics`), and the two banners are
+ * not reserved at all — most weeks have neither, and holding room for both
+ * would leave a permanent hole on every load to save a shift that usually does
+ * not happen.
+ */
+function PlanSkeleton() {
+  return (
+    <Card padded={false}>
+      <View style={styles.skeletonPlanHead} />
+      {Array.from({ length: planWeekMetrics.rows }, (_, i) => (
+        <View key={i} style={styles.skeletonPlanRow} />
+      ))}
+    </Card>
+  );
+}
 
-  useEffect(() => {
-    let alive = true;
-    getProfile()
-      .then((p) => {
-        if (alive) setProfile(p);
-      })
-      .catch((err: unknown) => {
-        /*
-         * A 401 is not an outage, and it is not retryable: the device token is
-         * gone, wrong, or revoked server-side. End the session — the gate then
-         * unmounts this whole group and shows sign-in — rather than printing a
-         * transport error the athlete can do nothing about beside a "Try again"
-         * that can only ever fail.
-         *
-         * Deliberately NOT guarded by `alive`. A revoked token has to end the
-         * session whether or not this screen is still on the glass, and
-         * `signOut` sets state on the provider, not on this component.
-         */
-        if (isUnauthorized(err)) {
-          void signOut();
-          return;
-        }
-        if (alive) setFailed(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [attempt, signOut]);
+export default function RunsScreen() {
+  /*
+   * One shared `/me` for every screen that needs it, and one 401 path inside
+   * it — see lib/profileStore. Nothing about the load is this screen's to
+   * decide any more; all it does is read the three flags.
+   */
+  const { profile, state, refreshing, refresh } = useProfile();
+  const failed = state === "failed";
 
   /** Newest first. Dates are YYYY-MM-DD, so they sort lexically. */
   const runs = useMemo(
@@ -159,7 +187,9 @@ export default function RunsScreen() {
     return byDate;
   }, [profile]);
 
-  if (failed) {
+  // The whole-page failure is for having NOTHING. With runs already on screen
+  // the failure is one line in the header instead — see `Header`.
+  if (failed && !profile) {
     return (
       <Screen>
         <View style={styles.page}>
@@ -167,15 +197,13 @@ export default function RunsScreen() {
           <Card>
             <Text style={styles.failed}>Your runs could not be loaded.</Text>
             {/*
-             * Only ever reached by a transport failure, which is exactly the
-             * kind that a second attempt can clear. Dropping back to the
-             * skeleton is honest about the state: nothing is known yet.
+             * Only ever reached by a transport failure — a 401 leaves through
+             * the session gate — which is exactly the kind a second attempt can
+             * clear. Dropping back to the skeleton is honest about the state:
+             * nothing is known yet.
              */}
             <Pressable
-              onPress={() => {
-                setFailed(false);
-                setAttempt((n) => n + 1);
-              }}
+              onPress={() => void refresh()}
               accessibilityRole="button"
               style={styles.retry}
             >
@@ -191,6 +219,9 @@ export default function RunsScreen() {
     return (
       <Screen>
         <View style={styles.page}>
+          <View style={styles.plan}>
+            <PlanSkeleton />
+          </View>
           <Header count={null} />
           <View style={styles.rows}>
             {Array.from({ length: SKELETON_ROWS }, (_, i) => (
@@ -209,7 +240,35 @@ export default function RunsScreen() {
         keyExtractor={(run) => String(run.id)}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={Separator}
-        ListHeaderComponent={<Header count={runs.length} />}
+        /* A refetch never dims or shimmers what is already here: the spinner
+           says a request is out, the numbers stay exactly as true as they were. */
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+        }
+        /*
+         * The plan rides in the list header so the whole tab is ONE scroll —
+         * a second scroll view around seven rows would fight the log's.
+         *
+         * `taperMode` / `taperCountdown` / `adjustment` are optional on
+         * `Profile.plan` because `/api/mobile/home` omits them; this screen
+         * reads `/me`, which sends all three. The fallbacks are for the type,
+         * not for a state the athlete can reach: a missing field means the
+         * payload did not carry it, and each of the three then renders nothing
+         * rather than a claim.
+         */
+        ListHeaderComponent={
+          <>
+            <View style={styles.plan}>
+              <PlanWeek
+                days={profile.plan.days}
+                taperMode={profile.plan.taperMode ?? false}
+                taperCountdown={profile.plan.taperCountdown ?? null}
+                adjustment={profile.plan.adjustment ?? NO_ADJUSTMENT}
+              />
+            </View>
+            <Header count={runs.length} stale={failed} />
+          </>
+        }
         /*
          * Absent, not NoRun. An empty log means the payload carried no runs —
          * "we have nothing", not "the athlete rested". `plan.days` cannot
@@ -290,6 +349,24 @@ const styles = StyleSheet.create({
     backgroundColor: color.brand,
   },
   retryLabel: { ...text.baseSemi, color: color.ink },
+  /** The plan sits on the same section rhythm as the header below it. */
+  plan: { marginBottom: layout.section },
+  /**
+   * The plan skeleton's two shapes. `well` is the sunken fill, exactly as the
+   * run skeleton uses it — and unlike `Absent` there is no dashed border and no
+   * dash, so a placeholder can never be read as "not recorded".
+   */
+  skeletonPlanHead: {
+    height: planWeekMetrics.head,
+    backgroundColor: color.well,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+  },
+  skeletonPlanRow: {
+    height: planWeekMetrics.row,
+    borderTopWidth: ruleWidth,
+    borderTopColor: color.ruleSoft,
+  },
   skeletonHeader: {
     height: runCardMetrics.headerLine,
     width: "58%",

@@ -19,8 +19,27 @@
  * interstitial, no dismiss, and no tinted or alarmed surface: nothing here is
  * urgent enough to interrupt, and interrupting would make a description read as
  * a directive.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THE WHOLE CARD IS A BUTTON, and why that needed an explicit label.
+ *
+ * It opens `/activity/{id}`, mirroring the web log, where each row is a `<Link
+ * href={/activity/${r.id}}>` (tabs.tsx:320-351). The route is pushed from in
+ * here rather than handed down as a prop because the card already holds
+ * `run.id`, and a link that knows its own destination cannot be wired to the
+ * wrong one.
+ *
+ * React Native's `Pressable` marks ITSELF accessible, so the card becomes one
+ * element and its children stop being individually announced. Left alone, that
+ * would silently drop the 5,205-runner provenance from every screen reader —
+ * which is the same failure as deleting the paragraph, and
+ * `website/src/lib/risk.ts:352-353` requires it to survive. So the label below
+ * is composed from the SAME strings that render, spike sentence and provenance
+ * included: nothing is on the glass that is not also spoken.
+ * ─────────────────────────────────────────────────────────────────────────
  */
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 import { Advisory } from "./Advisory";
@@ -29,7 +48,7 @@ import { Absent } from "./Nothing";
 import { Stat } from "./Stat";
 import type { Flag, RunCardProps, SessionSpike } from "../lib/types";
 import { formatDistance, formatDuration, formatPace } from "../lib/units";
-import { layout, ruleWidth, space } from "../theme/space";
+import { layout, ruleWidth, space, target } from "../theme/space";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
@@ -152,61 +171,105 @@ function RouteGlyph() {
 }
 
 export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
+  const router = useRouter();
+
   // Null when there is no distance or no duration to divide. A pace that was
   // never run is absent, and absent is dashed — never a stand-in "0:00 /mi".
   const pace = formatPace(run.durationS, run.km);
 
+  const distance = formatDistance(run.km);
+  const duration = formatDuration(run.durationS);
+
+  /*
+   * Everything the card shows, in the order it shows it. See the header: the
+   * Pressable collapses the card into one accessibility element, so this is the
+   * only place the spike sentence and its provenance can be spoken from.
+   * `Absent` renders "—" over "Not recorded"; the label says the same words.
+   */
+  const spoken = [
+    dateLabel,
+    sessionLabel,
+    `Distance ${distance}`,
+    `Time ${duration}`,
+    pace === null ? "Pace not recorded" : `Pace ${pace}`,
+    run.spike ? `${SPIKE_FLAG[run.spike.level]} — ${spikeReason(run.spike)}` : null,
+    run.spike ? SPIKE_PROVENANCE : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(". ");
+
   return (
-    <Card>
-      <View style={styles.header}>
-        <Text style={styles.date}>{dateLabel}</Text>
-        {sessionLabel ? (
-          <Text style={styles.session}>{sessionLabel}</Text>
+    <Pressable
+      onPress={() => router.push(`/activity/${run.id}`)}
+      accessibilityRole="button"
+      accessibilityLabel={spoken}
+      accessibilityHint="Opens this run."
+      style={({ pressed }) => [styles.press, pressed && styles.pressed]}
+    >
+      <Card>
+        <View style={styles.header}>
+          <Text style={styles.date}>{dateLabel}</Text>
+          {sessionLabel ? (
+            <Text style={styles.session}>{sessionLabel}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.row}>
+          <View
+            style={styles.glyph}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <RouteGlyph />
+          </View>
+
+          <View style={styles.stats}>
+            <View style={styles.stat}>
+              {/* Sentence case at every call site: text.micro owns the
+                  uppercasing, so a shouted literal only splits the convention. */}
+              <Stat label="Distance" value={distance} />
+            </View>
+            <View style={styles.stat}>
+              <Stat label="Time" value={duration} />
+            </View>
+            <View style={styles.stat}>
+              {pace === null ? (
+                <Absent eyebrow="Pace" />
+              ) : (
+                <Stat label="Pace" value={pace} />
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* Unchanged by the card becoming a button: the advisory sentence AND
+            the provenance paragraph below it both still render in full. */}
+        {run.spike ? (
+          <View style={styles.spike}>
+            <Advisory
+              flag={SPIKE_FLAG[run.spike.level]}
+              reason={spikeReason(run.spike)}
+            />
+            <Text style={styles.provenance}>{SPIKE_PROVENANCE}</Text>
+          </View>
         ) : null}
-      </View>
-
-      <View style={styles.row}>
-        <View
-          style={styles.glyph}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        >
-          <RouteGlyph />
-        </View>
-
-        <View style={styles.stats}>
-          <View style={styles.stat}>
-            {/* Sentence case at every call site: text.micro owns the
-                uppercasing, so a shouted literal only splits the convention. */}
-            <Stat label="Distance" value={formatDistance(run.km)} />
-          </View>
-          <View style={styles.stat}>
-            <Stat label="Time" value={formatDuration(run.durationS)} />
-          </View>
-          <View style={styles.stat}>
-            {pace === null ? (
-              <Absent eyebrow="Pace" />
-            ) : (
-              <Stat label="Pace" value={pace} />
-            )}
-          </View>
-        </View>
-      </View>
-
-      {run.spike ? (
-        <View style={styles.spike}>
-          <Advisory
-            flag={SPIKE_FLAG[run.spike.level]}
-            reason={spikeReason(run.spike)}
-          />
-          <Text style={styles.provenance}>{SPIKE_PROVENANCE}</Text>
-        </View>
-      ) : null}
-    </Card>
+      </Card>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  /**
+   * The button around the card. The card is far taller than this on its own;
+   * the floor is here so the target can never fall under 48dp regardless of
+   * what the card ends up containing.
+   */
+  press: { minHeight: target.min },
+  /**
+   * State, not motion: a pressed card dims slightly and returns. No scale, no
+   * spring, nothing that a reduced-motion setting would need to suppress.
+   */
+  pressed: { opacity: 0.72 },
   /** Title left, note right. No local lineHeight: text.micro carries the one
    *  the metrics reserve, and both cells sit on the same one. */
   header: {

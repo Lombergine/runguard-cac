@@ -57,13 +57,125 @@ export type RecentRun = {
   spike: SessionSpike | null;
 };
 
+/**
+ * How the athlete marked a planned session.
+ *
+ * `null` is deliberately NOT a member: it is the absence of a status, and on the
+ * wire it is the signal to DELETE the row (POST /api/workout-status). Anything
+ * else the server rejects with a 400 — see `setWorkoutStatus` in lib/api.ts.
+ */
+export type WorkoutStatus = "done" | "modified" | "skipped";
+
+/**
+ * One point of a GPS trace. Named fields rather than a `[lat, lng]` tuple
+ * because the two are the same type and a silent swap draws a plausible-looking
+ * route in the wrong hemisphere.
+ */
+export type RoutePoint = { lat: number; lng: number };
+
+/**
+ * One run, opened on its own. The shape of `GET /api/mobile/activity/{id}`.
+ *
+ * THAT ROUTE IS THE CONTRACT, not this declaration — and it now exists, at
+ * website/src/app/api/mobile/activity/[id]/route.ts. This was written against
+ * the `activities` row before the route landed and diverged from it in three
+ * ways, every one of which would have arrived as `undefined` at runtime rather
+ * than failing to compile: a type is not a fence across HTTP. Verified field by
+ * field against the handler on 2026-08-11.
+ *
+ * Distance is METRES here, not the kilometres the rest of this file uses. The
+ * route names every number for its stored unit and the app converts at the
+ * boundary — `miNumFromMeters` in lib/units already exists for exactly this.
+ *
+ * `route` arrives PARSED. The column stores a JSON string that the web page
+ * re-parses permissively at render time; a phone should not repeat that, and a
+ * parse failure is the server's to turn into `null` rather than the screen's to
+ * discover.
+ *
+ * `avgPaceSecPerKm` is derived, but it is derived ON THE SERVER and shipped
+ * explicitly nullable, with the divide-by-zero guard the web page has at
+ * page.tsx:127. That is why it is safe to take: a screen dividing for itself
+ * would have to rediscover that a zero-distance run has no pace, and one that
+ * forgot would print `0:00/mi` as though it were a real one.
+ *
+ * Every nullable means NOT RECORDED, never zero: a run with no HR strap has
+ * `avgHr: null`, and it must render through `Absent`.
+ */
+export type ActivityDetail = {
+  id: number;
+  /**
+   * The raw sync source key — "healthkit" | "apple_export" | "strava" | "seed",
+   * or whatever a future importer writes. NEVER PRINT IT — print `sourceLabel`.
+   */
+  source: string;
+  /**
+   * The display name for `source`, already mapped by the server ("healthkit" →
+   * "Apple Watch"). Taken from the route rather than re-derived here so the two
+   * surfaces cannot drift apart on what to call a data source.
+   */
+  sourceLabel: string;
+  /** The activity's own title, e.g. "Morning Run". Null for most sources. */
+  name: string | null;
+  /** e.g. "Run". */
+  type: string;
+  /** ISO datetime — this is the one payload that HAS a time of day. */
+  startTime: string;
+  /** METRES. Convert through lib/units (`miNumFromMeters`) before display. */
+  distanceM: number;
+  durationS: number;
+  /** SECONDS PER KILOMETRE. Null when the run has no distance or no duration. */
+  avgPaceSecPerKm: number | null;
+  /** Beats per minute. */
+  avgHr: number | null;
+  maxHr: number | null;
+  /** METRES climbed. Convert through lib/units. */
+  elevationGainM: number | null;
+  /** Active kcal. */
+  calories: number | null;
+  /** Steps per minute. */
+  cadence: number | null;
+  /**
+   * The GPS trace, oldest point first. Null when the source recorded none —
+   * which is most of them. Fewer than 2 points cannot draw a line; say the
+   * route was not recorded rather than drawing an empty box.
+   */
+  route: RoutePoint[] | null;
+};
+
 export type PlanDay = {
   date: string;
   type: string;
+  /** KILOMETRES. Null on days that prescribe no distance — Rest, and RACE DAY. */
   distanceKm: number | null;
+  /**
+   * ALREADY UNIT-WELDED BY THE SERVER, e.g. "8:51/mi" (`fmtPaceMi` in
+   * website/src/lib/engine.ts). Print it verbatim in one text node; never split
+   * the numeral from its "/mi", and never re-derive it. Null on Rest and on
+   * RACE DAY, where the plan prescribes no pace.
+   */
+  targetPace: string | null;
+  /** One athlete-facing sentence on why the day is in the plan. Descriptive. */
+  why: string;
+  /** Athlete-facing prose on how to run it. */
+  details: string;
+  /** Optional strength / mobility work. Null on most days. */
+  supplemental: string | null;
   isToday: boolean;
-  status: "done" | "modified" | "skipped" | null;
+  /** True when this day falls inside the taper window before a race. */
+  isTaper: boolean;
+  status: WorkoutStatus | null;
 };
+
+/**
+ * How much this week's volume was eased, and the one sentence that says why.
+ * Mirrors `PlanAdjustment` in website/src/lib/engine.ts.
+ *
+ * `reason` is null when nothing was eased — that is the whole test for whether
+ * the plan-adjustment line has anything to say. It is written in the second
+ * person and is DESCRIPTIVE ("Volume eased 10% because…"); render it as
+ * description, never as an instruction and never on an alert surface.
+ */
+export type PlanAdjustment = { scale: number; reason: string | null };
 
 /**
  * Wearable-derived recovery. Mirrors `RecoverySnapshot` in
@@ -174,9 +286,19 @@ export type ZoneMinutes = { z1: number; z2: number; z3: number; z4: number; z5: 
 export type Fitness = {
   score: number;
   tier: "Elite" | "Advanced" | "Intermediate" | "Developing";
+  /** This week against the average of the last four (engine.ts:199). */
+  trend?: "improving" | "plateau" | "declining";
   /** Season trend line; `week` is already a formatted label, e.g. "Mar 3". */
   weekly: { week: string; score: number }[];
-  /** 0–100 form / "Body Battery". Higher = fresher. */
+  /**
+   * 0–100 form / "Body Battery". Higher = fresher.
+   *
+   * NEVER NULL, AND THAT IS THE TRAP. `engine.ts:260` falls back to `ratio = 1`
+   * when chronic load is under 25, so an athlete who has never run scores a
+   * confident 67 — the same "a number computed from nothing" failure as
+   * `readiness` returning 100. A null check cannot protect this one; gate it on
+   * `risk.hasActivityHistory` before showing it, as the recovery screen does.
+   */
   freshness: number;
   vo2max: number | null;
 };
@@ -253,6 +375,17 @@ export type Injury = {
   resolved_at: string | null;
 };
 
+/**
+ * How a race felt. The only three words POST /api/race-result stores — it drops
+ * anything else to null silently rather than returning a 400, so a typo here
+ * loses the answer without saying so.
+ *
+ * `RaceHistoryEntry.feel` stays a bare `string | null`: that is what comes back
+ * out of the database, and narrowing a response to a union the column does not
+ * enforce would be a claim this file cannot keep.
+ */
+export type RaceFeel = "great" | "ok" | "rough";
+
 /** One finished race. Mirrors `CoreProfile.races.history[number]`. */
 export type RaceHistoryEntry = {
   id: number;
@@ -272,6 +405,61 @@ export type RaceHistoryEntry = {
 
 /** A point on a PR progression line. `timeS` is seconds — format before display. */
 export type PrPoint = { date: string; timeS: number };
+
+/**
+ * A season best. Mirrors `PRRecord` in website/src/lib/profile.ts.
+ *
+ * `timeS` is null when the athlete has never raced this event, and `label` is
+ * then the bare string "—" (profile.ts:363). DO NOT PRINT THAT LABEL: an em dash
+ * on its own is the one thing the spec's three-kinds-of-nothing rule exists to
+ * prevent, because it reads as a value that happens to be blank. Branch on
+ * `timeS` and render `Absent`, which says *why* there is no number.
+ */
+export type PRRecord = {
+  /** The event contested, e.g. "5K". Already a display string. */
+  event: string;
+  /** Seconds, or null if never raced. */
+  timeS: number | null;
+  /** Pre-formatted, e.g. "18:42". Only meaningful when `timeS` is non-null. */
+  label: string;
+};
+
+/**
+ * Model-predicted times, keyed by event name. Mirrors `Predictions` in
+ * website/src/lib/engine.ts.
+ *
+ * These are predictions, not results. Every surface that shows one is gated on
+ * `risk.hasActivityHistory` — a model given nothing still returns a confident
+ * number, and it is the same failure as readiness scoring 100 from no data.
+ */
+export type Predictions = Record<string, { timeS: number; label: string }>;
+
+/**
+ * An achievement. Mirrors `Badge` in website/src/lib/engine.ts.
+ *
+ * `detail` is prose, and the website parses a figure back out of it to show the
+ * longest streak (tabs.tsx:468-472). Prefer a real field if one ever appears;
+ * treat a missing or unparseable badge as `Absent`, never as zero.
+ */
+export type Badge = { id: string; label: string; earned: boolean; detail: string };
+
+/**
+ * A season goal. Mirrors `CoreProfile.goals`.
+ *
+ * `predicted` is null and `onTrack` is null when there is not enough history to
+ * say — which is NOT the same as being off track, and must not render as a
+ * failed goal.
+ */
+export type Goal = {
+  event: string;
+  /** Seconds. */
+  target: number;
+  /** Pre-formatted target, e.g. "17:30". */
+  targetLabel: string;
+  /** Pre-formatted current prediction, or null if unknown. */
+  predicted: string | null;
+  onTrack: boolean | null;
+};
 
 /** The slice of CoreProfile the app consumes. The endpoint returns much more. */
 export type Profile = {
@@ -299,7 +487,24 @@ export type Profile = {
   todayCheckin: CheckinRow | null;
   todaySoreness: SorenessEntry[];
   recentRuns: RecentRun[];
-  plan: { days: PlanDay[] };
+  /**
+   * This week's plan, Monday–Sunday.
+   *
+   * `days` is required because BOTH endpoints send it. The other three are
+   * OPTIONAL because only `/api/mobile/me` does: `/api/mobile/home` narrows the
+   * object to `{ days }` (see that route's handler), and home code takes this
+   * same type through `ProfileWithNextRace`. Declaring them required would be a
+   * claim the home payload does not keep — a screen would read `taperMode` as
+   * `undefined` while the type promised a boolean. Treat `undefined` here as
+   * "this payload did not carry it", not as false/none.
+   */
+  plan: {
+    days: PlanDay[];
+    taperMode?: boolean;
+    /** Whole days to the race, 0–6. Null outside taper week. */
+    taperCountdown?: number | null;
+    adjustment?: PlanAdjustment;
+  };
   risk: {
     hasActivityHistory: boolean;
     weekKm: number;
@@ -348,11 +553,17 @@ export type Profile = {
   /** Season bests. */
   stats?: PersonalStats;
   /**
-   * Only the zone breakdown is taken from /me's fuller `load` object; the rest
-   * of it duplicates `risk` (weekKm, acwr, acute/chronic) and would give two
-   * places to read one number.
+   * Two fields are taken from /me's fuller `load` object. The rest of it
+   * duplicates `risk` (weekKm, acwr, acute/chronic) and would give two places to
+   * read one number.
+   *
+   * `weekTrimp` is training impulse over the last 7 days — duration weighted
+   * sharply by heart rate, so two runs of the same distance can score very
+   * differently. Runs synced without heart-rate data contribute ZERO, which is
+   * why this figure can look low for a real week of training; say so wherever it
+   * is shown rather than letting it read as an easy week.
    */
-  load?: { weekZones: ZoneMinutes };
+  load?: { weekZones: ZoneMinutes; weekTrimp: number };
   /**
    * /me's full `races`. The whole object is optional because /home's payload
    * is not /me's, but `upcoming` stays required INSIDE it: both endpoints
@@ -367,6 +578,28 @@ export type Profile = {
     /** Keyed by event name; each list is improvements only, oldest first. */
     prProgression?: Record<string, PrPoint[]>;
   };
+  /** Season bests, one per event the team contests. */
+  prs?: PRRecord[];
+  /** Model-predicted times, keyed by event name. */
+  predictions?: Predictions;
+  badges?: Badge[];
+  goals?: Goal[];
+  /**
+   * Season pace trend, one entry per week. `pace` is SECONDS PER KILOMETRE and
+   * null for a week with no qualifying run — a missing week is not a slow week.
+   */
+  paceSeason?: { week: string; pace: number | null }[];
+  /** Weekly distance. KILOMETRES. */
+  weeks?: { week: string; km: number }[];
+  /**
+   * A year of daily load — `yearDays` on the server, renamed by
+   * /api/mobile/me. A day with no run is PRESENT with `load: 0`; a day before
+   * the athlete's first record is absent from the array entirely. Those are two
+   * different nothings and the calendar renders them differently.
+   */
+  calendar?: { date: string; load: number; km: number }[];
+  /** Every source that has ever written data for this athlete, e.g. "strava". */
+  connectedSources?: string[];
 };
 
 /**
@@ -485,10 +718,59 @@ export type ChatBubbleProps = {
   text: string;
 };
 
-export type BodyMapProps = {
-  /** Body-part keys currently selected, from lib/bodyParts. */
-  selected: string[];
-  onToggle: (partKey: string) => void;
-  /** Severity by part key, 0–10, for display intensity. */
-  severity?: Record<string, number>;
+/**
+ * One lit region on a read-only body map.
+ *
+ * `side` names a HALF OF THE DRAWING, not a clinical side, and it is already
+ * resolved: the caller expands "both" (and a lateral part stored with no side
+ * at all) into two marks before it gets here, so the map never has to parse a
+ * part string. `null` is the centreline, for the parts that have no sides.
+ */
+export type BodyMark = {
+  /** Body-part key from lib/bodyParts. */
+  key: string;
+  side: "left" | "right" | null;
+  kind: "injury" | "soreness";
+  /** 0–10. Omitted for an injury, which always draws at full weight. */
+  severity?: number;
 };
+
+/**
+ * The body map's two modes, as a UNION RATHER THAN A FLAG.
+ *
+ * Same rationale as `bubbleText` in ../components/ChatBubble.tsx: the wrong
+ * call must fail at compile time, not render something plausible. A `readonly`
+ * boolean would let a display map be handed an `onToggle` (silently ignored, or
+ * silently tappable) and let a picker be built without one. Here the two
+ * members are structurally exclusive — the `?: never` guards are the mechanism,
+ * not decoration, because TypeScript's excess-property check against a union
+ * admits any key declared in ANY member, so without them `onToggle` would slip
+ * onto a read-only map unremarked.
+ *
+ * Note there is no literal `mode` tag: the picker member is exactly the shape
+ * the existing call sites already pass, so they keep compiling untouched.
+ */
+export type BodyMapProps =
+  /** PICKER — interactive soreness entry. `onToggle` is non-negotiable. */
+  | {
+      /** Body-part keys currently selected, from lib/bodyParts. */
+      selected: string[];
+      onToggle: (partKey: string) => void;
+      /** Severity by part key, 0–10, for display intensity. */
+      severity?: Record<string, number>;
+      marks?: never;
+      accessibilityLabel?: never;
+    }
+  /** READ-ONLY — a rendered scan. No hit boxes exist in this mode at all. */
+  | {
+      marks: readonly BodyMark[];
+      /**
+       * Required, because the marks are SVG shapes with no text of their own
+       * and a touch device has no tooltip to fall back on. One sentence
+       * summarising every mark.
+       */
+      accessibilityLabel: string;
+      selected?: never;
+      onToggle?: never;
+      severity?: never;
+    };

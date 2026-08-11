@@ -11,6 +11,7 @@ import {
 } from "@expo-google-fonts/source-sans-3";
 import { SplineSansMono_500Medium } from "@expo-google-fonts/spline-sans-mono";
 
+import { ProfileProvider } from "../lib/profileStore";
 import { SessionProvider, useSession } from "../lib/session";
 import { color } from "../theme/tokens";
 
@@ -73,30 +74,47 @@ function Gate() {
   const signedIn = status === "in";
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: color.bg },
-        animation: "fade",
-      }}
-    >
-      <Stack.Protected guard={signedIn}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="chat" />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="connect" />
-      </Stack.Protected>
+    /*
+     * `key={status}` IS THE DESIGN — do not "simplify" it away.
+     *
+     * The profile store holds a 57 KB snapshot of one athlete. On "in" → "out"
+     * the changed key makes React throw this entire subtree away and mount a
+     * fresh one, and every athlete byte the store was holding goes with it.
+     * There is no clear-on-sign-out function for anyone to forget to call, no
+     * effect that has to win a race against the next render, and no way to add
+     * a field to the store that survives sign-out by accident.
+     */
+    <ProfileProvider key={status}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: color.bg },
+          animation: "fade",
+        }}
+      >
+        <Stack.Protected guard={signedIn}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="chat" />
+          <Stack.Screen name="profile" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="connect" />
+          {/* One run, opened from the log. It shows an athlete's own training
+              data, so it belongs inside the guard with the rest: signed out it
+              never mounts, and a deep link to /activity/12 has nothing to
+              resolve to. */}
+          <Stack.Screen name="activity/[id]" />
+        </Stack.Protected>
 
-      <Stack.Protected guard={!signedIn}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="signup" />
-        <Stack.Screen name="pair" />
-      </Stack.Protected>
+        <Stack.Protected guard={!signedIn}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="signup" />
+          <Stack.Screen name="pair" />
+        </Stack.Protected>
 
-      {/* Reachable either way: required by App Review, and contains nothing
-          athlete-derived. */}
-      <Stack.Screen name="privacy" />
-    </Stack>
+        {/* Reachable either way: required by App Review, and contains nothing
+            athlete-derived. */}
+        <Stack.Screen name="privacy" />
+      </Stack>
+    </ProfileProvider>
   );
 }

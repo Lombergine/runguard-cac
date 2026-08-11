@@ -5,11 +5,36 @@
  * Shapes here are keyed to the real route handlers:
  *   website/src/app/api/mobile/me/route.ts
  *   website/src/app/api/mobile/home/route.ts
+ *   website/src/app/api/mobile/activity/[id]/route.ts
  *   website/src/app/api/checkin/route.ts
  *   website/src/app/api/chat/route.ts
+ *   website/src/app/api/workout-status/route.ts
+ *   website/src/app/api/race/route.ts, race/[id]/route.ts, race-result/route.ts
  * Read those rather than trusting these comments if the two ever disagree.
+ *
+ * ── NEVER SEND `athleteId` ──────────────────────────────────────────────────
+ * Every shared (non-/api/mobile) route below opens with
+ * `resolveAthlete(request, body.athleteId ?? null)`. That id is the SCOPE
+ * argument: `resolveAthleteWithPath` (website/src/lib/apiAuth.ts) skips the
+ * scope comparison entirely when it is null and hands back the athlete the
+ * Bearer token belongs to — which is the only athlete this app may ever act as.
+ *
+ * So the app omits the field, always. Sending it cannot widen access — a
+ * mismatch just makes the route answer 401 — but it is a value the client has
+ * no business choosing, it is one typo away from locking the athlete out of
+ * their own check-in, and every request body in this module is written without
+ * it so that there is no template to copy the mistake from. The routes are
+ * shared with the coach dashboard, which is the caller that legitimately needs
+ * to name an athlete; the app is not.
  */
-import type { ChatMessage, Profile, ProfileWithNextRace } from "./types";
+import type {
+  ActivityDetail,
+  ChatMessage,
+  Profile,
+  ProfileWithNextRace,
+  RaceFeel,
+  WorkoutStatus,
+} from "./types";
 import { getToken } from "./auth";
 
 /**
@@ -212,38 +237,232 @@ export async function setHrMax(value: number | null): Promise<void> {
  * Check-in
  * ------------------------------------------------------------------ */
 
+type CheckinScores = {
+  /** 1–10. Anything outside the range is stored as null, not rejected. */
+  rpe?: number;
+  energy?: number;
+  motivation?: number;
+  academicStress?: boolean;
+};
+
+/**
+ * The soreness half, as a UNION rather than two loose optional keys.
+ *
+ * A severity has no meaning without the part it describes, and the route agrees
+ * in the harshest way: it reads `sorenessSeverity` only INSIDE the
+ * `if (typeof body.sorenessPart === "string" && …)` branch, so a partless
+ * severity is not rejected — it is silently dropped, and the route still answers
+ * `{ ok: true }`. A screen that sent one would show the athlete a receipt for a
+ * number the server never stored. The union makes that unsendable.
+ *
+ * It also makes the two legs of the pair mandatory TOGETHER, which the previous
+ * pair of independent optionals did not. `{ sorenessPart }` alone used to
+ * compile and, because the route folds an out-of-range severity to null, it
+ * DELETED that part's soreness. Clearing is a real operation, but it must be
+ * asked for — `severity: null` — not arrived at by forgetting a field.
+ *
+ * Written as flat `sorenessPart` / `sorenessSeverity` keys, matching the wire,
+ * rather than a nested `soreness: { part, severity }` object: nesting would read
+ * better but would need an edit to every existing call site, and this module
+ * does not own those files.
+ */
+type CheckinSoreness =
+  | { sorenessPart?: undefined; sorenessSeverity?: undefined }
+  | {
+      /** A key from lib/bodyParts. */
+      sorenessPart: string;
+      /**
+       * 0–10, or **null to DELETE** this part's soreness for today. The route
+       * range-checks: anything outside 0–10 is treated as null, i.e. as a
+       * delete. Truncated to 60 characters server-side.
+       */
+      sorenessSeverity: number | null;
+    };
+
 /**
  * POST /api/checkin body.
  *
  * Not in types.ts (which describes server responses and component props), so it
- * is defined here — the one request shape this module owns.
+ * is defined here — the request shapes this module owns.
  *
  * Two things the route does that the caller must know:
  *  - The date is ALWAYS server-side local (`localDay()`); you cannot send one.
  *    A phone in a different timezone from the server files under the server's
  *    day.
  *  - Exactly ONE soreness part per request. Report three sore parts with three
- *    calls.
+ *    calls. Each call also re-upserts the scores half, so send the scores once
+ *    and then the parts, or send the same scores every time.
  */
-export type CheckinInput = {
-  /** 1–10. Anything outside the range is stored as null, not rejected. */
-  rpe?: number;
-  energy?: number;
-  motivation?: number;
-  academicStress?: boolean;
-  /** A key from lib/bodyParts. */
-  sorenessPart?: string;
+export type CheckinInput = CheckinScores & CheckinSoreness;
+
+/**
+ * Returns `{ ok: true }`; there is nothing in it worth handing back.
+ *
+ * The non-finite severity guard is the same trap `setHrMax` documents, pointed
+ * at a different destructive write: `JSON.stringify({ sorenessSeverity: NaN })`
+ * emits `null`, and null is this route's CLEAR signal. So
+ * `postCheckin({ sorenessPart: p, sorenessSeverity: Number(field) })` over an
+ * unparseable entry would wipe that part's soreness and report success. Refused
+ * before the request, with a 400 the caller shows exactly like the server's.
+ */
+export async function postCheckin(body: CheckinInput): Promise<void> {
+  const severity = body.sorenessSeverity;
+  if (severity !== undefined && severity !== null && !Number.isFinite(severity)) {
+    throw new ApiError(400, "Enter how sore that area is as a number from 0 to 10.");
+  }
+  await request<{ ok: true }>("/api/checkin", { method: "POST", body });
+}
+
+/* ------------------------------------------------------------------ *
+ * Plan
+ * ------------------------------------------------------------------ */
+
+/**
+ * POST /api/workout-status — mark one planned day done, modified or skipped,
+ * or pass **null** to clear the mark (the route DELETEs the row).
+ *
+ * Clearing is not skipping. `null` returns the day to "not marked", which is
+ * what `PlanDay.status: null` means everywhere else; "skipped" is a thing the
+ * athlete told us. Do not offer one as a way of expressing the other.
+ *
+ * `date` IS the client's to send here, unlike the check-in's — the athlete is
+ * marking a day of the plan, which may not be today. It must be YYYY-MM-DD;
+ * `PlanDay.date` already is, so pass it straight through rather than formatting
+ * one. The route takes the first 10 characters, then 400s if what is left does
+ * not match the pattern, and 400s the same way on a status that is not one of
+ * the three words or null. Both messages are the server's and arrive as
+ * `ApiError.message`.
+ *
+ * Hands nothing back, for the reason the profile writes do: the marked day
+ * changes the plan the next fetch returns.
+ */
+export async function setWorkoutStatus(
+  date: string,
+  status: WorkoutStatus | null
+): Promise<void> {
+  await request<{ ok: true }>("/api/workout-status", {
+    method: "POST",
+    body: { date, status },
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Races
+ * ------------------------------------------------------------------ */
+
+/** POST /api/race body. */
+export type RaceInput = {
+  /** The meet's name. Truncated to 120 characters server-side. */
+  name: string;
   /**
-   * 0–10, or **null to DELETE** this part's soreness for today. Omitting
-   * `sorenessSeverity` while sending a `sorenessPart` also deletes it, because
-   * the route treats an out-of-range value as null.
+   * YYYY-MM-DD, and NOT in the past. The route compares against ITS OWN
+   * `localDay()`, so an athlete a day ahead of the server can have a date that
+   * looks like tomorrow to them rejected as past. Show the server's sentence
+   * rather than pre-judging the date on the phone.
    */
-  sorenessSeverity?: number | null;
+  date: string;
+  /** The distance contested, e.g. "5K". Truncated to 20 characters. */
+  event: string;
+  /** METRES, and must be > 0. */
+  distanceM: number;
+  /** Truncated to 120 characters. */
+  location?: string;
 };
 
-/** Returns `{ ok: true }`; there is nothing in it worth handing back. */
-export async function postCheckin(body: CheckinInput): Promise<void> {
-  await request<{ ok: true }>("/api/checkin", { method: "POST", body });
+/**
+ * POST /api/race — add a race to the athlete's own calendar.
+ *
+ * Every rejection here is a sentence written for a person, and each one names
+ * the field: "Please fill in: race name, distance." for a missing or
+ * non-positive value, "That race date is in the past — pick an upcoming date."
+ * for the date. `request()` lifts the body's `error` string onto
+ * `ApiError.message`, so a form shows `err.message` verbatim — do not restate
+ * these checks in the client, or the form and the server will disagree about
+ * which one is true.
+ *
+ * The route replies `{ ok: true, race }` with the inserted row. Discarded on
+ * purpose: the races screen refetches, because the new race needs `daysUntil`,
+ * `pacing`, `predicted` and `canEdit` computed alongside every other race, and
+ * `race` carries none of them.
+ */
+export async function createRace(input: RaceInput): Promise<void> {
+  await request<{ ok: true }>("/api/race", { method: "POST", body: input });
+}
+
+/**
+ * DELETE /api/race/{id} — remove a race the athlete created.
+ *
+ * Sends no body: the route's `request.json().catch(() => ({}))` treats an empty
+ * one as `{}`, which is exactly the athleteId-free scope this app wants.
+ *
+ * **403, not 404**, when the race is not the athlete's — coach- and seed-created
+ * races are on the athlete's calendar but not theirs to delete, which is what
+ * `UpcomingRace.canEdit` is false for. Gate the button on `canEdit` so the
+ * refusal is not the first the athlete hears of it, and surface the server's
+ * "Not found or not yours to delete" if one gets through anyway.
+ */
+export async function deleteRace(raceId: number): Promise<void> {
+  await request<{ ok: true }>(`/api/race/${raceId}`, { method: "DELETE" });
+}
+
+/** POST /api/race-result body. */
+export type RaceResultInput = {
+  /** e.g. "5K". Truncated to 20 characters server-side. */
+  event: string;
+  /**
+   * Seconds, STRICTLY between 30 and 7200 — the route tests `> 30 && < 7200`,
+   * so 30 and 7200 exactly are both rejected, and both ends are exclusive.
+   */
+  timeS: number;
+  /** YYYY-MM-DD. Omitted, the route files it under its own local today. */
+  date?: string;
+  /** Finishing position. */
+  place?: number;
+  /**
+   * How it felt. The route DROPS anything outside these three words to null
+   * without complaining, so this union is the only thing standing between a
+   * typo and a silently lost answer.
+   */
+  feel?: RaceFeel;
+  /** Free text, e.g. "cold, windy". Truncated to 120 characters. */
+  conditions?: string;
+};
+
+/**
+ * POST /api/race-result — log a finished race.
+ *
+ * The route's only 400 is "Need event and timeS (seconds)", and it is what an
+ * out-of-range `timeS` produces too: a non-number, a NaN (which
+ * `JSON.stringify` sends as null), and a 4-hour marathon all land on that one
+ * sentence. A form should therefore say what the bounds ARE next to the field,
+ * rather than relying on the rejection to explain itself.
+ *
+ * Appends a row every time — there is no upsert and no id to update. Two taps
+ * are two results, so the caller must not retry blind on a timeout.
+ */
+export async function logRaceResult(input: RaceResultInput): Promise<void> {
+  await request<{ ok: true }>("/api/race-result", { method: "POST", body: input });
+}
+
+/* ------------------------------------------------------------------ *
+ * Activity
+ * ------------------------------------------------------------------ */
+
+/**
+ * GET /api/mobile/activity/{id} — one run in full.
+ *
+ * The route is the contract; `ActivityDetail` in types.ts records what this
+ * module expects of it and why. It did not exist when this was written.
+ *
+ * Ownership is the ROUTE's to enforce, exactly as the web detail page does
+ * (`activity.athlete_id !== athlete.id` → notFound): ids are sequential, so
+ * anything less hands every athlete every other athlete's runs. Nothing the app
+ * can do substitutes for that check.
+ *
+ * No `stripDeviceToken` — this payload has no `athlete` object to carry one.
+ */
+export async function getActivity(id: number): Promise<ActivityDetail> {
+  return request<ActivityDetail>(`/api/mobile/activity/${id}`);
 }
 
 /* ------------------------------------------------------------------ *

@@ -17,41 +17,36 @@
  * `risk.hasActivityHistory`. That includes `race.pacing`, whose sentences quote
  * the predicted splits back at you.
  *
- * `UpcomingRace` comes from lib/types. `races.history` does not exist in that
- * contract yet, so `RaceResult` below narrows the real payload
- * (`CoreProfile.races.history` in website/src/lib/profile.ts) to the fields this
- * screen reads — local on purpose; types.ts stays untouched.
+ * `UpcomingRace` and `RaceHistoryEntry` both come from lib/types, which is the
+ * single declaration of what /api/mobile/me sends. This screen used to narrow
+ * the history leg locally, because the contract did not carry it; it does now,
+ * and two descriptions of one payload are free to drift apart.
  */
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
 import { Stat } from "../../components/Stat";
-import { getProfile, isUnauthorized } from "../../lib/api";
+import { AddRaceForm, RemoveRace } from "../../components/AddRaceForm";
+import { LogResultForm } from "../../components/LogResultForm";
+import { PrChart } from "../../components/charts/PrChart";
 import { dayLabel } from "../../lib/dates";
-import { useSession } from "../../lib/session";
-import type { Profile, UpcomingRace } from "../../lib/types";
+import { fmtDuration } from "../../lib/units";
+import { useProfile } from "../../lib/profileStore";
+import type { Profile, RaceHistoryEntry, UpcomingRace } from "../../lib/types";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
-import { text } from "../../theme/type";
-
-type RaceResult = {
-  id: number;
-  event: string;
-  date: string;
-  /** Pre-formatted finishing time, e.g. "18:42". */
-  time: string;
-  place: number | null;
-  isPr: boolean;
-};
-
-/** `Profile["races"]` plus the history leg, which the contract does not carry. */
-type WithRaces = Omit<Profile, "races"> & {
-  races?: { upcoming: UpcomingRace[]; history?: RaceResult[] };
-};
+import { font, text } from "../../theme/type";
 
 /**
  * Inside this many days the card wears the ember strip. Ported from the
@@ -89,8 +84,11 @@ function countLabel(n: number): string {
  * at zero: an empty card is Absent, and "0 races" would state a measured fact
  * we do not have. The figure sits beside the heading, so nothing shifts
  * vertically when it appears.
+ *
+ * `stale` adds ONE quiet line when a refetch failed over races already on
+ * screen. The whole-page failure below stays reserved for having nothing.
  */
-function Header({ count }: { count: number | null }) {
+function Header({ count, stale }: { count: number | null; stale?: boolean }) {
   return (
     <View style={styles.header}>
       <Text style={styles.eyebrow}>Race log</Text>
@@ -103,6 +101,11 @@ function Header({ count }: { count: number | null }) {
       <Text style={styles.note}>
         {"What is coming, and what you have already run."}
       </Text>
+      {stale ? (
+        <Text style={styles.note}>
+          Could not reach your server just now. These are the races last loaded.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -146,10 +149,12 @@ function Pacing({ lines, predicted }: { lines: string[]; predicted: string }) {
 function UpcomingCard({
   race,
   predictionKnown,
+  onChanged,
 }: {
   race: UpcomingRace;
   /** `risk.hasActivityHistory`. False = the model has nothing to stand on. */
   predictionKnown: boolean;
+  onChanged: () => void;
 }) {
   const soon = race.daysUntil <= IMMINENT_DAYS;
   return (
@@ -193,12 +198,89 @@ function UpcomingCard({
             <Absent eyebrow="Predicted" label="Not enough data yet." />
           </View>
         )}
+
+        {/*
+          The website's pre-race checklist (tabs.tsx:700-705), reworded and
+          gated.
+
+          REWORDED because a checklist is imperative by construction and
+          non-negotiable #5 says the app describes rather than instructs. Four
+          `☐` boxes with orders beside them is the most instructional thing the
+          app could render, and it would sit next to a green tick glyph that
+          § "Nothing shouts" also rules out. What survives is the same four
+          facts, stated as what athletes usually do — which is what the list was
+          actually telling you.
+
+          GATED because a checklist for a race five months away is noise. It
+          appears inside the same imminence window the ember strip uses, so the
+          card grows detail as the race gets close rather than carrying it all
+          season.
+        */}
+        {soon ? (
+          <View style={styles.checklist}>
+            <Text style={styles.checklistHead}>In the last few days</Text>
+            {PRE_RACE.map((line) => (
+              <Text key={line} style={styles.checklistLine}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Renders null unless `canEdit` — coach-added and seeded races are not
+            the athlete's to remove, and the server agrees on the same
+            comparison, so this is the boundary and not a hint. */}
+        <RemoveRace race={race} onChanged={onChanged} />
       </View>
     </Card>
   );
 }
 
-function ResultRow({ result }: { result: RaceResult }) {
+/**
+ * How the race went, in the athlete's own word.
+ *
+ * `feel` is null when they did not say — which is NOT "ok". The form that writes
+ * this deliberately pre-selects nothing (the website defaults to "ok", so an
+ * athlete who touches neither control stores a verdict they never gave), and
+ * that care would be undone here by printing a default. A missing feel renders
+ * nothing at all rather than a neutral-looking word.
+ *
+ * No colour on any of the three: "rough" is a description of a race, not a
+ * failure to style in red (non-negotiable #5).
+ */
+/**
+ * The website's four checklist items, restated as description.
+ *
+ *   "8+ hours of sleep the two nights before"
+ *     → "Most people sleep 8+ hours on each of the two nights before."
+ *   "Carbs + water with every meal the day prior"
+ *     → "The day before usually means carbohydrate and water with every meal."
+ *   "Kit laid out the night before"
+ *     → "Kit is usually laid out the night before."
+ *   "20 min warmup + 4 strides, done 15 min before the gun"
+ *     → "A warm-up is usually 20 minutes plus four strides, finishing about 15
+ *        minutes before the gun."
+ *
+ * Same four facts, same numbers, no imperative verb and no checkbox. The last
+ * one is also the wording `lib/workout`'s race-day block already uses, so the
+ * two places that describe a warm-up agree.
+ */
+const PRE_RACE = [
+  "Most people sleep 8+ hours on each of the two nights before.",
+  "The day before usually means carbohydrate and water with every meal.",
+  "Kit is usually laid out the night before.",
+  "A warm-up is usually 20 minutes plus four strides, finishing about 15 minutes before the gun.",
+] as const;
+
+const FEEL_WORD: Record<string, string> = {
+  great: "felt great",
+  ok: "felt ok",
+  rough: "felt rough",
+};
+
+function ResultRow({ result }: { result: RaceHistoryEntry }) {
+  const feel = result.feel ? FEEL_WORD[result.feel] : null;
+  const splits = result.splits ?? null;
   return (
     <View style={styles.resultRow}>
       <View style={styles.resultLeft}>
@@ -206,6 +288,26 @@ function ResultRow({ result }: { result: RaceResult }) {
           {`${dayLabel(result.date)} · ${result.event}`}
         </Text>
         <Text style={styles.time}>{result.time}</Text>
+
+        {/*
+          Splits, conditions and feel have been on the payload and declared in
+          lib/types since the app was built, and rendered nowhere until now.
+
+          Splits wrap as a mono run of times rather than becoming a table: a
+          variable-length list of 3–12 figures has no column count that works at
+          360px, and every one goes through fmtDuration so none is a bare
+          numeral (non-negotiable #3).
+        */}
+        {splits && splits.length > 0 ? (
+          <Text style={styles.splits}>
+            {splits.map((s) => fmtDuration(s)).join("  ·  ")}
+          </Text>
+        ) : null}
+        {feel || result.conditions ? (
+          <Text style={styles.raceNote}>
+            {[feel, result.conditions].filter(Boolean).join(" · ")}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.resultRight}>
         {result.isPr ? <Text style={styles.pr}>PR</Text> : null}
@@ -222,34 +324,12 @@ function ResultRow({ result }: { result: RaceResult }) {
 }
 
 export default function RacesScreen() {
-  const [profile, setProfile] = useState<WithRaces | null>(null);
-  const [failed, setFailed] = useState(false);
-  /** Bumped by the retry button; the only reason this effect runs twice. */
-  const [attempt, setAttempt] = useState(0);
-  const { signOut } = useSession();
-
-  useEffect(() => {
-    let alive = true;
-    getProfile()
-      .then((p) => {
-        if (alive) setProfile(p);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        // A 401 is not an outage and retrying cannot fix it — the token is
-        // gone, wrong, or belongs to a deleted athlete. Hand it to the gate,
-        // which clears every stored key and unmounts this navigator; this
-        // screen must not offer a "try again" that can only ever 401 again.
-        if (isUnauthorized(err)) {
-          void signOut();
-          return;
-        }
-        setFailed(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [attempt, signOut]);
+  // Shared `/me`, and with it the single 401 path — a revoked token ends the
+  // session from inside the store rather than from five separate catch blocks.
+  const { profile: shared, state, refreshing, refresh, invalidate } = useProfile();
+  /** `races.history` is not in the contract yet — see Profile. */
+  const profile: Profile | null = shared;
+  const failed = state === "failed";
 
   /** Soonest first. YYYY-MM-DD sorts lexically. */
   const upcoming = useMemo(
@@ -269,7 +349,8 @@ export default function RacesScreen() {
     [profile],
   );
 
-  if (failed) {
+  // Only with nothing on screen. A failed refetch over loaded races keeps them.
+  if (failed && !profile) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
@@ -277,10 +358,7 @@ export default function RacesScreen() {
           <Card>
             <Text style={styles.failed}>Your races could not be loaded.</Text>
             <Pressable
-              onPress={() => {
-                setFailed(false);
-                setAttempt((n) => n + 1);
-              }}
+              onPress={() => void refresh()}
               accessibilityRole="button"
               accessibilityLabel="Try loading your races again"
               style={styles.retry}
@@ -312,8 +390,15 @@ export default function RacesScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.page}>
-        <Header count={upcoming.length + history.length} />
+      <ScrollView
+        contentContainerStyle={styles.page}
+        /* Pull to refetch. Nothing below dims while it runs — a predicted time
+           that fades reads as a prediction losing confidence, which it is not. */
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+        }
+      >
+        <Header count={upcoming.length + history.length} stale={failed} />
 
         <View style={styles.sections}>
           <View style={styles.section}>
@@ -333,9 +418,11 @@ export default function RacesScreen() {
                   key={race.id}
                   race={race}
                   predictionKnown={predictionKnown}
+                  onChanged={invalidate}
                 />
               ))
             )}
+            <AddRaceForm onChanged={invalidate} />
           </View>
 
           <View style={styles.section}>
@@ -354,6 +441,14 @@ export default function RacesScreen() {
                 ))}
               </Card>
             )}
+            <LogResultForm onChanged={invalidate} />
+          </View>
+
+          {/* PR progression. Owns its own Card and head — do not wrap it.
+              Below History on purpose: the times themselves come first, and
+              this says how they moved. */}
+          <View style={styles.section}>
+            <PrChart progression={profile.races?.prProgression} />
           </View>
         </View>
       </ScrollView>
@@ -370,6 +465,17 @@ const styles = StyleSheet.create({
   },
   sections: { gap: layout.section },
   section: { gap: space.md },
+  splits: {
+    ...text.meta,
+    fontFamily: font.mono,
+    color: color.ink2,
+    marginTop: space.xs,
+  },
+  raceNote: { ...text.meta, color: color.muted, marginTop: space.xs },
+  checklist: { gap: space.xs, marginTop: space.md },
+  checklistHead: { ...text.micro, color: color.muted },
+  /** Prose, no marker, no glyph — see the block that renders this. */
+  checklistLine: { ...text.meta, color: color.ink2 },
   eyebrow: { ...text.micro, color: color.muted },
   title: { ...text.title, color: color.ink, flexShrink: 1 },
   failed: { ...text.base, color: color.ink2 },

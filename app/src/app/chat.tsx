@@ -40,6 +40,25 @@ import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
+ * The website's five openers, ported verbatim from
+ * `website/src/components/athlete/widgets.tsx:361-367`.
+ *
+ * Checked against `website/src/lib/safety.ts`: none of the five matches a tier-1
+ * pattern (CRISIS, PURGE, DRUGS), so none of them makes the app suggest a
+ * question that answers itself with a crisis referral. The first one is
+ * symptom-shaped (`legs` + `sore`), so it may come back as the tier-2 symptom
+ * escalation — that is a normal reply, tagged `engine = 'rules'`, and it stays a
+ * bubble. Re-check this list against `safetyIntercept()` if it is ever edited.
+ */
+const SUGGESTED = [
+  "Should I run today, my legs are really sore?",
+  "How do I run a faster 800m?",
+  "Am I on track to break 5 minutes in the mile?",
+  "What should I do the day before my race?",
+  "Why is my pace getting slower even though I'm training more?",
+] as const;
+
+/**
  * The one place a message becomes a component. `bubbleText` is the only thing
  * that can mint the branded string `ChatBubble` accepts, and it refuses a
  * flagged message — so the null check below IS the safety branch, and a row
@@ -81,6 +100,56 @@ function Panel({
         {note ? <Text style={styles.panelNote}>{note}</Text> : null}
       </View>
       {children}
+    </View>
+  );
+}
+
+/**
+ * The five openers, as controls.
+ *
+ * `onPick` IS `send` — the same function the Send button calls, with the same
+ * signature. A suggested prompt is therefore not a special kind of message: it
+ * gets the same `postChat` call, the same optimistic row, the same retag when
+ * the reply comes back `safety: true`, the same drop-and-restore on failure and
+ * the same `Row` on the way back. There is no second path to add a message to
+ * this screen, and nothing here can put a reply on screen without `bubbleText`
+ * being asked first.
+ *
+ * Shape: full-width, sunken, control radius, no shadow, left-aligned — nothing a
+ * `ChatBubble` has (84% width, a side, card radius, elevation) and nothing
+ * `SafetyNotice` has. Five sentences in boxes must not read as a transcript, so
+ * the micro-label above says what they are. No ember: the composer's Send button
+ * is the one accent on this screen, and a row of glowing prompts would make the
+ * app the one with something to say.
+ */
+function Suggestions({
+  disabled,
+  onPick,
+}: {
+  disabled: boolean;
+  onPick: (q: string) => void;
+}) {
+  return (
+    <View style={styles.suggestions}>
+      {/*
+        Non-negotiable #5: options, not instructions. Descriptive — "Some things
+        people ask", not "Try asking" — so the row reads as examples of what this
+        is for rather than a list of things the app wants from the athlete.
+      */}
+      <Text style={styles.suggestLabel}>Some things people ask</Text>
+      {SUGGESTED.map((q) => (
+        <Pressable
+          key={q}
+          style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
+          onPress={() => onPick(q)}
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel={`Ask ${q}`}
+          accessibilityState={{ disabled }}
+        >
+          <Text style={styles.chipLabel}>{q}</Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -143,8 +212,18 @@ export default function ChatScreen() {
     };
   }, [endSession]);
 
-  const send = useCallback(async () => {
-    const q = draft.trim();
+  /**
+   * Takes the text rather than reading `draft`, so a suggested prompt is the
+   * same call with a different argument instead of a second sender. Everything
+   * below — the optimistic row, the retag, the restore, the 401 — is therefore
+   * identical for both, and there is no branch anywhere on where `q` came from.
+   *
+   * `setDraft("")` and the restore are safe for a chip because the chips only
+   * render while the composer is empty (see the call site): there is never a
+   * half-typed sentence for a chip to clear.
+   */
+  const send = useCallback(async (text: string) => {
+    const q = text.trim();
     if (!q || pending || signedOut) return;
     sendStarted.current = true;
     // Held by reference so the two setState callbacks below can find this exact
@@ -173,9 +252,11 @@ export default function ChatScreen() {
     } finally {
       setPending(false);
     }
-  }, [draft, pending, signedOut, endSession]);
+  }, [pending, signedOut, endSession]);
 
-  const canSend = draft.trim().length > 0 && !pending && !signedOut;
+  /** Anything at all can be sent — the composer just also needs some words. */
+  const canSendAnything = !pending && !signedOut;
+  const canSend = draft.trim().length > 0 && canSendAnything;
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -242,11 +323,40 @@ export default function ChatScreen() {
             // Nothing to say while the first load is still in flight, and
             // nothing to say when it failed — the notice above covers that.
             messages === null ? null : (
-              <Panel title="Ask your coach" note="Nothing sent yet">
-                <Text style={styles.plain}>
-                  Ask about a run, a workout, or how you have been feeling.
-                </Text>
-              </Panel>
+              <View style={styles.opener}>
+                <Panel title="Ask your coach" note="Nothing sent yet">
+                  <Text style={styles.plain}>
+                    Ask about a run, a workout, or how you have been feeling.
+                  </Text>
+                </Panel>
+                {/*
+                  The chips live HERE, in the empty state, and nowhere else —
+                  they are an opener, not a permanent rail. Three reasons, in
+                  order of weight:
+
+                  1. Safety. Once a conversation exists, a persistent chip row
+                     sits under the LAST thing said. After an intercept that is
+                     directly beneath a SafetyNotice, and a tappable "How do I
+                     run a faster 800m?" one line below a crisis referral makes
+                     the app look like it is moving the conversation on. The
+                     website can afford the row because its transcript is a
+                     520px panel the composer never covers; a phone cannot.
+                  2. Non-negotiable #5 — options, not instructions. Suggestions
+                     that reappear after every reply stop reading as examples
+                     and start reading as the app prompting for the next line.
+                  3. Room. With the keyboard up at 360×640 the chips would
+                     either eat the transcript or ride above the composer as a
+                     second control competing with Send.
+
+                  Also gated on an empty composer: the athlete's own half-typed
+                  sentence outranks any suggestion of ours, and hiding the chips
+                  is what makes `send`'s single `setDraft("")` safe for both
+                  callers.
+                */}
+                {draft.trim().length === 0 ? (
+                  <Suggestions disabled={!canSendAnything} onPick={send} />
+                ) : null}
+              </View>
             )
           }
           ListFooterComponent={
@@ -277,7 +387,9 @@ export default function ChatScreen() {
             />
             <Pressable
               style={styles.send}
-              onPress={send}
+              // Wrapped, not passed by reference: `send` now takes the text,
+              // and Pressable would hand it a gesture event.
+              onPress={() => send(draft)}
               disabled={!canSend}
               accessibilityRole="button"
               accessibilityLabel="Send"
@@ -302,6 +414,29 @@ export default function ChatScreen() {
               )}
             </Pressable>
           </View>
+          {/*
+            Who reads this. A privacy disclosure to a teenager about their own
+            words, so it is permanent by construction: it sits in the composer
+            block, which is pinned above the keyboard and never scrolls, it is
+            not conditional on anything, and there is nothing to dismiss. It is
+            deliberately NOT in the empty state — that is the exact bug the
+            website fixed, where the note lived inside `msgs.length === 0` and
+            vanished forever after the first message.
+
+            The wording is the corrected one from
+            `website/src/components/athlete/widgets.tsx:538-544`, not the panel
+            note at `tabs.tsx:750` that still says "coach sees a summary".
+            Verified against the query the coach's screen actually runs
+            (`website/src/lib/profile.ts:189-192`): `SELECT text … role = 'user'
+            … ORDER BY id DESC LIMIT 5`, rendered one line per row in quotes at
+            `dashboard/athlete/[id]/page.tsx:330-337`. Last 5 — true. The
+            athlete's own messages, not the replies — true, "your messages".
+            Verbatim, never summarised — true. It is `ink2` and not `muted`
+            because fine print is the wrong register for this sentence.
+          */}
+          <Text style={styles.coachNote}>
+            Your coach can read your last 5 messages here, word for word.
+          </Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -342,6 +477,32 @@ const styles = StyleSheet.create({
   /** The caveat. Always the right-hand side, always muted (5.16:1 on card). */
   panelNote: { ...text.meta, color: color.muted },
   plain: { ...text.base, color: color.ink2 },
+  /** The empty state: the panel, then the openers under it. */
+  opener: { gap: space.xl },
+  /**
+   * The chips carry the page inset themselves — the list has none, because
+   * SafetyNotice is full-bleed.
+   */
+  suggestions: { paddingHorizontal: layout.page, gap: target.gap },
+  suggestLabel: { ...text.micro, color: color.muted, marginBottom: space.xs },
+  /**
+   * A control, not a bubble and not a notice: full width (no side), sunken,
+   * `radius.control` rather than the card radius a bubble uses, no shadow.
+   */
+  chip: {
+    minHeight: target.min,
+    justifyContent: "center",
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    backgroundColor: color.well,
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+  },
+  /** Pressed state matches the check-in answers: a soft ember wash, no fill. */
+  chipPressed: { backgroundColor: color.accentSoft },
+  chipLabel: { ...text.meta, color: color.ink2 },
+  coachNote: { ...text.meta, color: color.ink2 },
   /** Quiet and inline: no overlay, no spinner, no animation. */
   pending: { ...text.meta, color: color.muted },
   composer: {

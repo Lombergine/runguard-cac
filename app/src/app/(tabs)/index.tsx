@@ -55,20 +55,21 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Line } from "react-native-svg";
 
 import {
-  areaLabel,
   CheckInCard,
   CheckInCardSkeleton,
-  type CheckInAnswers,
+  SorenessList,
+  type LoggedSoreness,
   type SleepAnswer,
-  type SorenessAnswer,
 } from "../../components/CheckInCard";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
 import { Absent } from "../../components/Nothing";
 import { Tile } from "../../components/Tile";
+import { Notifications } from "../../components/Notifications";
 import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
 import { WeekProgress } from "../../components/WeekProgress";
 import { getHome, isUnauthorized, postCheckin } from "../../lib/api";
-import { sorenessLabel } from "../../lib/bodyParts";
+import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
+import { useInvalidateProfile } from "../../lib/profileStore";
 import {
   readinessBand,
   readinessValue,
@@ -76,7 +77,7 @@ import {
   type ReadinessBand,
 } from "../../lib/readinessVerdict";
 import { dayLabel, localDay, receiptLabel } from "../../lib/dates";
-import { readinessState } from "../../lib/readiness";
+import { checkedInToday, readinessState } from "../../lib/readiness";
 import type {
   ProfileWithNextRace,
   ReadinessState,
@@ -84,7 +85,7 @@ import type {
 } from "../../lib/types";
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
-import { font, tabular, text } from "../../theme/type";
+import { text } from "../../theme/type";
 
 /**
  * "How did you sleep?" maps to `energy`, which is the only self-report field
@@ -94,23 +95,27 @@ import { font, tabular, text } from "../../theme/type";
 const ENERGY_BY_SLEEP: Record<SleepAnswer, number> = { bad: 3, ok: 6, good: 9 };
 
 /**
- * The triage word becomes a 0–10 severity, because that is the only shape
- * `sorenessSeverity` has.
+ * The three sides a lateral part can be filed under, and what each one
+ * SUPERSEDES when it is logged.
  *
- * The two numbers are prePracticeFlag's own thresholds (website/src/lib/
- * engine.ts: `>= 4` → watch, `>= 7` → unusual) — the flag the coach reads is
- * then the one the athlete's own word named.
+ * `both` replaces separately-logged left and right; either single side makes a
+ * prior `both` stale. This is the website's rule (`widgets.tsx:159-165`) and it
+ * is not cosmetic: a supersede that does not land leaves a score on the coach's
+ * screen that the athlete believes they replaced.
+ *
+ * The website skips a clear whose key it does not think is set. This does not:
+ * the clears are emitted UNCONDITIONALLY, because the only thing that could
+ * license skipping one is a local mirror of the server, and trusting a mirror
+ * over the server is the whole shape of the bug. A DELETE of a row that is not
+ * there costs one request and is a no-op; a skipped DELETE of a row that IS
+ * there is a stale soreness nobody will notice.
  */
-const SEVERITY_BY_SORENESS: Record<Exclude<SorenessAnswer, "none">, number> = {
-  some: 4,
-  lot: 7,
-};
-
-/** How the stored soreness level is described back to the athlete. */
-const SORENESS_WORD: Record<Exclude<SorenessAnswer, "none">, string> = {
-  some: "A bit sore",
-  lot: "Very sore",
-};
+function supersededBy(part: string, side: Side | null): string[] {
+  if (side === null || getBodyPart(part)?.lateral !== true) return [];
+  return side === "both"
+    ? [sorenessLabel(part, "left"), sorenessLabel(part, "right")]
+    : [sorenessLabel(part, "both")];
+}
 
 /**
  * The verdict is a GLYPH, so it takes the text-safe half of each accent pair.
@@ -134,18 +139,51 @@ const EMBER_END = { x: 1, y: 1 } as const;
 
 export default function CheckInScreen() {
   const router = useRouter();
+  /**
+   * `invalidate` ONLY. This screen's own data comes from the 5.3 KB `/home`,
+   * and it stays that way — `useProfile()` here would trip the shared store's
+   * lazy first fetch and pull 57 KB of `/me` on every cold start for a payload
+   * nothing on this screen renders. What a check-in does change is what `/me`
+   * says about soreness and readiness, so the screens backed by it are told
+   * their copy is out of date.
+   */
+  const invalidateProfile = useInvalidateProfile();
   const [profile, setProfile] = useState<ProfileWithNextRace | null>(null);
   const [loadError, setLoadError] = useState<"none" | "unpaired" | "failed">("none");
   /** Set only when this session submitted the check-in — the one time we know. */
   const [submittedAt, setSubmittedAt] = useState<Date | null>(null);
+  /**
+   * THE MIRROR OF WHAT THE SERVER HOLDS, keyed "left knee" → 0–10.
+   *
+   * A key is added only after its POST has returned, and removed only after its
+   * clear has. Everything the athlete sees about soreness — the lit regions on
+   * the figure, the side chips, the readout, and finally the receipt — is
+   * rendered from this and from nothing else, so there is no draft state that a
+   * receipt could describe as though it had been written.
+   *
+   * It starts empty rather than seeded from `profile.todaySoreness`, and that
+   * is sound rather than lazy: a soreness row creates a `checkins` row
+   * (`upsertCheckinSoreness` → `upsertCheckin`), so any soreness already stored
+   * for today implies `todayCheckin`, which collapses this screen to the
+   * receipt and never renders the card at all.
+   */
+  const [logged, setLogged] = useState<LoggedSoreness>({});
+  /**
+   * Keys whose supersede clear failed. They are STILL IN `logged`, because they
+   * are still on the server; this list is what lets the card and the receipt
+   * say so out loud instead of quietly reporting a clean write.
+   */
+  const [uncleared, setUncleared] = useState<string[]>([]);
+  /** Why the last soreness write did not do what it said. */
+  const [sorenessError, setSorenessError] = useState<string | null>(null);
   /**
    * What the server actually took, set only after every call succeeded. The
    * receipt describes this and nothing else — it must never name soreness the
    * server does not hold.
    */
   const [stored, setStored] = useState<{
-    soreness: SorenessAnswer;
-    parts: number;
+    entries: [string, number][];
+    uncleared: string[];
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitFailed, setSubmitFailed] = useState(false);
@@ -174,32 +212,100 @@ export default function CheckInScreen() {
     };
   }, [reveal]);
 
-  async function submit({ sleep, soreness, parts }: CheckInAnswers) {
+  /**
+   * ONE ROW PER REQUEST, plus its supersedes. The route stores a single
+   * `sorenessPart` per call (lib/api.ts, `CheckinInput`), and the part and the
+   * severity are mandatory together — `severity: null` is the explicit CLEAR,
+   * never a way of leaving a field out.
+   *
+   * The order matters. The row the athlete asked for is written FIRST; only
+   * once it has landed are the rows it supersedes cleared. Clearing first would
+   * mean a failure between the two steps left the athlete with neither the old
+   * score nor the new one.
+   *
+   * Every outcome is reported for what it is:
+   *   the write failed          → nothing changed, and the sentence says so
+   *   the write landed          → the mirror takes it
+   *   a supersede clear failed  → the mirror KEEPS the superseded row, which is
+   *                               the truth, and the key is remembered so the
+   *                               card and the receipt both name it
+   */
+  async function logSoreness(part: string, side: Side | null, severity: number | null) {
+    const key = sorenessLabel(part, side);
+    const supersedes = severity === null ? [] : supersededBy(part, side);
+    // Only rows we believe are actually set can be left stale by a failed
+    // clear; a failed DELETE of a row that was never there has cost nothing.
+    const held = supersedes.filter((other) => logged[other] !== undefined);
+
+    setSubmitting(true);
+    setSorenessError(null);
+    try {
+      await postCheckin({ sorenessPart: key, sorenessSeverity: severity });
+    } catch {
+      setSorenessError(
+        severity === null
+          ? `That didn't clear — ${key} is still recorded. Tap the score again.`
+          : `That didn't save. Nothing was recorded for ${key}. Tap the number again.`
+      );
+      setSubmitting(false);
+      return;
+    }
+    setLogged((prev) => {
+      const next = { ...prev };
+      if (severity === null) delete next[key];
+      else next[key] = severity;
+      return next;
+    });
+    setUncleared((prev) => prev.filter((k) => k !== key));
+
+    const stale: string[] = [];
+    for (const other of supersedes) {
+      try {
+        await postCheckin({ sorenessPart: other, sorenessSeverity: null });
+        setLogged((prev) => {
+          const next = { ...prev };
+          delete next[other];
+          return next;
+        });
+        setUncleared((prev) => prev.filter((k) => k !== other));
+      } catch {
+        if (held.includes(other)) stale.push(other);
+      }
+    }
+    if (stale.length > 0) {
+      setUncleared((prev) => [...prev, ...stale.filter((k) => !prev.includes(k))]);
+      setSorenessError(
+        `Saved ${key} ${severity}/10, but the earlier score for ${stale.join(
+          " and "
+        )} could not be removed. It is still recorded.`
+      );
+    }
+    setSubmitting(false);
+  }
+
+  /**
+   * The finishing write: the sleep answer, and then the collapse.
+   *
+   * The soreness rows are already on the server by now — each one was written
+   * as it was tapped — so this call carries only `energy`. It is safe for it to
+   * carry only that: `upsertCheckin` merges with `COALESCE`
+   * (website/src/lib/db.ts:420-426), so the soreness-only calls above did not
+   * blank anything and this one does not either.
+   */
+  async function finish(sleep: SleepAnswer) {
     setSubmitting(true);
     setSubmitFailed(false);
     try {
       await postCheckin({ energy: ENERGY_BY_SLEEP[sleep] });
-      if (soreness !== "none") {
-        // ONE PART PER REQUEST — the route stores a single `sorenessPart` per
-        // call (lib/api.ts, CheckinInput). Sequential, because every one of
-        // these upserts the same check-in row. Any failure throws out of the
-        // whole submit: a receipt is only allowed to follow a complete write.
-        for (const partKey of parts) {
-          await postCheckin({
-            // The map toggles a lateral part as one state, so which side is
-            // genuinely unknown. `sorenessLabel(key, null)` stores the bare
-            // part rather than inventing "left" or "both".
-            sorenessPart: sorenessLabel(partKey, null),
-            sorenessSeverity: SEVERITY_BY_SORENESS[soreness],
-          });
-        }
-      }
     } catch {
       setSubmitFailed(true);
       setSubmitting(false);
       return;
     }
-    setStored({ soreness, parts: parts.length });
+    // The receipt is built from the mirror, which holds only rows whose write
+    // returned — so it cannot name soreness the server does not have, and the
+    // uncleared list stops it claiming a replacement that did not happen.
+    setStored({ entries: Object.entries(logged), uncleared });
     setSubmittedAt(new Date());
     setSubmitting(false);
     reveal.setValue(0);
@@ -213,6 +319,11 @@ export default function CheckInScreen() {
     // placeholder: unknown-for-now claims nothing, where a stale figure would.
     const refreshed = await getHome().catch(() => null);
     if (refreshed) setProfile(refreshed);
+    // The runs, calendar, races and profile screens read `/me`, which now
+    // reports different soreness and a recomputed readiness. Anything already
+    // holding it refetches; anything that never loaded it does nothing, and
+    // gets the new figures from its own first load.
+    invalidateProfile();
   }
 
   if (loadError !== "none") {
@@ -253,7 +364,11 @@ export default function CheckInScreen() {
 
   let receipt: string | null = null;
   if (submittedAt) receipt = receiptLabel(submittedAt);
-  else if (profile?.todayCheckin) {
+  else if (profile && checkedInToday(profile) && profile.todayCheckin) {
+    // `checkedInToday`, not `todayCheckin !== null` — the same gate readiness
+    // uses, for the same reason. A soreness-only write creates a checkins row
+    // with every self-report column NULL, and "Checked in" over a row the
+    // athlete never answered is a receipt for something that did not happen.
     // No time of day exists on a check-in row; the day alone is what is true.
     receipt = `Checked in · ${dayLabel(profile.todayCheckin.date)}`;
   }
@@ -312,8 +427,12 @@ export default function CheckInScreen() {
           <>
             <CheckInCard
               dateLabel={dayLabel(localDay())}
-              onComplete={submit}
+              logged={logged}
+              uncleared={uncleared}
+              onLogSoreness={logSoreness}
+              onComplete={finish}
               submitting={submitting}
+              sorenessError={sorenessError}
               failed={submitFailed}
             />
             {/* No receipt means no check-in today — `readinessState` is
@@ -494,6 +613,16 @@ function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
             : null
         }
       />
+
+      {/*
+        Last on the screen, and renders nothing when there is nothing — see
+        Notifications for why an empty list is not "All good".
+
+        Last on purpose: these are the server's observations about the athlete,
+        and putting them above the check-in would answer the screen's question
+        before it was asked.
+      */}
+      <Notifications items={profile.notifications} />
     </View>
   );
 }
@@ -557,29 +686,43 @@ function RecoveryGrid({ recovery }: { recovery: RecoverySnapshot }) {
 }
 
 /**
- * One line naming exactly what the soreness half of the check-in put on the
- * server, and nothing beyond it. It renders only for a check-in this session
- * submitted, because that is the only one whose soreness this screen witnessed.
+ * Exactly what the soreness half of the check-in put on the server, and nothing
+ * beyond it. It renders only for a check-in this session submitted, because
+ * that is the only one whose soreness this screen witnessed.
  *
- * "No" is a reported fact and says so; anything else names the count of regions
- * that were stored. It never mentions what was not captured — an earlier
- * version read "where isn't recorded yet", which implied the severity HAD been
- * kept when in fact nothing had been sent at all.
+ * It names every stored row in full — "left knee 6/10 · shin 0/10" — through
+ * the same component the card's own readout used, so the two cannot word the
+ * same rows differently. An empty list means the athlete answered "No", which
+ * is a reported fact and says so; it is never printed for a check-in that
+ * simply failed to record something.
+ *
+ * AND IT CLAIMS NO MORE THAN THAT. A supersede clear that did not land leaves a
+ * row on the server the athlete believes they replaced, so the second line
+ * names it. This is the exact failure this screen has already shipped once, in
+ * the other direction: a receipt that announced a clean save for soreness that
+ * had never been sent.
  */
 function SorenessNote({
   stored,
 }: {
-  stored: { soreness: SorenessAnswer; parts: number } | null;
+  stored: { entries: [string, number][]; uncleared: string[] } | null;
 }) {
   if (!stored) return null;
-  if (stored.soreness === "none") {
-    return <Text style={styles.sorenessNote}>No soreness reported.</Text>;
-  }
   return (
-    <Text style={styles.sorenessNote}>
-      {`${SORENESS_WORD[stored.soreness]}, recorded in `}
-      <Text style={styles.sorenessCount}>{areaLabel(stored.parts)}</Text>.
-    </Text>
+    <View style={styles.sorenessNote}>
+      {stored.entries.length === 0 ? (
+        <Text style={styles.sorenessNoteLine}>No soreness reported.</Text>
+      ) : (
+        <SorenessList lead="Recorded: " entries={stored.entries} />
+      )}
+      {stored.uncleared.length > 0 ? (
+        <Text style={styles.sorenessNoteLine}>
+          {`An earlier score for ${stored.uncleared.join(
+            " and "
+          )} could not be removed, and is still recorded.`}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -642,9 +785,8 @@ const styles = StyleSheet.create({
   },
   loadErrorActionLabel: { ...text.baseSemi, color: color.ink },
   loadError: { ...text.base, color: color.ink2 },
-  sorenessNote: { ...text.meta, color: color.muted, marginTop: space.md },
-  /** Numerals are mono everywhere, and the count keeps its noun welded on. */
-  sorenessCount: { ...tabular, fontFamily: font.mono, color: color.ink2 },
+  sorenessNote: { marginTop: space.md, gap: space.xs },
+  sorenessNoteLine: { ...text.meta, color: color.muted },
 
   /**
    * The hero panel. `shadow.card` is elevation and nothing else — the same

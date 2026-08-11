@@ -26,11 +26,30 @@
  * ignores the extra `safety` field.)
  *
  * The only way to mint a `BubbleText` is `bubbleText(message)` below, which
- * returns `null` for a flagged message. The brand type itself is deliberately
- * NOT exported, so a caller cannot even write `x as BubbleText`.
+ * returns `null` for a flagged message.
  *
- * DO NOT "simplify" this back to `text: string`. The brand is the whole
- * mechanism; without it the safety branch is a comment.
+ * ── WHY THE TEXT IS CARRIED IN AN OBJECT, NOT A BRANDED STRING ──────────────
+ * It used to be `string & { [brand]: true }`, and that had a hole. The brand
+ * type is not exported, but it is still REACHABLE through the mint's signature:
+ *
+ *     <ChatBubble text={flagged.text as NonNullable<ReturnType<typeof bubbleText>>} />
+ *
+ * compiles. `ReturnType` can name a type that was never exported, so "do not
+ * export the brand" is not a fence — and a fence made only of types is defeated
+ * by any cast, because casts are erased before anything runs.
+ *
+ * So the guarantee is no longer only a compile-time one. `bubbleText` returns an
+ * OBJECT whose text sits behind `carried`, a module-private runtime symbol that
+ * no other module can obtain. A caller who casts their way past the type still
+ * hands over a plain string, `body[carried]` is `undefined`, and the component
+ * renders NOTHING rather than a crisis reply in a chat bubble.
+ *
+ * Both fences are kept deliberately: the type stops the accident at the keyboard,
+ * and the symbol stops the cast at runtime. A safety reply cannot be bubbled by
+ * any incantation, only by editing this file.
+ *
+ * DO NOT "simplify" this back to `text: string`. Without it the safety branch is
+ * a comment.
  */
 import { View, Text, StyleSheet } from "react-native";
 
@@ -39,10 +58,15 @@ import { color, shadow } from "../theme/tokens";
 import { text } from "../theme/type";
 import { space, radius, ruleWidth } from "../theme/space";
 
-declare const bubbleTextBrand: unique symbol;
+/**
+ * Module-private, and private at RUNTIME as well as in the type system — this is
+ * the half a cast cannot forge. `const x = Symbol()` infers `unique symbol`, so
+ * it works as a key in the type below.
+ */
+const carried = Symbol("bubbleText");
 
 /** Module-private on purpose — see the header. */
-type BubbleText = string & { readonly [bubbleTextBrand]: true };
+type BubbleText = { readonly [carried]: string };
 
 /**
  * The single mint. Returns `null` for a safety-tagged message, which is the
@@ -51,7 +75,7 @@ type BubbleText = string & { readonly [bubbleTextBrand]: true };
  */
 export function bubbleText(message: ChatMessage): BubbleText | null {
   if (message.safety) return null;
-  return message.text as BubbleText;
+  return { [carried]: message.text };
 }
 
 export function ChatBubble({
@@ -59,10 +83,17 @@ export function ChatBubble({
   text: body,
 }: Omit<ChatBubbleProps, "text"> & { text: BubbleText }) {
   const mine = role === "user";
+  // The runtime half of the fence. Anything that reached here without going
+  // through `bubbleText` — i.e. via a cast — has no `carried` property, and a
+  // message we cannot vouch for is not rendered at all. Failing closed is the
+  // whole point: the alternative is a safety reply wearing bubble geometry.
+  const body_ = body?.[carried];
+  if (typeof body_ !== "string") return null;
+
   return (
     <View style={mine ? styles.rowMine : styles.rowTheirs}>
       <View style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-        <Text style={styles.body}>{body}</Text>
+        <Text style={styles.body}>{body_}</Text>
       </View>
     </View>
   );

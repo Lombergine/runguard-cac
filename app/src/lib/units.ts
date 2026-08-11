@@ -8,11 +8,23 @@
  * text node. Every distance and pace the UI shows comes out of this module with
  * the unit already attached — there is no supported way to get a bare numeral
  * and render "mi" somewhere else in the layout.
+ *
+ * PACE IS SPELLED "8:51/mi", WITH NO SPACE, to match `fmtPaceMi` in
+ * website/src/lib/engine.ts:55. Some paces are formatted by the server and
+ * printed verbatim (`PlanDay.targetPace`, the race pacing sentences) while
+ * others are derived here from a duration and a distance, and the two land on
+ * the same screen — the training tab shows both. One spelling, or the tab looks
+ * like two apps.
  */
 
 export const MI_PER_KM = 0.621371;
 export const KM_PER_MI = 1.609344;
 export const M_PER_MI = 1609.344;
+/**
+ * Exact by definition — the international foot is 0.3048 m exactly, so this is
+ * not an approximation and does not need to agree with anything by luck.
+ */
+export const M_PER_FT = 0.3048;
 
 /** Kilometres → miles (number). */
 export function kmToMi(km: number): number {
@@ -22,6 +34,25 @@ export function kmToMi(km: number): number {
 /** Metres → miles (number). */
 export function miFromMeters(m: number): number {
   return m / M_PER_MI;
+}
+
+/**
+ * Metres → a rounded feet number. Elevation is the one figure the API sends in
+ * metres and the interface shows in feet, and feet are whole: nobody climbs
+ * 412.7 ft.
+ */
+export function ftNumFromMeters(m: number): number {
+  return Math.round(m / M_PER_FT);
+}
+
+/**
+ * Metres → "412 ft", the unit welded on (non-negotiable #3). Returns null for a
+ * non-finite input rather than "NaN ft" — a figure that cannot be computed is
+ * not recorded, and the caller must render it through `Absent`.
+ */
+export function fmtFeetFromMeters(m: number): string | null {
+  if (!Number.isFinite(m)) return null;
+  return `${ftNumFromMeters(m)} ft`;
 }
 
 /** Kilometres → a rounded miles number. */
@@ -58,18 +89,35 @@ export function fmtDuration(totalS: number): string {
 }
 
 /**
- * A run's duration and distance → "8:51 /mi".
+ * A run's duration and distance → "8:51/mi".
  *
  * Returns `null` when the pace does not exist (no distance, no duration, or a
  * non-finite input). A pace that was never run is ABSENT, and absent is its own
- * visual object — render `<Absent />`, never a fabricated "0:00 /mi".
+ * visual object — render `<Absent />`, never a fabricated "0:00/mi".
  */
 export function fmtPaceMi(durationS: number, km: number): string | null {
   const mi = kmToMi(km);
   if (!Number.isFinite(mi) || !Number.isFinite(durationS) || mi <= 0 || durationS <= 0) {
     return null;
   }
-  return `${fmtDuration(durationS / mi)} /mi`;
+  return `${fmtDuration(durationS / mi)}/mi`;
+}
+
+/**
+ * A pace already expressed in seconds per KILOMETRE → "8:12/mi".
+ *
+ * The server's weekly pace trend (`paceSeason`) ships sec/km, and the website
+ * converts it at the point of display with `pace * KM_PER_MI`
+ * (`website/src/components/charts.tsx:300`). Same arithmetic here, so the two
+ * surfaces never print different paces for the same week.
+ *
+ * Distinct from `fmtPaceMi`, which derives a pace from a run's duration and
+ * distance. Null on a non-pace, for the same reason: a pace that does not
+ * exist is ABSENT, and absent is its own visual object.
+ */
+export function fmtPaceMiFromKm(secPerKm: number): string | null {
+  if (!Number.isFinite(secPerKm) || secPerKm <= 0) return null;
+  return `${fmtDuration(secPerKm * KM_PER_MI)}/mi`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -84,3 +132,5 @@ export const formatDistance = fmtMiles;
 export const formatDuration = fmtDuration;
 /** Nullable — see `fmtPaceMi`. Render `<Absent />` on null, never a stand-in. */
 export const formatPace = fmtPaceMi;
+/** Nullable — see `fmtPaceMiFromKm`. */
+export const formatPaceFromKmPace = fmtPaceMiFromKm;

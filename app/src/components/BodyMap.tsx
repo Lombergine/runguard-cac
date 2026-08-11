@@ -1,10 +1,20 @@
 /**
- * The soreness picker. See ../../../docs/visual-spec.md § "Components → Body map".
+ * The body figure, in its two modes. See ../../../docs/visual-spec.md
+ * § "Components → Body map" and § "Imagery".
  *
  * A flat, front-facing figure drawn like a PRINTED ANATOMY KEY, not a rendered
  * illustration: one line weight (`ruleWidth`, the same rule that draws every
  * card), no gradient, no shading, no depth. An app that can surface a crisis
  * reply cannot also look cartoonish.
+ *
+ * TWO MODES, ONE FIGURE, AND THE TYPE DECIDES WHICH.
+ *   - PICKER    — `selected` + `onToggle`. Every region carries a hit box.
+ *   - READ-ONLY — `marks` + `accessibilityLabel`. NO `Pressable` is created at
+ *                 all; there is nothing to press and nothing that looks
+ *                 pressable.
+ * `BodyMapProps` (../lib/types) is a union, not a `readonly` boolean, so a
+ * display map cannot be handed an `onToggle` and a picker cannot forget one.
+ * Read the docblock there before changing either member.
  *
  * REGIONS COME FROM `lib/bodyParts`. They are never re-listed here — the same
  * twelve the coach's injury form offers, or the map lights up differently
@@ -29,18 +39,38 @@
  *
  * The distinction also has to survive greyscale, so it is never carried by hue
  * alone: an unselected marker has no fill at all and a `rule` outline, a
- * selected one is filled and outlined at full weight.
+ * selected one is filled and outlined at full weight. The read-only marks obey
+ * the same rule — see `MARK_COLOR`.
  *
- * LATERAL PARTS GET TWO HIT REGIONS, ONE STATE. The contract's `onToggle`
- * takes a bare part key and `selected` holds bare part keys, so both the left
- * and the right marker for a lateral part toggle — and fill — together. The
- * pair exists so a runner reaches for the sore side and finds a target there.
+ * LATERAL PARTS GET TWO HIT REGIONS, ONE STATE. The picker's `onToggle` takes a
+ * bare part key and `selected` holds bare part keys, so both the left and the
+ * right marker for a lateral part toggle — and fill — together. The pair exists
+ * so a runner reaches for the sore side and finds a target there. Read-only
+ * marks are the opposite: they name their side, because a scan that lit both
+ * shins for one sore shin would be reporting something that was never recorded.
+ *
+ * THE PICKER THEREFORE NAMES A PART, NEVER A SIDE, and a caller that records
+ * sides must say so in words next to the figure. CheckInCard does: it passes
+ * the WORST score across a part's sides as that part's `severity`, exactly as
+ * the website's twelve chips do (`widgets.tsx:206-209`), and the side and its
+ * own score are named in the controls and the readout beneath the drawing.
+ * This is a resolution limit of the picker, not a licence to imply two sore
+ * shins — do not let a surface report from the fill alone.
+ *
+ * WHAT A FILL MEANS, AND WHAT IT MUST NOT. `on` is what draws a fill at all and
+ * `severity` only sets its density (0.45 at 0/10, 1.0 at 10/10). So a part
+ * scored ZERO is filled, faintly, inside a `track` outline, and a part never
+ * answered for has no fill and a plain `rule` outline: the two are separated by
+ * the presence of the fill and by the colour and contrast of the stroke, not by
+ * density alone. A caller must never pass a part as `selected` with no entry in
+ * `severity` when the number is genuinely unknown — that draws at FULL
+ * intensity and would be a blank rendered as the worst possible reading.
  */
 import { Pressable, StyleSheet, View } from "react-native";
-import Svg, { Ellipse, G, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
 
 import { BODY_PARTS } from "../lib/bodyParts";
-import { BodyMapProps } from "../lib/types";
+import { BodyMapProps, BodyMark } from "../lib/types";
 import { ruleWidth, target } from "../theme/space";
 import { color } from "../theme/tokens";
 
@@ -52,6 +82,24 @@ import { color } from "../theme/tokens";
 const W = 320;
 const H = 540;
 
+/**
+ * The READ-ONLY figure's drawn height.
+ *
+ * The picker is fixed at 320 × 540 because one SVG unit must be one point there
+ * — that is the only way a 48-unit hit box is honestly a 48pt tap target. The
+ * read-only scan has no hit boxes, so nothing ties it to that size, and at full
+ * size it filled an entire phone screen: on the Stats tab the figure pushed the
+ * five tiles, the heart-rate zones, the PR table, five charts and the training
+ * year all below the fold, so the screen opened on a drawing and nothing else.
+ * Caught by screenshot, not by diff.
+ *
+ * 300 keeps the same viewBox — every mark, outline and proportion scales with
+ * it — and leaves the tiles visible on first paint. The website draws its own
+ * body scan at 220 × 320 for the same reason.
+ */
+const READ_H = 300;
+const READ_W = Math.round((W * READ_H) / H);
+
 /** Mirrors the drawn left half onto the right. */
 const MIRROR = `translate(${W}, 0) scale(-1, 1)`;
 
@@ -59,6 +107,14 @@ const MIRROR = `translate(${W}, 0) scale(-1, 1)`;
 const MIN_FILL = 0.45;
 
 const MAX_SEVERITY = 10;
+
+/**
+ * What an unstated severity is worth. Mirrors the website's `?? 5`
+ * (website/src/components/athlete/AthleteModel.tsx:38,46) so the two surfaces
+ * band the same row identically. Injuries never reach it — they have their own
+ * treatment.
+ */
+const ASSUMED_SEVERITY = 5;
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -117,11 +173,33 @@ const LEG =
   "L 56 506 L 58 520 L 104 518 L 122 496 L 120 462 L 124 420 L 126 356 " +
   "L 132 314 L 146 262 L 146 218";
 
+/** The figure itself. Identical in both modes — the modes differ only in what
+ *  is laid over it. */
+function Figure() {
+  return (
+    <G stroke={color.ink2} strokeWidth={ruleWidth} fill={color.card}>
+      <Path d={NECK} fill="none" />
+      <Ellipse cx={160} cy={32} rx={21} ry={25} />
+      <Path d={TORSO} />
+      <Path d={ARM} />
+      <Path d={LEG} />
+      <G transform={MIRROR}>
+        <Path d={ARM} />
+        <Path d={LEG} />
+      </G>
+    </G>
+  );
+}
+
 function fillOpacity(severity: number | undefined): number {
   if (severity === undefined) return 1;
   const clamped = Math.max(0, Math.min(MAX_SEVERITY, severity));
   return MIN_FILL + (clamped / MAX_SEVERITY) * (1 - MIN_FILL);
 }
+
+/* ------------------------------------------------------------------ *
+ * Picker
+ * ------------------------------------------------------------------ */
 
 function Marker({ patch, on, severity }: { patch: Box; on: boolean; severity?: number }) {
   return (
@@ -139,7 +217,15 @@ function Marker({ patch, on, severity }: { patch: Box; on: boolean; severity?: n
   );
 }
 
-export function BodyMap({ selected, onToggle, severity }: BodyMapProps) {
+function Picker({
+  selected,
+  onToggle,
+  severity,
+}: {
+  selected: string[];
+  onToggle: (partKey: string) => void;
+  severity?: Record<string, number>;
+}) {
   const isOn = (key: string) => selected.includes(key);
 
   const markers = (lateral: boolean) =>
@@ -156,17 +242,7 @@ export function BodyMap({ selected, onToggle, severity }: BodyMapProps) {
     <View style={styles.wrap}>
       <View pointerEvents="none">
         <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-          <G stroke={color.ink2} strokeWidth={ruleWidth} fill={color.card}>
-            <Path d={NECK} fill="none" />
-            <Ellipse cx={160} cy={32} rx={21} ry={25} />
-            <Path d={TORSO} />
-            <Path d={ARM} />
-            <Path d={LEG} />
-            <G transform={MIRROR}>
-              <Path d={ARM} />
-              <Path d={LEG} />
-            </G>
-          </G>
+          <Figure />
 
           {markers(false)}
           {markers(true)}
@@ -205,10 +281,189 @@ export function BodyMap({ selected, onToggle, severity }: BodyMapProps) {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * Read-only marks
+ *
+ * The severity bands are the website's (AthleteModel.tsx:31-48): an injury and
+ * a ≥7 soreness are the same top tone, ≥4 the middle one, below that the
+ * lowest. The website's red/amber/gold become this app's three declared status
+ * tones so the ramp is the same three steps in the app's own palette.
+ *
+ * COLOUR IS THE LAST CHANNEL, NEVER THE ONLY ONE (non-negotiable #4's
+ * reasoning). Desaturate the figure and three things still separate:
+ *
+ *   injury            a DIAMOND core, on a DOUBLE-WEIGHT outline, full fill
+ *   severe soreness   a ROUND core, near the largest radius, dense fill
+ *   mild soreness     a ROUND core, near the smallest radius, faint fill
+ *
+ * so injury-vs-soreness is shape plus stroke weight, and severe-vs-mild is core
+ * radius plus fill density. The tone only repeats what the drawing already
+ * says.
+ * ------------------------------------------------------------------ */
+
+const MARK_COLOR: Record<"injury" | "severe" | "moderate" | "mild", string> = {
+  injury: color.unusual,
+  severe: color.unusual,
+  moderate: color.serious,
+  mild: color.watch,
+};
+
+/** Core radius, mild → severe. The website grows its glow the same way. */
+const CORE_MIN_R = 3;
+const CORE_MAX_R = 7;
+
+/** Across the points, not the flats. */
+const DIAMOND = 10;
+
+function band(severity: number | undefined): "severe" | "moderate" | "mild" {
+  const s = severity ?? ASSUMED_SEVERITY;
+  if (s >= 7) return "severe";
+  if (s >= 4) return "moderate";
+  return "mild";
+}
+
+function coreRadius(severity: number | undefined): number {
+  const s = Math.max(0, Math.min(MAX_SEVERITY, severity ?? ASSUMED_SEVERITY));
+  return CORE_MIN_R + (s / MAX_SEVERITY) * (CORE_MAX_R - CORE_MIN_R);
+}
+
+/**
+ * One mark: the region wash saying WHERE, and a core saying WHAT and HOW MUCH.
+ * Shared with the legend key below, so the key is drawn by the same code as the
+ * thing it explains and cannot drift from it.
+ */
+function Mark({
+  patch,
+  kind,
+  severity,
+}: {
+  patch: Box;
+  kind: BodyMark["kind"];
+  severity?: number;
+}) {
+  const injury = kind === "injury";
+  const tone = MARK_COLOR[injury ? "injury" : band(severity)];
+  const cx = patch.x + patch.w / 2;
+  const cy = patch.y + patch.h / 2;
+
+  return (
+    <G>
+      <Rect
+        x={patch.x}
+        y={patch.y}
+        width={patch.w}
+        height={patch.h}
+        rx={Math.min(patch.w, patch.h) / 3}
+        fill={color.trackSoft}
+        fillOpacity={injury ? 1 : fillOpacity(severity)}
+        stroke={tone}
+        strokeWidth={injury ? ruleWidth * 2 : ruleWidth}
+      />
+      {injury ? (
+        <Rect
+          x={cx - DIAMOND / 2}
+          y={cy - DIAMOND / 2}
+          width={DIAMOND}
+          height={DIAMOND}
+          fill={tone}
+          transform={`rotate(45, ${cx}, ${cy})`}
+        />
+      ) : (
+        <Circle cx={cx} cy={cy} r={coreRadius(severity)} fill={tone} />
+      )}
+    </G>
+  );
+}
+
+/** Swatch size, and the square patch drawn inside it. */
+const SWATCH = 22;
+const SWATCH_PATCH: Box = { x: 2, y: 2, w: SWATCH - 4, h: SWATCH - 4 };
+
+/**
+ * One entry of the legend key, drawn by `Mark` at swatch scale.
+ *
+ * `accessibilityElementsHidden` because the key is redundant to a screen
+ * reader: every flagged area is already spelled out in the legend rows and in
+ * the figure's summary label, and reading four wordless swatches would add
+ * nothing but stops.
+ */
+export function MarkSwatch({ kind, severity }: { kind: BodyMark["kind"]; severity?: number }) {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Svg width={SWATCH} height={SWATCH} viewBox={`0 0 ${SWATCH} ${SWATCH}`}>
+        <Mark patch={SWATCH_PATCH} kind={kind} severity={severity} />
+      </Svg>
+    </View>
+  );
+}
+
+function ReadOnly({
+  marks,
+  accessibilityLabel,
+}: {
+  marks: readonly BodyMark[];
+  accessibilityLabel: string;
+}) {
+  const half = (side: BodyMark["side"]) =>
+    marks
+      .filter((m) => m.side === side && GEO[m.key])
+      .map((m, i) => (
+        <Mark
+          key={`${m.kind}-${m.key}-${i}`}
+          patch={GEO[m.key].patch}
+          kind={m.kind}
+          severity={m.severity}
+        />
+      ));
+
+  return (
+    // One accessibility node for the whole figure. The marks are wordless
+    // shapes, and on a touch device there is no tooltip to recover them from —
+    // so the summary lives here and the detail lives in the legend, as text.
+    <View
+      style={styles.wrapRead}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Svg width={READ_W} height={READ_H} viewBox={`0 0 ${W} ${H}`}>
+        <Figure />
+
+        {half(null)}
+        {half("left")}
+        <G transform={MIRROR}>{half("right")}</G>
+      </Svg>
+    </View>
+  );
+}
+
+export function BodyMap(props: BodyMapProps) {
+  if (props.marks !== undefined) {
+    return (
+      <ReadOnly marks={props.marks} accessibilityLabel={props.accessibilityLabel} />
+    );
+  }
+  return (
+    <Picker
+      selected={props.selected}
+      onToggle={props.onToggle}
+      severity={props.severity}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: {
     width: W,
     height: H,
+    alignSelf: "center",
+  },
+  wrapRead: {
+    width: READ_W,
+    height: READ_H,
     alignSelf: "center",
   },
   hit: {

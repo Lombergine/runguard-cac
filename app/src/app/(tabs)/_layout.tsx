@@ -1,8 +1,16 @@
 /**
  * The tab bar. See ../../../../docs/visual-spec.md § "Components" → Nav.
  *
- * Four items, Home first and default, because the check-in is the product and
- * everything else — charts, calendar, race history — is explicitly secondary.
+ * Home is first and default, because the check-in is the product and everything
+ * else — charts, calendar, race history — is explicitly secondary.
+ *
+ * FIVE items, not the four the spec asks for. That line was written when the app
+ * showed a subset of the athlete's data; it now mirrors the whole web portal,
+ * whose seven tabs have to land somewhere, and burying Recovery and Stats behind
+ * a header link would hide two of the five things an athlete opens the app for.
+ * The calendar folded into Stats — which is where the website has always kept
+ * it — so this is four of the spec's items plus one, not four plus two.
+ * Recorded as a decision, on instruction, rather than left to read as drift.
  *
  * Three things this file is careful about:
  *
@@ -46,10 +54,20 @@ const GRID = 24;
  * daily, so it gets the most literal glyph.
  */
 const HOME = "M3.5 10.5 L12 4 L20.5 10.5 M6 8.6 V20 H18 V8.6";
-/** Runs — a plotted line over a baseline. */
+/** Training — a plotted line over a baseline. */
 const RUNS = "M3.5 20.5 H20.5 M5 16.5 L10 10.5 L14 13.5 L20 5.5";
-/** Calendar — a grid page with its header rule and two hangers. */
-const CALENDAR = "M3.5 5.5 H20.5 V20.5 H3.5 Z M3.5 10 H20.5 M8 3 V7 M16 3 V7";
+/**
+ * Recovery — a crescent. Recovery is mostly what happened overnight (sleep, HRV,
+ * resting HR), and a moon says that without the medical register a cross or a
+ * heart would carry. Drawn as two arcs so it outlines at `ruleWidth` rather than
+ * needing a fill.
+ */
+const RECOVERY = "M14.6 3.8 A8.6 8.6 0 1 0 14.6 20.2 A10.6 10.6 0 0 1 14.6 3.8 Z";
+/**
+ * Stats — three bars on a baseline. Deliberately bars where Training is a line:
+ * the two tabs sit next to each other and must not read as the same glyph.
+ */
+const STATS = "M3.5 20.5 H20.5 M6.5 20.5 V13 M12 20.5 V6.5 M17.5 20.5 V10";
 /** Races — a course flag. */
 const RACES = "M6 3.5 V20.5 M6 5.5 H19 L16 9.5 L19 13.5 H6";
 
@@ -133,15 +151,24 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="runs"
         options={{
-          title: "Runs",
+          // The route stays `runs`; the tab is Training, because it now carries
+          // the week's plan as well as the runs already done.
+          title: "Training",
           tabBarIcon: tabIcon(RUNS),
         }}
       />
       <Tabs.Screen
-        name="calendar"
+        name="recovery"
         options={{
-          title: "Calendar",
-          tabBarIcon: tabIcon(CALENDAR),
+          title: "Recovery",
+          tabBarIcon: tabIcon(RECOVERY),
+        }}
+      />
+      <Tabs.Screen
+        name="stats"
+        options={{
+          title: "Stats",
+          tabBarIcon: tabIcon(STATS),
         }}
       />
       <Tabs.Screen

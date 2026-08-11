@@ -40,6 +40,7 @@ import { Card } from "./Card";
 import { Absent, NoRun } from "./Nothing";
 import { Stat } from "./Stat";
 import { formatDistance } from "../lib/units";
+import { workoutBlocks } from "../lib/workout";
 import type { PlanDay } from "../lib/types";
 import { space } from "../theme/space";
 import { color } from "../theme/tokens";
@@ -64,6 +65,7 @@ export type TodayBlockProps = {
 
 export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
   const isRest = day?.type === REST;
+  const blocks = day ? workoutBlocks(day) : [];
 
   return (
     <Card>
@@ -88,6 +90,40 @@ export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
           <Stat label="Distance" value={formatDistance(day.distanceKm)} />
         )}
       </View>
+
+      {/*
+        The session broken down, and why it is in the plan — the website shows
+        both on Home (tabs.tsx:259-273).
+
+        Deliberately BELOW the distance and set in body prose rather than given
+        its own card: § "Roomy, not dense" says the home screen is "essentially
+        one question and three buttons with a lot of air around them", and that
+        the emptiness is doing work by pointing at the check-in. Warm-up / main
+        set / cool-down is four paragraphs; as a panel of its own it would
+        out-weigh the question the screen exists to ask. As a tail on a block
+        that was already here, it reads as detail about today rather than as a
+        second subject.
+
+        `workoutBlocks` is the shared derivation from lib/workout — the same one
+        the week's plan uses, so the two screens cannot describe one run
+        differently.
+      */}
+      {blocks.length > 0 ? (
+        <View style={styles.blocks}>
+          {blocks.map((b) => (
+            <View key={b.label}>
+              <Text style={[styles.blockLabel, b.accent && styles.blockLabelAccent]}>
+                {b.label}
+              </Text>
+              <Text style={styles.blockBody}>{b.text}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {/* The plan's own sentence about why today looks like this. Descriptive,
+          second person, written by the server for the athlete. */}
+      {day?.why ? <Text style={styles.why}>{day.why}</Text> : null}
 
       {/* A plain lowercase word, exactly as the server sends it. No badge, no
           fill, no colour: this describes what happened, it does not rate it. */}
@@ -169,6 +205,21 @@ const styles = StyleSheet.create({
   countdown: { ...text.stat, color: color.brandText, marginTop: space.md },
   raceDay: { ...text.title, color: color.brandText, marginTop: space.md },
   raceName: { ...text.base, color: color.ink2, marginTop: space.xs },
+
+  /** The session breakdown. Separated by air, not by a rule — a rule here would
+      make it a second section of the card rather than a tail on the first. */
+  blocks: { marginTop: space.lg, gap: space.md },
+  blockLabel: { ...text.micro, color: color.muted },
+  /**
+   * The main set takes the ember, as it does on the website — but on the LABEL,
+   * not as an 8% panel tint behind the text. A tinted block would be a second
+   * surface inside a card, and elevation in this app is `shadow.card` on a card
+   * and never emphasis.
+   */
+  blockLabelAccent: { color: color.brandText },
+  blockBody: { ...text.meta, color: color.ink2, marginTop: space.xs },
+  /** Why today looks like this. Prose, in the body voice, no marker. */
+  why: { ...text.meta, color: color.muted, marginTop: space.lg },
 });
 
 export default TodayBlock;

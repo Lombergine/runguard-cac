@@ -1,12 +1,18 @@
 /**
- * The training calendar — a year of daily load, weeks as columns.
+ * The training year — a year of daily load, weeks as columns.
+ *
+ * Lifted whole out of the old `(tabs)/calendar.tsx`, which no longer exists: the
+ * grid now sits at the foot of Stats, where the website has always kept it
+ * (`website/src/components/athlete/tabs.tsx:536`). Everything below — the four
+ * cell states, the ramp, the footer, the legend — is that screen's, unchanged in
+ * meaning.
  *
  * Secondary by design (visual-spec § Nav): it exists to be scanned, not to
  * compete with the check-in. So: no interaction, no per-cell tap target, no
  * animation. A grid you read.
  *
- * The whole screen turns on one question — what does an empty square mean? The
- * payload cannot answer it on its own, so this file answers it explicitly:
+ * The whole component turns on one question — what does an empty square mean?
+ * The payload cannot answer it on its own, so this file answers it explicitly:
  *
  *   ABSENT  we have nothing for that day. Days before the athlete's first
  *           recorded activity, and the pad days at the start of the first week
@@ -33,7 +39,7 @@
  *     well #F4EFE6  vs  accentSoft #FDECC8   1.02:1,  ΔL* 0.7
  *
  * An absent day and the athlete's easiest recorded day became the same object.
- * That is the one failure this screen cannot have, so the ramp was re-anchored
+ * That is the one failure this grid cannot have, so the ramp was re-anchored
  * rather than merely re-hued: its palest rung is now `brand` itself, and it
  * deepens by mixing toward `ink` (the website's IntensityCalendar does the same
  * thing with a red heat ramp, but it can afford a pale foot because every one
@@ -46,38 +52,39 @@
  * `emberHot` and `ink`. No glyph is ever placed on one.
  * ─────────────────────────────────────────────────────────────────────────
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Absent, NoRun, Zero } from "../../components/Nothing";
-import { Stat } from "../../components/Stat";
-import { getProfile, isUnauthorized } from "../../lib/api";
-import { dayLabel, localDay, parseLocalDay } from "../../lib/dates";
-import { useSession } from "../../lib/session";
-import { formatDistance } from "../../lib/units";
-import type { Profile } from "../../lib/types";
-import { layout, radius, ruleWidth, space, target } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { Absent, NoRun, Zero } from "./Nothing";
+import { dayLabel, localDay, parseLocalDay } from "../lib/dates";
+import { formatDistance } from "../lib/units";
+import { layout, radius, ruleWidth, space } from "../theme/space";
+import { color, shadow } from "../theme/tokens";
+import { text } from "../theme/type";
 
 /** One day of `calendar`, which rides along outside the `Profile` slice. */
-type CalendarDay = { date: string; load: number; km: number };
-
-/** The response carries more than `Profile` declares; this is the extra we read. */
-type WithCalendar = Profile & { calendar?: CalendarDay[] };
+export type CalendarDay = { date: string; load: number; km: number };
 
 type CellKind = "absent" | "norun" | "zero" | "load";
 
-type Cell = { date: string; kind: CellKind; level: number };
+type Cell = {
+  date: string;
+  kind: CellKind;
+  level: number;
+  /** KILOMETRES. Only meaningful when `kind` is "load". */
+  km: number;
+  /** The engine's daily load. Unitless — a model output, not a measurement. */
+  load: number;
+};
 
 /* ------------------------------------------------------------------ *
  * Panel — the website's information unit (athlete/tabs.tsx:22): a title on the
  * left, an optional note on the right carrying the caveat, the unit or the
  * reading instruction, then the content. White card, `shadow.card`, one rule.
  *
- * Local to this screen because components/ is not this pass's to change; the
- * shadow comes from the token, so it cannot drift from any other panel.
+ * Local, as it was on the screen this came from: every value is a token, so it
+ * cannot drift from any other panel in the app even though the code is not
+ * shared.
  * ------------------------------------------------------------------ */
 
 function Panel({
@@ -113,7 +120,14 @@ const CELL = space.xl;
 const GAP = space.xs;
 const COLUMN = CELL + GAP;
 const ROWS = 7;
-const GRID_HEIGHT = ROWS * COLUMN - GAP;
+
+/**
+ * The drawn height of the grid itself, exported so a screen can reserve exactly
+ * this much while `/me` is still in flight. A skeleton that guesses is a layout
+ * shift, and the athlete may tap before the data settles.
+ */
+export const YEAR_GRID_HEIGHT = ROWS * COLUMN - GAP;
+
 /**
  * iOS refuses to draw a dashed or dotted border at radius 0, and absent must
  * stay dashed. `space.xs` is the smallest step on the scale — the same softened
@@ -147,7 +161,15 @@ const RAMP_LOW = channels(color.brand);
 /** The hottest rung: emberHot carried down into ink. */
 const RAMP_HIGH = mix(channels(color.emberHot), channels(color.ink), 0.55);
 
-const RAMP: string[] = Array.from({ length: RUNGS }, (_, step) => {
+/**
+ * Five rungs, palest first. EXPORTED for the HR-zone bar on the Stats screen,
+ * which sits a few hundred pixels above this grid and encodes the same idea —
+ * five steps of intensity, hotter is harder. Two different five-step encodings
+ * on one screen would be two visual languages for one concept; sharing this one
+ * also means the zone bar inherits the ramp's greyscale monotonicity, so it
+ * survives colour-blindness and glare exactly as the grid does.
+ */
+export const EMBER_RAMP: string[] = Array.from({ length: RUNGS }, (_, step) => {
   const [r, g, b] = mix(RAMP_LOW, RAMP_HIGH, step / (RUNGS - 1));
   return `rgb(${r}, ${g}, ${b})`;
 });
@@ -184,6 +206,11 @@ function mondayOnOrBefore(iso: string): Date {
   const d = parseLocalDay(iso);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return d;
+}
+
+/** "18 days", welded — never a bare count with the noun rendered beside it. */
+function daysLabel(n: number): string {
+  return `${n} ${n === 1 ? "day" : "days"}`;
 }
 
 type Grid = {
@@ -237,7 +264,7 @@ function buildGrid(entries: CalendarDay[], restDays: Set<string>): Grid | null {
     } else {
       kind = "zero";
     }
-    column[row] = { date: iso, kind, level };
+    column[row] = { date: iso, kind, level, km: entry?.km ?? 0, load: entry?.load ?? 0 };
 
     // Labels are read off real dates rather than derived, so a grid that is
     // one column short is still labelled correctly.
@@ -262,117 +289,106 @@ function buildGrid(entries: CalendarDay[], restDays: Set<string>): Grid | null {
   };
 }
 
-export default function CalendarScreen() {
-  const { signOut } = useSession();
-  const [profile, setProfile] = useState<WithCalendar | null>(null);
-  const [failed, setFailed] = useState(false);
-  /** Bumped by "Try again"; re-runs the fetch without remounting the screen. */
-  const [attempt, setAttempt] = useState(0);
+/**
+ * `days` is `/me`'s `calendar` (366 slots, one per day). `restDays` is the set
+ * of ISO days the current plan scheduled as rest — the only thing that can turn
+ * an unrecorded day inside the observed period into NO RUN rather than ZERO.
+ *
+ * THE ONE INTERACTION, and why it is shaped this way. The website prints each
+ * day's load inside its cell and reveals the detail on HOVER — which means that
+ * on a phone the detail is not merely collapsed, it is unreachable. So a tap is
+ * the only way this grid can say as much as the website's does.
+ *
+ * The target is a COLUMN, not a cell. A cell is 24px, half the minimum target,
+ * and 366 targets that are all too small to hit is worse than none; a column is
+ * a 24 × 190 strip, and the day within it comes from where in that strip the
+ * thumb landed. Horizontal precision is still one week — so the readout NAMES
+ * THE EXPLICIT LOCAL DAY (non-negotiable #2), and a mis-hit is visible and
+ * correctable rather than silently wrong.
+ *
+ * `Pressable` cancels on move, so the taps do not fight the horizontal
+ * ScrollView and no scroll-offset arithmetic is needed: `locationY` is relative
+ * to the column that was pressed, whatever the scroll position.
+ *
+ * This is the same interaction the charts settled on (`components/chart/Plot`) —
+ * tap to select, one persistent readout beneath, pre-filled so the first read is
+ * free. One answer to "how do I read a value", not two.
+ *
+ * What has NOT changed: no animation, no per-cell chrome, no tooltip, and the
+ * grid is still one accessibility node with one sentence.
+ */
+/**
+ * The website's five load words (`IntensityCalendar.tsx:34`), kept verbatim so
+ * an athlete reading both surfaces hears the same vocabulary.
+ */
+const LEVEL_WORD = ["Recovery", "Easy", "Moderate", "Hard", "Max effort"] as const;
 
-  useEffect(() => {
-    let alive = true;
-    getProfile()
-      .then((p) => {
-        if (alive) setProfile(p);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        // A 401 is NOT an outage. The token is missing, wrong, or belongs to a
-        // deleted athlete, and no amount of retrying fixes it — so it must not
-        // borrow the outage sentence. Hand it to the session gate, which
-        // unmounts this whole group; this screen renders nothing in the
-        // meantime rather than flashing copy the athlete cannot act on.
-        if (isUnauthorized(err)) {
-          void signOut();
-          return;
-        }
-        setFailed(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [signOut, attempt]);
-
-  const grid = useMemo(() => {
-    if (!profile) return null;
-    const rest = new Set(
-      profile.plan.days.filter((d) => d.type === "Rest").map((d) => d.date),
-    );
-    return buildGrid(profile.calendar ?? [], rest);
-  }, [profile]);
-
-  if (failed) {
-    // Transport only, now that 401 leaves through the gate: the server is
-    // unreachable or timed out, which a retry genuinely can fix. The screen
-    // keeps its name so the athlete knows what is missing, and the button is a
-    // real target rather than a sentence on an otherwise empty page.
-    return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <View style={styles.failedPage}>
-          <Text style={styles.failedTitle}>Calendar</Text>
-          <Text style={styles.failed}>
-            Your calendar could not be loaded. The RunGuard server could not be
-            reached.
-          </Text>
-          <Pressable
-            onPress={() => {
-              setFailed(false);
-              setAttempt((n) => n + 1);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Try loading the calendar again"
-            style={styles.failedAction}
-          >
-            <Text style={styles.failedActionLabel}>Try again</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
+/**
+ * What one day says. FOUR different sentences, because the grid draws four
+ * different facts and non-negotiable #4 exists to stop them collapsing:
+ *
+ *   absent  we have nothing for this day — it is before the first synced run
+ *   norun   the plan scheduled a rest day
+ *   zero    a day inside the recorded period with no run on it
+ *   load    a run, with its distance and the model's load figure
+ *
+ * The website has one hover string for all of these and no touch equivalent at
+ * all, so on a phone the detail is currently unreachable rather than merely
+ * collapsed.
+ *
+ * `load` is deliberately NOT dressed as a measurement: it is a model output with
+ * no unit, and the sentence says so rather than printing a bare number that
+ * looks like one.
+ */
+function readoutFor(cell: Cell): string {
+  const day = dayLabel(cell.date);
+  switch (cell.kind) {
+    case "absent":
+      return `${day} — nothing recorded. This is before your first synced run.`;
+    case "norun":
+      return `${day} — rest day, no run scheduled.`;
+    case "zero":
+      return `${day} — no run recorded.`;
+    default:
+      return `${day} — ${formatDistance(cell.km)} · ${LEVEL_WORD[cell.level]} (load ${Math.round(cell.load)})`;
   }
+}
+
+export function YearGrid({
+  days,
+  restDays,
+}: {
+  days: CalendarDay[];
+  restDays: Set<string>;
+}) {
+  const grid = useMemo(() => buildGrid(days, restDays), [days, restDays]);
+
+  /**
+   * Pre-filled with the most recent day that has a run on it, as the charts
+   * pre-fill with their latest point: tappability is undiscoverable, so the
+   * first read has to be free.
+   */
+  const latest = useMemo(() => {
+    if (!grid) return null;
+    for (let c = grid.columns.length - 1; c >= 0; c--) {
+      for (let r = ROWS - 1; r >= 0; r--) {
+        const cell = grid.columns[c][r];
+        if (cell && cell.kind === "load") return cell;
+      }
+    }
+    return null;
+  }, [grid]);
+
+  const [picked, setPicked] = useState<Cell | null>(null);
+  const shown = picked ?? latest;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.page}>
-        {/*
-          The row keeps its height in every state, so nothing below it moves.
-          A pending figure is a grey bar, never an em dash: "—" means "not
-          recorded" everywhere in this app and must not stand in for "loading".
-        */}
-        <View style={styles.stats}>
-          {!profile ? (
-            <>
-              <View style={styles.tile}>
-                <View style={styles.skeletonStat} />
-              </View>
-              <View style={styles.tile}>
-                <View style={styles.skeletonStat} />
-              </View>
-            </>
-          ) : null}
-          {grid ? (
-            <>
-              <View style={styles.tile}>
-                <Stat label="Distance" value={formatDistance(grid.totalKm, 0)} />
-              </View>
-              <View style={styles.tile}>
-                <Stat
-                  label="Days run"
-                  value={`${grid.daysRun} ${grid.daysRun === 1 ? "day" : "days"}`}
-                />
-              </View>
-            </>
-          ) : null}
-        </View>
-
-        <Panel title="Last 12 months" note="daily load · hotter is harder">
-          {/* Reserves the grid's exact height so nothing shifts as data lands. */}
-          {!profile ? <View style={styles.skeleton} /> : null}
-
-          {profile && !grid ? (
-            <Absent label="No training recorded in the last 12 months." />
-          ) : null}
-
-          {grid ? (
+    <>
+      <Panel title="Your training year" note="daily load · hotter is harder">
+        {grid === null ? (
+          <Absent label="No training recorded in the last 12 months." />
+        ) : (
+          <>
             <View style={styles.gridRow}>
               <View style={styles.gutter}>
                 <View style={styles.monthSpacer} />
@@ -384,10 +400,13 @@ export default function CalendarScreen() {
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {/* One image with one sentence, not 366 unlabelled squares: a
+                    screen reader walking cell by cell would read nothing but
+                    "view" 366 times, and the shape of the year is the datum. */}
                 <View
                   accessible
                   accessibilityRole="image"
-                  accessibilityLabel={`Training grid. ${grid.daysRun} days run in the last 12 months, ${formatDistance(grid.totalKm, 0)} total. Nothing recorded before ${dayLabel(grid.firstRecorded)}.`}
+                  accessibilityLabel={`Training grid. ${daysLabel(grid.daysRun)} run in the last 12 months, ${formatDistance(grid.totalKm, 0)} total. Nothing recorded before ${dayLabel(grid.firstRecorded)}.`}
                 >
                   <View style={styles.monthRow}>
                     {grid.monthMarks.map((mark) => (
@@ -402,7 +421,17 @@ export default function CalendarScreen() {
 
                   <View style={styles.grid}>
                     {grid.columns.map((column, i) => (
-                      <View key={i} style={styles.column}>
+                      <Pressable
+                        key={i}
+                        style={styles.column}
+                        // The row is derived from where in the column the thumb
+                        // landed; each row is CELL + GAP tall.
+                        onPress={(e) => {
+                          const row = Math.floor(e.nativeEvent.locationY / COLUMN);
+                          const cell = column[Math.max(0, Math.min(ROWS - 1, row))];
+                          if (cell) setPicked(cell);
+                        }}
+                      >
                         {column.map((cell, row) =>
                           cell === null ? (
                             <View key={row} style={styles.future} />
@@ -416,66 +445,76 @@ export default function CalendarScreen() {
                                 cell.kind === "zero" && styles.cellZero,
                                 cell.kind === "load" && styles.cellLoad,
                                 cell.kind === "load" && {
-                                  backgroundColor: RAMP[cell.level],
+                                  backgroundColor: EMBER_RAMP[cell.level],
                                 },
+                                // The selected day. A ring, not a fill: the fill
+                                // is the datum and overwriting it would hide the
+                                // thing being read.
+                                picked?.date === cell.date && styles.cellPicked,
                               ]}
                             />
                           ),
                         )}
-                      </View>
+                      </Pressable>
                     ))}
                   </View>
                 </View>
               </ScrollView>
             </View>
-          ) : null}
 
-          {grid ? (
+            {/*
+              The readout. One line, below the grid, always present — the
+              website's equivalent appears only on hover and so does not exist
+              on a phone at all.
+            */}
+            {shown ? (
+              <Text style={styles.readout} accessibilityLiveRegion="polite">
+                {readoutFor(shown)}
+              </Text>
+            ) : null}
+
+            {/* The two figures the old calendar screen carried in tiles above
+                the grid. They are facts about the year, so they stay with the
+                year — as a caption, not as tiles, because the tiles at the top
+                of Stats are the athlete's headline numbers and these are not. */}
             <Text style={styles.note}>
+              {`${daysLabel(grid.daysRun)} run · ${formatDistance(grid.totalKm, 0)} in the last 12 months.`}
+            </Text>
+            <Text style={styles.footnote}>
               Nothing recorded before {dayLabel(grid.firstRecorded)}.
             </Text>
-          ) : null}
-        </Panel>
+          </>
+        )}
+      </Panel>
 
-        <Panel title="Reading the grid" note="dashed means not recorded">
-          <View style={styles.legend}>
-            <View>
-              <Text style={styles.legendLabel}>Ember cell · a day that was run</Text>
-              <View style={styles.rampRow}>
-                {RAMP.map((fill, i) => (
-                  <View
-                    key={i}
-                    style={[styles.cell, styles.cellLoad, { backgroundColor: fill }]}
-                  />
-                ))}
-              </View>
-              <Text style={styles.note}>
-                Deeper ember is a harder day than a paler one. Even the palest
-                ember cell is a day that was run.
-              </Text>
+      <Panel title="Reading the grid" note="dashed means not recorded">
+        <View style={styles.legend}>
+          <View>
+            <Text style={styles.legendLabel}>Ember cell · a day that was run</Text>
+            <View style={styles.rampRow}>
+              {EMBER_RAMP.map((fill, i) => (
+                <View
+                  key={i}
+                  style={[styles.cell, styles.cellLoad, { backgroundColor: fill }]}
+                />
+              ))}
             </View>
-
-            <Absent eyebrow="Dashed cell" label="Nothing recorded for that day." />
-            <Zero eyebrow="Solid white cell" unit="mi" />
-            <NoRun eyebrow="Dotted cell" />
+            <Text style={styles.note}>
+              Deeper ember is a harder day than a paler one. Even the palest
+              ember cell is a day that was run.
+            </Text>
           </View>
-        </Panel>
-      </ScrollView>
-    </SafeAreaView>
+
+          <Absent eyebrow="Dashed cell" label="Nothing recorded for that day." />
+          <Zero eyebrow="Solid white cell" unit="mi" />
+          <NoRun eyebrow="Dotted cell" />
+        </View>
+      </Panel>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
-    gap: layout.section,
-  },
-
-  /* Panels and tiles carry the same elevation — a shadow is depth here, never
-     emphasis, so no card on this screen is louder than another. */
   panel: {
     backgroundColor: color.card,
     borderWidth: ruleWidth,
@@ -496,52 +535,6 @@ const styles = StyleSheet.create({
   /* muted on `card` is 5.16:1 — the note is small and often the only caveat. */
   panelNote: { ...text.meta, color: color.muted },
 
-  stats: { flexDirection: "row", gap: space.md },
-  tile: {
-    flex: 1,
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    ...shadow.card,
-  },
-  /* 48 = the micro label's 16 line-box + space.xs + the stat's 28, so a tile is
-     exactly as tall before the figure lands as after. */
-  skeletonStat: {
-    height: space.xxxl,
-    borderRadius: radius.control,
-    backgroundColor: color.well,
-  },
-
-  failedPage: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    gap: space.md,
-  },
-  failedTitle: { ...text.title, color: color.ink },
-  failed: { ...text.base, color: color.ink2 },
-  /* Matches the home screen's retry: brand FILL with `ink` on it, never
-     brandText on cream — a filled control is a shape, and the glyph rides the
-     fill. `target.min` keeps it tappable with cold hands. */
-  failedAction: {
-    marginTop: space.sm,
-    alignSelf: "flex-start",
-    minHeight: target.min,
-    justifyContent: "center",
-    paddingHorizontal: space.xl,
-    borderRadius: radius.control,
-    backgroundColor: color.brand,
-  },
-  failedActionLabel: { ...text.baseSemi, color: color.ink },
-  note: { ...text.meta, color: color.muted, marginTop: space.md },
-
-  skeleton: {
-    height: GRID_HEIGHT,
-    borderRadius: CELL_RADIUS,
-    backgroundColor: color.well,
-  },
-
   gridRow: { flexDirection: "row" },
   gutter: { width: GUTTER },
   monthSpacer: { height: CELL, marginBottom: GAP },
@@ -551,8 +544,17 @@ const styles = StyleSheet.create({
   monthRow: { height: CELL, marginBottom: GAP },
   monthLabel: { ...text.micro, color: color.muted, position: "absolute" },
 
-  grid: { flexDirection: "row", height: GRID_HEIGHT },
+  grid: { flexDirection: "row", height: YEAR_GRID_HEIGHT },
   column: { width: CELL, marginRight: GAP },
+  /**
+   * The selected day. `ink` at the app's own rule weight, drawn INSIDE the cell
+   * so the column keeps its width and the grid does not reflow on a tap. Chosen
+   * over a colour change because every colour in this grid already means
+   * something.
+   */
+  cellPicked: { borderWidth: ruleWidth, borderColor: color.ink },
+  /** The tapped day's sentence. Body voice, muted — it reports, it does not rate. */
+  readout: { ...text.meta, color: color.ink2, marginTop: space.md },
 
   /** A day that has not happened yet. Drawn as nothing at all — see the note. */
   future: { height: CELL, marginBottom: GAP },
@@ -589,7 +591,13 @@ const styles = StyleSheet.create({
     borderColor: color.rule,
   },
 
+  note: { ...text.meta, color: color.muted, marginTop: space.md },
+  /** The absent line sits tighter under the caption it qualifies. */
+  footnote: { ...text.meta, color: color.muted, marginTop: space.xs },
+
   legend: { gap: space.lg },
   legendLabel: { ...text.meta, color: color.ink2, marginBottom: space.sm },
   rampRow: { flexDirection: "row", gap: GAP },
 });
+
+export default YearGrid;
