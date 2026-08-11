@@ -2,8 +2,16 @@
  * An ORDINARY chat message. See ../../../docs/visual-spec.md § "Components →
  * Chat".
  *
- * Athlete right, coach left, 12px radius, no shadow — nothing in this app
- * floats.
+ * Athlete right, coach left, 12px radius. Under the sunrise re-skin a bubble
+ * DOES float: both sides carry the same `shadow.card`, because equal elevation
+ * is what keeps the pair reading as two turns of one conversation rather than
+ * one of them being emphasised. The athlete's turn takes the soft ember wash
+ * (`accentSoft`, ink on it 14.4:1), the coach's a plain white card held off the
+ * cream ground by a soft rule.
+ *
+ * The bubble geometry — radius, 84% max width, a side — is also what makes
+ * `SafetyNotice` legible as NOT a message. Do not lend any of it to that
+ * component, and do not take its full-bleed flatness for this one.
  *
  * A safety-intercepted message must never reach this component (visual-spec
  * non-negotiable #1). That is enforced by the TYPE OF THE TEXT, not by a
@@ -27,7 +35,7 @@
 import { View, Text, StyleSheet } from "react-native";
 
 import type { ChatBubbleProps, ChatMessage } from "../lib/types";
-import { color } from "../theme/tokens";
+import { color, shadow } from "../theme/tokens";
 import { text } from "../theme/type";
 import { space, radius, ruleWidth } from "../theme/space";
 
@@ -68,14 +76,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
+    // Elevation, not emphasis: identical on both sides.
+    ...shadow.card,
   },
-  /** Athlete. The one accent appearance in the thread. */
+  /** Athlete. A soft ember wash — the brand, not a status. */
   mine: { backgroundColor: color.accentSoft },
-  /** Coach. A sunken well held by a rule, matching every other surface. */
+  /** Coach. Neutral white card; the soft rule keeps its edge on cream. */
   theirs: {
-    backgroundColor: color.well,
+    backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.ruleSoft,
   },
   body: { ...text.base, color: color.ink },
 });

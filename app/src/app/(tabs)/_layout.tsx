@@ -6,13 +6,17 @@
  *
  * Three things this file is careful about:
  *
- *  1. Nothing floats. React Navigation's bar ships `elevation: 8` and a
- *     hairline top border in the theme's border colour; both are overridden so
- *     the bar is separated from the page by the same 1.5px rule as every card.
- *     Hairlines vanish in sunlight, which is the whole reason the rule is 1.5.
- *  2. Colour is rationed. The active tint is the one accent; inactive is
- *     `muted`, a grey — so the bar spends exactly one of the screen's three
- *     permitted colours.
+ *  1. White bar over the cream page, held up by the website's hairline
+ *     (`ruleSoft`) at the app's 1.5px width — the colour is the site's, the
+ *     weight is ours, because a true hairline vanishes in sunlight. Under
+ *     sunrise the bar may also float: `shadow.card`, the one elevation token,
+ *     replaces the navigator's own `elevation: 8`. Nothing is hand-rolled.
+ *  2. The active tab is the ember, because the ember is the brand. It lands
+ *     twice and the two colours are NOT interchangeable: the label is a glyph
+ *     and takes `brandText` (5.21:1 on the white bar), the icon is a shape and
+ *     takes `brandStrong` (3.19:1 — over the 3:1 floor for a drawn element,
+ *     where the `brand` fill itself would be 2.01:1 and invisible outdoors).
+ *     Inactive stays `muted`, 5.16:1.
  *  3. The glyphs are drawn at the UI's own rule weight rather than at an icon
  *     set's. Each is stroked at `ruleWidth` device pixels exactly (the grid is
  *     scaled out of the stroke width), so a tab icon and a card border are the
@@ -24,7 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { ruleWidth, space, target } from "../../theme/space";
-import { color } from "../../theme/tokens";
+import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /**
@@ -75,6 +79,28 @@ function Glyph({
   );
 }
 
+/**
+ * One tab's icon renderer. The navigator hands down the active tint, which is
+ * the label's ember (`brandText`); the drawn glyph takes the brighter
+ * `brandStrong` instead, so the ember reads as ember at 1.5px without putting a
+ * 2:1 fill under a word.
+ */
+function tabIcon(d: string) {
+  return function TabIcon({
+    color: tint,
+    focused,
+    size,
+  }: {
+    color: ColorValue;
+    focused: boolean;
+    size: number;
+  }) {
+    return (
+      <Glyph d={d} stroke={focused ? color.brandStrong : tint} size={size} />
+    );
+  };
+}
+
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
@@ -85,7 +111,9 @@ export default function TabsLayout() {
         // voice on top of the check-in.
         headerShown: false,
         sceneStyle: styles.scene,
-        tabBarActiveTintColor: color.accent,
+        // A glyph colour: the navigator paints the LABEL with this. The icon
+        // overrides it in tabIcon().
+        tabBarActiveTintColor: color.brandText,
         tabBarInactiveTintColor: color.muted,
         tabBarStyle: [styles.bar, { height: BAR_HEIGHT + insets.bottom }],
         tabBarLabelStyle: styles.label,
@@ -99,36 +127,28 @@ export default function TabsLayout() {
           // "Home" does not say what is there, and this is the tab that
           // matters. The rest are named after what they show.
           tabBarAccessibilityLabel: "Home, the daily check-in",
-          tabBarIcon: ({ color: tint, size }) => (
-            <Glyph d={HOME} stroke={tint} size={size} />
-          ),
+          tabBarIcon: tabIcon(HOME),
         }}
       />
       <Tabs.Screen
         name="runs"
         options={{
           title: "Runs",
-          tabBarIcon: ({ color: tint, size }) => (
-            <Glyph d={RUNS} stroke={tint} size={size} />
-          ),
+          tabBarIcon: tabIcon(RUNS),
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
           title: "Calendar",
-          tabBarIcon: ({ color: tint, size }) => (
-            <Glyph d={CALENDAR} stroke={tint} size={size} />
-          ),
+          tabBarIcon: tabIcon(CALENDAR),
         }}
       />
       <Tabs.Screen
         name="races"
         options={{
           title: "Races",
-          tabBarIcon: ({ color: tint, size }) => (
-            <Glyph d={RACES} stroke={tint} size={size} />
-          ),
+          tabBarIcon: tabIcon(RACES),
         }}
       />
     </Tabs>
@@ -139,11 +159,13 @@ const styles = StyleSheet.create({
   scene: { backgroundColor: color.bg },
   bar: {
     backgroundColor: color.card,
-    // Replaces the navigator's hairline, which is invisible outdoors.
+    // The website's hairline colour at the app's 1.5px width.
     borderTopWidth: ruleWidth,
-    borderTopColor: color.rule,
-    // The navigator's default is 8. Nothing in this app floats.
-    elevation: 0,
+    borderTopColor: color.ruleSoft,
+    // The one elevation token, verbatim — it also supplies the `elevation` that
+    // replaces the navigator's default 8. Its offset is downward, so what shows
+    // above the bar is the soft top of the 14px blur, not a second shadow.
+    ...shadow.card,
   },
   /** Guarantees the 48px target even if the bar is ever shortened. */
   item: { minHeight: target.min },

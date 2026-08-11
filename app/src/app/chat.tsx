@@ -28,13 +28,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { ChatBubble, bubbleText } from "../components/ChatBubble";
 import { SafetyNotice } from "../components/SafetyNotice";
 import { getChat, postChat } from "../lib/api";
 import type { ChatMessage } from "../lib/types";
-import { color } from "../theme/tokens";
-import { text } from "../theme/type";
+import { color, shadow } from "../theme/tokens";
+import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
@@ -49,6 +50,36 @@ function Row({ message }: { message: ChatMessage }) {
   return (
     <View style={styles.bubbleRow}>
       <ChatBubble role={message.role} text={body} />
+    </View>
+  );
+}
+
+/**
+ * The website's Panel hierarchy (`website/src/components/athlete/tabs.tsx:22`):
+ * a semibold title on the LEFT, an optional muted note on the RIGHT, then the
+ * content. Used for the two things on this screen that are the app talking
+ * about the thread rather than in it.
+ *
+ * Note that neither of these is a message, so neither may look like one — and
+ * neither may look like `SafetyNotice` either. A rounded, inset, shadowed card
+ * is the correct third shape: it is plainly furniture.
+ */
+function Panel({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.panel}>
+      <View style={styles.panelHead}>
+        <Text style={styles.panelTitle}>{title}</Text>
+        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
+      </View>
+      {children}
     </View>
   );
 }
@@ -149,7 +180,11 @@ export default function ChatScreen() {
         */}
         {loadFailed ? (
           <View style={styles.loadFailed}>
-            <Text style={styles.plain}>Your earlier messages could not be loaded.</Text>
+            <Panel title="Earlier messages" note="Could not load">
+              <Text style={styles.plain}>
+                Anything you send now will still appear here.
+              </Text>
+            </Panel>
           </View>
         ) : null}
         <FlatList<ChatMessage>
@@ -167,12 +202,11 @@ export default function ChatScreen() {
             // Nothing to say while the first load is still in flight, and
             // nothing to say when it failed — the notice above covers that.
             messages === null ? null : (
-              <View style={styles.notice}>
+              <Panel title="Ask your coach" note="Nothing sent yet">
                 <Text style={styles.plain}>
-                  No messages yet. Ask about a run, a workout, or how you have been
-                  feeling.
+                  Ask about a run, a workout, or how you have been feeling.
                 </Text>
-              </View>
+              </Panel>
             )
           }
           ListFooterComponent={
@@ -208,7 +242,23 @@ export default function ChatScreen() {
               accessibilityLabel="Send"
               accessibilityState={{ disabled: !canSend }}
             >
-              <Text style={canSend ? styles.sendLabel : styles.sendLabelOff}>Send</Text>
+              {canSend ? (
+                // The ember signature, 135° as on the web. The label is `ink`,
+                // NOT `brandText`: measured on the gradient's darkest stop
+                // (#F97316) ink is 5.97:1 and brandText only 1.86:1.
+                <LinearGradient
+                  colors={color.ember}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sendFill}
+                >
+                  <Text style={styles.sendLabel}>Send</Text>
+                </LinearGradient>
+              ) : (
+                <View style={[styles.sendFill, styles.sendOff]}>
+                  <Text style={styles.sendLabelOff}>Send</Text>
+                </View>
+              )}
             </Pressable>
           </View>
         </View>
@@ -228,8 +278,28 @@ const styles = StyleSheet.create({
   list: { paddingVertical: space.xl },
   bubbleRow: { paddingHorizontal: layout.page },
   separator: { height: space.md },
-  notice: { paddingHorizontal: layout.page },
-  loadFailed: { paddingHorizontal: layout.page, paddingTop: space.xl },
+  loadFailed: { paddingTop: space.xl },
+  /** Panel: title left, note right, content under. */
+  panel: {
+    marginHorizontal: layout.page,
+    backgroundColor: color.card,
+    borderRadius: radius.card,
+    borderWidth: ruleWidth,
+    borderColor: color.ruleSoft,
+    padding: layout.cardPadding,
+    gap: space.sm,
+    ...shadow.card,
+  },
+  panelHead: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  panelTitle: { ...text.meta, fontFamily: font.bodySemi, color: color.ink },
+  /** The caveat. Always the right-hand side, always muted (5.16:1 on card). */
+  panelNote: { ...text.meta, color: color.muted },
   plain: { ...text.base, color: color.ink2 },
   /** Quiet and inline: no overlay, no spinner, no animation. */
   pending: { ...text.meta, color: color.muted },
@@ -246,24 +316,38 @@ const styles = StyleSheet.create({
     flex: 1,
     ...text.base,
     color: color.ink,
-    backgroundColor: color.bg,
+    /** Sunken against the white composer, so the field reads as a field. */
+    backgroundColor: color.well,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.ruleSoft,
     borderRadius: radius.control,
     paddingHorizontal: space.md,
     paddingVertical: space.md,
     minHeight: target.min,
     maxHeight: target.min * 3,
   },
+  /** Clips the gradient to the control radius; the fill carries the padding. */
   send: {
     minWidth: target.min,
     minHeight: target.min,
-    paddingHorizontal: space.md,
     borderRadius: radius.control,
+    overflow: "hidden",
+  },
+  sendFill: {
+    flex: 1,
+    minWidth: target.min,
+    minHeight: target.min,
+    paddingHorizontal: space.lg,
     alignItems: "center",
     justifyContent: "center",
   },
-  sendLabel: { ...text.baseSemi, color: color.accent },
+  /** Disabled: no ember at all, so "cannot send" is not a dimmed brand. */
+  sendOff: {
+    backgroundColor: color.well,
+    borderWidth: ruleWidth,
+    borderColor: color.ruleSoft,
+  },
+  sendLabel: { ...text.baseSemi, color: color.ink },
   sendLabelOff: { ...text.baseSemi, color: color.muted },
   sendFailed: { ...text.meta, color: color.ink2 },
 });

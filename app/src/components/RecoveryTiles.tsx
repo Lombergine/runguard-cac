@@ -2,10 +2,17 @@
  * The 2×2 recovery grid: Sleep · 7d, HRV, Resting HR, Week.
  *
  * Mirrors the four bento tiles on the website's home tab
- * (website/src/components/athlete/tabs.tsx) — same four readings, same copy —
- * in this app's flat language. Tiles are ink-on-card and are never tinted: the
- * website turns a tile amber or red when a delta crosses a threshold, which is
- * status colour doing advisory work, and advisory here stays a description.
+ * (website/src/components/athlete/tabs.tsx `BentoTile`:127) — same four
+ * readings, same copy — under the website's `Panel` head (tabs.tsx:22): title on
+ * the LEFT, muted note on the RIGHT, then the content. The note carries the
+ * reading instruction the tiles cannot fit, which is what the two deltas are
+ * measured against.
+ *
+ * Tiles stay ink-on-card and are never tinted. The website turns a tile amber or
+ * red when a delta crosses a threshold; that is status colour doing advisory
+ * work, and advisory here stays a description. Sunrise loosens how often colour
+ * may appear, not what colour is allowed to say — so the ember is spent on the
+ * things the athlete acts on, never on a reading that has drifted.
  *
  * Every reading is nullable. `RecoverySnapshot`
  * (website/src/lib/risk.ts) has every field `| null`, and for most athletes in
@@ -17,12 +24,14 @@
  * The figures are already rounded to one decimal by the server (risk.ts
  * `round`), so nothing is re-formatted here beyond welding the unit on.
  */
-import { View, StyleSheet } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 
 import { Tile } from "./Tile";
 import { Profile } from "../lib/types";
 import { formatDistance } from "../lib/units";
 import { space } from "../theme/space";
+import { color } from "../theme/tokens";
+import { text } from "../theme/type";
 
 /**
  * The recovery readings the grid shows.
@@ -63,6 +72,13 @@ export function RecoveryTiles({ risk }: RecoveryTilesProps) {
 
   return (
     <View style={styles.grid}>
+      <View style={styles.head}>
+        <Text style={styles.title}>Recovery</Text>
+        {/* The caveat, not a heading of its own: two of these four tiles carry a
+            delta, and a delta means nothing without what it is measured from. */}
+        <Text style={styles.note}>Deltas vs 28-day baseline</Text>
+      </View>
+
       <View style={styles.row}>
         <Tile label="Sleep · 7d" value={r.sleepAvg != null ? `${r.sleepAvg} h` : null} />
         <Tile
@@ -98,6 +114,16 @@ export function RecoveryTiles({ risk }: RecoveryTilesProps) {
 
 const styles = StyleSheet.create({
   grid: { gap: space.md },
+  /** The Panel head: title left, note right, both on the same baseline. */
+  head: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  title: { ...text.title, color: color.ink },
+  note: { ...text.meta, color: color.muted },
   // Two explicit rows rather than a wrapping grid: `flex: 1` on each tile keeps
   // the pair the same width and the same height at 360px, which a flexBasis
   // wrap does not guarantee once one tile carries a sub-line.

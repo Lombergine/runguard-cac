@@ -1,17 +1,16 @@
 /**
  * One density tile: a micro-label, one big mono figure, an optional sub-line.
  *
- * Mirrors the website's `BentoTile`
- * (website/src/components/athlete/tabs.tsx) for its INFORMATION, not for its
- * decoration. The web version carries a gradient ground, a glow and an entrance
- * animation; none of that survives the port. Here it is a flat `card` ground
- * with a single 1.5px rule — see ../../../docs/visual-spec.md § "Lines instead
- * of shadows". No shadow, no elevation, no gradient, no tint.
+ * Ports the website's `BentoTile`
+ * (website/src/components/athlete/tabs.tsx:127): a white `card` ground, the
+ * `ruleSoft` hairline, `radius.card`, and `shadow.card`. What does NOT survive
+ * the port is the web version's entrance animation and its per-tile glow — a
+ * shadow here is elevation, never emphasis, so every tile carries the same one.
  *
  * The card surface is spelled out here rather than composed from <Card/>
  * because a tile has to `flex: 1` so both tiles in a grid row finish at the
  * same height, and Card takes no style prop. Every value still comes from the
- * same tokens Card uses.
+ * same tokens Card uses, so the two surfaces cannot drift.
  *
  * `value` arrives PRE-FORMATTED with its unit already welded on ("7.2 h",
  * "48 ms", "4.2 mi"). There is deliberately no `unit` prop: a separate unit
@@ -26,7 +25,7 @@
  */
 import { View, Text, StyleSheet } from "react-native";
 
-import { color } from "../theme/tokens";
+import { color, shadow } from "../theme/tokens";
 import { text, font, tabular } from "../theme/type";
 import { layout, radius, ruleWidth, space } from "../theme/space";
 
@@ -42,8 +41,16 @@ export type TileProps = {
   sub?: string;
   /**
    * Colour for the figure. A token from ../theme/tokens — never a literal.
-   * Colour is rationed to about three appearances per screen, so most tiles
-   * leave this unset and read ink-on-card.
+   *
+   * This lands on a GLYPH, so it must be one of the `…Text` variants
+   * (`brandText`, `okText`, `watchText`, `unusualText`, `series1Text`) and
+   * never a fill token. The fills are the website's raw hexes and fail as
+   * text: `brand` is 2.15:1 on `card`, `ok` 3.30:1, `watch` 3.19:1. Their
+   * `…Text` twins are all ≥5.16:1 on `card` and ≥4.51:1 on `well`.
+   *
+   * Ember is the app's signature and this is the one place in the primitives
+   * where it belongs on a figure — `color.brandText` for a tile the screen
+   * wants to read as the headline number.
    */
   accent?: string;
 };
@@ -91,9 +98,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.ruleSoft,
     borderRadius: radius.card,
     padding: layout.cardPadding,
+    ...shadow.card,
   },
   label: { ...text.micro, color: color.muted },
   value: { ...text.stat, color: color.ink, marginTop: space.xs },

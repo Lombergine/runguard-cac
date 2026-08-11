@@ -1,9 +1,21 @@
 /**
  * Races — what is coming, and what has already been run.
  *
- * Secondary by design (visual-spec § Nav), and deliberately unexcited: a PR is
- * a plain two-letter label, not a badge, a medal or a fill. The screen is a
- * printed results sheet, not a trophy cabinet.
+ * Sunrise skin: cream ground, white cards, and the ember reserved for two jobs —
+ * the gradient strip on a race that is nearly here, and the split markers in the
+ * pacing plan. A PR is still a plain two-letter label, not a badge, a medal or a
+ * fill: the screen is a printed results sheet, not a trophy cabinet, and that
+ * call survives the re-skin.
+ *
+ * Every block follows the website's Panel hierarchy (`website/src/components/
+ * athlete/tabs.tsx:22`): title on the left, a muted note on the right carrying
+ * the caveat, then the content.
+ *
+ * HONESTY: `race.predicted` is a model output, not a measurement. With no synced
+ * activity it is the model talking to itself, so — exactly as the website does
+ * (`tabs.tsx:681`) — everything downstream of it is gated on
+ * `risk.hasActivityHistory`. That includes `race.pacing`, whose sentences quote
+ * the predicted splits back at you.
  *
  * `UpcomingRace` comes from lib/types. `races.history` does not exist in that
  * contract yet, so `RaceResult` below narrows the real payload
@@ -12,6 +24,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
@@ -38,6 +51,13 @@ type RaceResult = {
 type WithRaces = Omit<Profile, "races"> & {
   races?: { upcoming: UpcomingRace[]; history?: RaceResult[] };
 };
+
+/**
+ * Inside this many days the card wears the ember strip. Ported from the
+ * website, which switches the race card's border to `--brand` at the same
+ * threshold (tabs.tsx:668).
+ */
+const IMMINENT_DAYS = 7;
 
 /** "in 12 days", welded, in one node. Today and tomorrow read as words. */
 function countdownLabel(daysUntil: number): string {
@@ -73,7 +93,7 @@ function Header({ count }: { count: number | null }) {
   return (
     <View style={styles.header}>
       <Text style={styles.eyebrow}>Race log</Text>
-      <View style={styles.headingRow}>
+      <View style={styles.panelHead}>
         <Text style={styles.heading}>Races</Text>
         {count !== null && count > 0 ? (
           <Text style={styles.count}>{countLabel(count)}</Text>
@@ -86,28 +106,92 @@ function Header({ count }: { count: number | null }) {
   );
 }
 
+/** The Panel hierarchy: title left, caveat right, content below. */
 function SectionHeading({ title, note }: { title: string; note: string }) {
   return (
-    <View>
+    <View style={styles.panelHead}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={styles.note}>{note}</Text>
+      <Text style={styles.sectionNote}>{note}</Text>
     </View>
   );
 }
 
-function UpcomingCard({ race }: { race: UpcomingRace }) {
+/**
+ * The split-by-split plan. Server-composed sentences, rendered as description —
+ * markers are shapes, so the block never reads as a set of orders.
+ *
+ * Only ever mounted when the prediction is trustworthy; see `UpcomingCard`.
+ */
+function Pacing({ lines, predicted }: { lines: string[]; predicted: string }) {
   return (
-    <Card>
-      <Text style={styles.eyebrow}>
-        {`${dayLabel(race.date)} · ${countdownLabel(race.daysUntil)}`}
-      </Text>
-      <Text style={styles.title}>{race.name}</Text>
-      {race.location ? (
-        <Text style={styles.meta}>{race.location}</Text>
+    <View style={styles.pacing}>
+      <View style={styles.panelHead}>
+        <Text style={styles.pacingTitle}>Pacing strategy</Text>
+        <Text style={styles.pacingNote}>{`from your predicted ${predicted}`}</Text>
+      </View>
+      {lines.map((line, i) => (
+        <View key={i} style={styles.splitRow}>
+          {/* A shape, not a glyph: `brand` is a fill token and unreadable as type. */}
+          <View style={styles.splitMarkCol}>
+            <View style={styles.splitMark} />
+          </View>
+          <Text style={styles.splitText}>{line}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function UpcomingCard({
+  race,
+  predictionKnown,
+}: {
+  race: UpcomingRace;
+  /** `risk.hasActivityHistory`. False = the model has nothing to stand on. */
+  predictionKnown: boolean;
+}) {
+  const soon = race.daysUntil <= IMMINENT_DAYS;
+  return (
+    <Card padded={false}>
+      {soon ? (
+        <LinearGradient
+          colors={color.ember}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.ember}
+        />
       ) : null}
-      <View style={styles.upcomingStats}>
-        <Stat label="Event" value={race.event} />
-        <Stat label="Predicted" value={race.predicted} />
+      <View style={styles.upcomingBody}>
+        <View style={styles.panelHead}>
+          <Text style={styles.title}>{race.name}</Text>
+          <Text style={soon ? styles.countdownSoon : styles.countdown}>
+            {countdownLabel(race.daysUntil)}
+          </Text>
+        </View>
+        <Text style={styles.eyebrow}>
+          {race.location
+            ? `${dayLabel(race.date)} · ${race.location}`
+            : dayLabel(race.date)}
+        </Text>
+
+        <View style={styles.upcomingStats}>
+          <Stat label="Event" value={race.event} />
+          {predictionKnown ? (
+            <Stat label="Predicted" value={race.predicted} />
+          ) : null}
+        </View>
+
+        {predictionKnown ? (
+          race.pacing.length > 0 ? (
+            <Pacing lines={race.pacing} predicted={race.predicted} />
+          ) : null
+        ) : (
+          // Dashed, because we do not know — never a confident finishing time
+          // for an athlete who has synced nothing.
+          <View style={styles.predictedAbsent}>
+            <Absent eyebrow="Predicted" label="Not enough data yet." />
+          </View>
+        )}
       </View>
     </Card>
   );
@@ -200,6 +284,8 @@ export default function RacesScreen() {
     );
   }
 
+  const predictionKnown = profile.risk.hasActivityHistory;
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.page}>
@@ -209,12 +295,22 @@ export default function RacesScreen() {
           <View style={styles.section}>
             <SectionHeading
               title="Upcoming"
-              note="Predicted times come from your recent training."
+              note={
+                predictionKnown
+                  ? "Predicted times come from your recent training."
+                  : "Predictions need synced runs."
+              }
             />
             {upcoming.length === 0 ? (
               <Absent label="No races scheduled." />
             ) : (
-              upcoming.map((race) => <UpcomingCard key={race.id} race={race} />)
+              upcoming.map((race) => (
+                <UpcomingCard
+                  key={race.id}
+                  race={race}
+                  predictionKnown={predictionKnown}
+                />
+              ))
             )}
           </View>
 
@@ -251,25 +347,63 @@ const styles = StyleSheet.create({
   sections: { gap: layout.section },
   section: { gap: space.md },
   eyebrow: { ...text.micro, color: color.muted },
-  title: { ...text.title, color: color.ink, marginTop: space.sm },
-  meta: { ...text.meta, color: color.ink2 },
+  title: { ...text.title, color: color.ink, flexShrink: 1 },
   failed: { ...text.base, color: color.ink2 },
 
   header: { marginBottom: layout.section },
-  headingRow: {
+  /** The Panel row: title left, note right, baselines shared, wraps at 360px. */
+  panelHead: {
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
+    flexWrap: "wrap",
     gap: space.md,
     marginTop: space.xs,
   },
   heading: { ...text.title, color: color.ink },
-  /** Mono, with the noun welded on. Never a bare numeral. */
-  count: { ...text.stat, color: color.ink2 },
+  /**
+   * Mono, with the noun welded on. Never a bare numeral. Ember on type, so it
+   * takes `brandText` — 4.88:1 on `bg`, where `brand` itself is 2.01:1.
+   */
+  count: { ...text.stat, color: color.brandText },
   sectionTitle: { ...text.title, color: color.ink },
+  sectionNote: { ...text.meta, color: color.muted, flexShrink: 1 },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
+  /** The one loud thing on the screen, and only when the race is nearly here. */
+  ember: {
+    height: space.xs,
+    borderTopLeftRadius: radius.card - ruleWidth,
+    borderTopRightRadius: radius.card - ruleWidth,
+  },
+  upcomingBody: { padding: layout.cardPadding },
+  countdown: { ...text.micro, color: color.muted },
+  /** brandText, not brand: 5.21:1 on `card`, against 2.01:1 for the fill. */
+  countdownSoon: { ...text.micro, color: color.brandText },
   upcomingStats: { flexDirection: "row", gap: space.xxl, marginTop: space.lg },
+  predictedAbsent: { marginTop: space.lg },
+
+  pacing: {
+    marginTop: space.lg,
+    paddingTop: space.xs,
+    borderTopWidth: ruleWidth,
+    borderTopColor: color.ruleSoft,
+  },
+  pacingTitle: { ...text.baseSemi, color: color.ink },
+  pacingNote: { ...text.micro, color: color.muted, flexShrink: 1 },
+  splitRow: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
+  /** Centres the marker on the first line without hardcoding an offset. */
+  splitMarkCol: {
+    height: text.meta.lineHeight,
+    justifyContent: "center",
+  },
+  splitMark: {
+    width: space.sm,
+    height: space.sm,
+    borderRadius: space.xs,
+    backgroundColor: color.brand,
+  },
+  splitText: { ...text.meta, color: color.ink2, flexShrink: 1 },
 
   resultRow: {
     flexDirection: "row",

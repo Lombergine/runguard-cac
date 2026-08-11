@@ -1,62 +1,133 @@
 /**
- * Colour tokens — the single source. See ../../../docs/visual-spec.md.
+ * Colour tokens — the "sunrise" system, ported from the website.
  *
- * Never hardcode a colour in a component. If a colour you need is not here,
- * that is a signal the design does not call for it.
+ * Source of truth: `website/src/app/globals.css:3-45`, whose own docblock names
+ * the system: "Warm cream-white surfaces, one ember signature doing the energy
+ * work, soft real shadows, colorful-but-disciplined state chips."
  *
- * Colour is RATIONED: roughly three appearances per screen — the thing you tap,
- * a status dot, the body map. Everything else is white, near-black, and one
- * grey rule weight.
+ * This SUPERSEDES the pale-cool palette the app shipped with. See
+ * ../../../docs/visual-spec.md — its palette section is overruled; its safety
+ * and honesty rules are not.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * WHY THERE ARE TWO SETS OF ACCENT COLOURS
+ *
+ * The website's palette was never checked against WCAG, and most of it fails
+ * as text. Measured against `surface2` (#f4efe6), the darkest ground text
+ * commonly sits on:
+ *
+ *     ink-muted  #94897b  3.21:1     brand    #f59e0b  2.01:1
+ *     good       #16a34a  3.08:1     warning  #d97706  2.98:1
+ *     series-1   #2a78d6  4.13:1     serious  #ea580c  3.33:1
+ *
+ * Every one of those is below the 4.5:1 text floor, and `ink-muted` carries
+ * every micro-label, note and sub-line on the site. This app is used at 6am
+ * outdoors in glare, so shipping them verbatim would be a real legibility
+ * defect rather than a pedantic one.
+ *
+ * So each accent exists twice:
+ *   - the FILL value  — the website's exact hex, for bars, dots and gradients
+ *   - the TEXT value  — the same hue and saturation walked down in lightness
+ *                       until it clears 4.5:1 on surface2
+ *
+ * Use `…Text` whenever the colour lands on a glyph. Use the plain token for a
+ * shape. Getting this wrong is invisible indoors and unreadable on a track.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 
 export const color = {
-  /**
-   * Surface — pre-dawn cool, not cream. Warm cream washes out in low morning
-   * light, which is the primary use.
-   */
-  bg: "#F3F5F4",
+  /* Surfaces — warm paper, three elevation steps (globals.css:12-24). */
+  bg: "#FAF7F2",
+  /** Top of the page gradient; the website's ground sunrises over 420px. */
+  bgTop: "#FDF3E3",
   card: "#FFFFFF",
-  /** Sunken, for empty slots. */
-  well: "#E9EDEB",
+  /** Sunken. The old palette called this `well`; kept as the empty-slot fill. */
+  well: "#F4EFE6",
+  surface3: "#ECE5D8",
 
-  /** Ink — deliberately darker than fashionable, for outdoor sunlight. */
-  ink: "#12161A",
-  ink2: "#3C444B",
-  /** Verified ≥4.5:1 on `bg`. Re-verify if `bg` ever changes. */
-  muted: "#6B7178",
+  /* Ink. Both clear 4.5:1 on every surface above (ink 14.6+, ink2 6.4+). */
+  ink: "#221D15",
+  ink2: "#55503F",
+  /**
+   * Darkened from the website's #94897b (3.21:1 → 4.83:1 on bg, 4.51 on well).
+   * Same hue and saturation, lower lightness.
+   */
+  muted: "#756C5F",
 
-  /** Rules are 1.5px, not hairline — hairlines disappear in bright sun. */
-  rule: "#D3DAD7",
-  ruleSoft: "#E4E9E7",
+  /* Rules. The website uses translucent ink rather than a grey. */
+  rule: "rgba(34,29,21,0.14)",
+  ruleSoft: "rgba(34,29,21,0.09)",
+  ruleStrong: "rgba(34,29,21,0.24)",
+
+  /* ── The ember signature — "the fun" (globals.css:26-31) ───────────── */
+  /** FILL only: bars, dots, gradient stops. 2.01:1 — never put a glyph on it. */
+  brand: "#F59E0B",
+  brandStrong: "#D97706",
+  emberHot: "#F97316",
+  /** The gradient stops, for expo-linear-gradient. 135° on the web. */
+  ember: ["#FBBF24", "#F59E0B", "#F97316"] as const,
+  emberGlow: "rgba(249,115,22,0.16)",
+  /** TEXT: ember at 4.55:1. Use for any ember-coloured word. */
+  brandText: "#976106",
+
+  /* ── Semantic states. The website's comment: "verdicts only, never chrome" */
+  ok: "#16A34A",
+  watch: "#D97706",
+  serious: "#EA580C",
+  unusual: "#DC2626",
+  series1: "#2A78D6",
+  /** TEXT variants, all ≥4.5:1 on well. */
+  okText: "#117E39",
+  watchText: "#A55A05",
+  seriousText: "#BD470A",
+  unusualText: "#D42222",
+  series1Text: "#266DC4",
 
   /**
-   * Accent — exactly ONE. Deliberately not green: green reads "good", and a
-   * blank must never read as fine. This is the school-colour slot.
+   * Absent. ALWAYS paired with a dashed border and a label, never colour alone.
+   * Retuned for the cream ground: 4.86:1 on well, 5.21:1 on bg.
    */
-  accent: "#2C4C8C",
-  accentSoft: "#DFE6F2",
+  unknown: "#6F675C",
 
-  /** Support — track surface. Data and illustration only, never on a control. */
+  /* ── Compatibility with the pre-sunrise names ──────────────────────────
+   * The old palette had exactly ONE accent (a deep field blue) because colour
+   * was rationed. Under sunrise the accent IS the ember, so these map onto it.
+   * `accent` is a FILL — put a glyph on `brandText`, never on this.
+   */
+  accent: "#F59E0B",
+  /** Soft ember wash for a bar track or a pressed state. */
+  accentSoft: "#FDECC8",
+
+  /**
+   * Body-map support colour. The spec's rule survives the re-skin: soreness is
+   * data entry about the body, so it must NOT wear the accent, or a tapped
+   * region reads as a system action. Warm brick — same family as the ember,
+   * clearly not it.
+   */
   track: "#9A4A38",
-  trackSoft: "#F0E1DD",
+  trackSoft: "#F2E0DB",
 
-  /** Status — semantic only. Never decorative, never on a non-status element. */
-  ok: "#2F6B4F",
-  watch: "#8A6A1F",
-  unusual: "#A33A2E",
-  /**
-   * ALWAYS paired with a dashed border and a label. Never colour alone.
-   *
-   * The `—` renders at 22px — under the 24px large-text threshold — so 4.5:1
-   * applies, on the sunken `well` as well as on `bg`. Measured (WCAG 2.x):
-   * 4.82:1 on `well`, 5.20:1 on `bg`, 5.69:1 on `card`. `well` is the binding
-   * surface; keep it ≥4.5 there and the rest follow.
-   *
-   * Same hue and saturation as before, only darker, so absence still reads as
-   * grey rather than ink — and deliberately still much lighter than `ink2`
-   * (2.4× its relative luminance), because absence must not outweigh data.
-   */
-  unknown: "#63676D",
+  /* Chart furniture (globals.css:23-24). */
+  grid: "#ECE6DA",
+  baseline: "#D8D0C0",
+} as const;
+
+/**
+ * The website's two-layer card shadow (globals.css:77-82), translated to RN.
+ * iOS reads shadow*, Android reads elevation, so both are set.
+ *
+ * Nothing floated in the old palette. Under sunrise things do — but a shadow is
+ * elevation, never emphasis: it must not be used to make one card louder than
+ * another.
+ */
+export const shadow = {
+  card: {
+    shadowColor: "#221D15",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    elevation: 3,
+  },
 } as const;
 
 export type ColorToken = keyof typeof color;

@@ -6,10 +6,16 @@
  * shapes, the advisory in each flag, cards, stats, run cards, the receipt, both
  * chat surfaces, the body map, and the type scale with its role names.
  *
- * The greyscale test lives here too: screenshot a section, desaturate it, and
- * every state in it must still be tellable apart. Each specimen's label names
- * the cue that is supposed to survive, so the check can be read off the
- * screenshot without the source open.
+ * The greyscale test lives here too, and it now has its own section at the top:
+ * the three kinds of nothing and all four status shapes, adjacent, each
+ * captioned with the cue that is supposed to survive desaturation. Screenshot
+ * that one block, drop the saturation, and the whole honesty contract can be
+ * checked at a glance without the source open. It sits on the page's cream
+ * ground rather than inside a white panel on purpose — Zero's fill is `card`,
+ * so on a white panel it would lose a cue it is meant to be tested on.
+ *
+ * Structure follows the website's Panel: a semibold title on the left, the
+ * caveat or reading instruction as a muted note on the right, then the content.
  *
  * DEV ONLY, AND ENFORCED. This is a live route under src/app/, so a release
  * build can reach it by URL; expo-router has no dev-only route mechanism, so
@@ -17,6 +23,7 @@
  */
 import { useState } from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent, Zero, NoRun } from "../components/Nothing";
@@ -31,10 +38,21 @@ import { SafetyNotice } from "../components/SafetyNotice";
 import { Stat } from "../components/Stat";
 import { ChatMessage, Flag, RecentRun } from "../lib/types";
 import { color } from "../theme/tokens";
-import { text, TextRole } from "../theme/type";
-import { layout, space } from "../theme/space";
+import { font, text, TextRole } from "../theme/type";
+import { layout, radius, space } from "../theme/space";
 
 const FLAGS: Flag[] = ["clear", "watch", "unusual", "unknown"];
+
+/**
+ * The cue each status shape is supposed to keep once the colour is gone. These
+ * are the captions in the greyscale row, so the screenshot names its own test.
+ */
+const DOT_CUE: Record<Flag, string> = {
+  clear: "filled disc",
+  watch: "half filled",
+  unusual: "split, two quadrants",
+  unknown: "dashed ring",
+};
 
 /**
  * Fixed specimen runs. `date` is only the payload's day key — every card takes
@@ -121,31 +139,58 @@ function SpecimenSheet() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.pageTitle}>Specimen sheet</Text>
+        {/* The ember, once, doing the energy work. 135° as on the web. */}
+        <LinearGradient
+          colors={color.ember}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.emberRule}
+        />
         <Text style={styles.pageNote}>
           Shared primitives in every state. Not a product screen.
         </Text>
 
-        {/* ---------------------------------------------------------- */}
-        <Section title="Three kinds of nothing" />
+        {/* ----------------------------------------------------------
+         * The one block to screenshot. Everything the honesty contract
+         * rests on, adjacent, with its surviving cue written under it.
+         * -------------------------------------------------------- */}
+        <Section
+          title="Greyscale check"
+          note="Desaturate this block — every cell must still read apart"
+        />
         <Text style={styles.note}>
-          Adjacent on purpose. Dashed is the only one that means "we don't
-          know"; zero is a fact; rest recedes.
+          Colour is the last cue, never the only one. Dashed means "we don't
+          know" and nothing else does; zero is a fact and looks like every other
+          fact; rest recedes.
         </Text>
         <View style={styles.trio}>
           <View style={styles.trioCell}>
             <Absent />
-            <Caption>Absent — dashed</Caption>
+            <Caption>Absent — dashed rule, sunken fill</Caption>
           </View>
           <View style={styles.trioCell}>
             <Zero unit="mi" />
-            <Caption>Zero — solid</Caption>
+            <Caption>Zero — solid rule, card fill</Caption>
           </View>
           <View style={styles.trioCell}>
             <NoRun />
-            <Caption>NoRun — dotted</Caption>
+            <Caption>No run — dotted rule, no fill</Caption>
           </View>
         </View>
+        <View style={styles.dotRow}>
+          {FLAGS.map((flag) => (
+            <View key={flag} style={styles.dotCell}>
+              <StatusDot flag={flag} size={28} />
+              <Caption center>{`${flag} — ${DOT_CUE[flag]}`}</Caption>
+            </View>
+          ))}
+        </View>
 
+        {/* ---------------------------------------------------------- */}
+        <Section
+          title="Three kinds of nothing"
+          note="Three components, never one with a variant prop"
+        />
         <Specimen label="Absent — with eyebrow, default label">
           <Absent eyebrow="Readiness" />
         </Specimen>
@@ -163,19 +208,7 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="StatusDot" />
-        <Text style={styles.note}>
-          Shape carries the meaning. Desaturate this row — all four must still
-          read apart.
-        </Text>
-        <View style={styles.dotRow}>
-          {FLAGS.map((flag) => (
-            <View key={flag} style={styles.dotCell}>
-              <StatusDot flag={flag} size={28} />
-              <Caption>{flag}</Caption>
-            </View>
-          ))}
-        </View>
+        <Section title="StatusDot" note="Shape first, colour last" />
         <Specimen label="At the default 12px, inline size">
           <View style={styles.dotInline}>
             {FLAGS.map((flag) => (
@@ -185,7 +218,10 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="Advisory" />
+        <Section
+          title="Advisory"
+          note="Body weight, lowercase — description, not instruction"
+        />
         {FLAGS.map((flag) => (
           <Specimen key={flag} label={`flag="${flag}"`}>
             <Advisory flag={flag} reason={REASONS[flag]} />
@@ -193,12 +229,13 @@ function SpecimenSheet() {
         ))}
 
         {/* ---------------------------------------------------------- */}
-        <Section title="Card" />
+        <Section title="Card" note="White on the warm ground" />
         <Specimen label="padded (default)">
           <Card>
             <Text style={styles.cardTitle}>Yesterday's run</Text>
             <Text style={styles.cardBody}>
-              One crisp rule, no shadow. Nothing in this app floats.
+              Any elevation is shadow.card — never a hand-rolled one, and never
+              used to make one card louder than its neighbour.
             </Text>
           </Card>
         </Specimen>
@@ -211,7 +248,7 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="Stat" />
+        <Section title="Stat" note="mono, tabular figures" />
         <Text style={styles.note}>
           Distance / Time / Pace, always in that order. Values arrive
           pre-formatted with the unit welded on.
@@ -236,7 +273,7 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="RunCard" />
+        <Section title="RunCard" note="Dates arrive pre-formatted, never derived" />
         <Text style={styles.note}>
           Distance / Time / Pace, always that order, right of the route glyph.
           Nothing here is coloured, so the greyscale copy should be identical.
@@ -255,7 +292,7 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="CheckInReceipt" />
+        <Section title="CheckInReceipt" note="There is no success screen" />
         <Text style={styles.note}>
           What the check-in card collapses into. One line, mono, time and day
           welded together. There is no success screen.
@@ -265,7 +302,7 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="Chat" />
+        <Section title="Chat" note="A safety reply can never reach a bubble" />
         <Text style={styles.note}>
           Side and geometry separate the speakers, not hue: the athlete's bubble
           is right-aligned and unruled, the coach's is left and held by a rule.
@@ -284,7 +321,7 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="BodyMap" />
+        <Section title="BodyMap" note="Track colour, never the ember" />
         <Text style={styles.note}>
           Tappable. Selection is a filled patch inside an outline, so it survives
           desaturation; the fill is track, not accent, because this is the
@@ -305,7 +342,7 @@ function SpecimenSheet() {
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
-        <Section title="Type scale" />
+        <Section title="Type scale" note="If it is a number, it is mono" />
         {TYPE_SCALE.map((step) => (
           <View key={step.role} style={styles.typeRow}>
             <Text style={styles.typeRole}>{step.role}</Text>
@@ -326,12 +363,31 @@ function SpecimenSheet() {
  * Gallery-local scaffolding. Not part of the design system.
  * ------------------------------------------------------------------ */
 
-function Section({ title }: { title: string }) {
-  return <Text style={styles.section}>{title}</Text>;
+/**
+ * The website's Panel header: semibold title on the left, the caveat or the
+ * reading instruction as a muted note on the right, baseline-aligned.
+ */
+function Section({ title, note }: { title: string; note?: string }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {note ? <Text style={styles.sectionNote}>{note}</Text> : null}
+    </View>
+  );
 }
 
-function Caption({ children }: { children: string }) {
-  return <Text style={styles.caption}>{children}</Text>;
+function Caption({
+  children,
+  center,
+}: {
+  children: string;
+  center?: boolean;
+}) {
+  return (
+    <Text style={[styles.caption, center && styles.captionCenter]}>
+      {children}
+    </Text>
+  );
 }
 
 function Specimen({
@@ -366,26 +422,49 @@ const styles = StyleSheet.create({
   page: { paddingHorizontal: layout.page, paddingBottom: space.xxxl },
 
   pageTitle: { ...text.title, color: color.ink, marginTop: space.xl },
-  pageNote: { ...text.meta, color: color.muted, marginTop: space.xs },
+  /** The ember signature. A shape, so it takes the fill stops. */
+  emberRule: {
+    height: space.xs,
+    borderRadius: radius.card,
+    marginTop: space.sm,
+    width: space.xxxl * 2,
+  },
+  pageNote: { ...text.meta, color: color.muted, marginTop: space.sm },
 
   section: {
-    ...text.micro,
-    color: color.accent,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
     marginTop: layout.section,
     marginBottom: space.sm,
   },
+  // A glyph, so it takes brandText — 4.88:1 on `bg`, where the `brand` fill it
+  // replaces would be 2.03:1.
+  sectionTitle: {
+    ...text.meta,
+    fontFamily: font.bodySemi,
+    color: color.brandText,
+  },
+  sectionNote: { ...text.micro, color: color.muted, flexShrink: 1 },
   note: { ...text.meta, color: color.ink2, marginBottom: space.md },
 
   specimen: { marginTop: space.lg },
   specimenLabel: { ...text.meta, color: color.muted, marginBottom: space.sm },
 
   caption: { ...text.meta, color: color.muted, marginTop: space.sm },
+  captionCenter: { textAlign: "center" },
 
   trio: { flexDirection: "row", gap: space.sm },
   trioCell: { flex: 1 },
 
-  dotRow: { flexDirection: "row", gap: space.xl },
-  dotCell: { alignItems: "center" },
+  dotRow: {
+    flexDirection: "row",
+    gap: space.sm,
+    marginTop: space.xl,
+  },
+  dotCell: { flex: 1, alignItems: "center" },
   dotInline: { flexDirection: "row", alignItems: "center", gap: space.lg },
 
   cardTitle: { ...text.title, color: color.ink },

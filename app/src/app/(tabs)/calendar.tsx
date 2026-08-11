@@ -15,7 +15,7 @@
  *           recedes. Only the current plan week can produce this.
  *   ZERO    inside the observed period, nothing was run. Solid rule, `card`
  *           fill — a fact, styled like every other fact.
- *   LOAD    something was run. Solid rule, `accentSoft` → `accent` ramp.
+ *   LOAD    something was run. Solid rule, ember heat ramp.
  *
  * The important half is the first one. `GET /api/mobile/me` builds `calendar`
  * from `dailySeries()`, which emits a slot for EVERY day in the window and
@@ -23,6 +23,28 @@
  * wholesale would claim we watched an athlete run nothing for the eight months
  * before they connected a watch. The first recorded day is therefore the line
  * between "not recorded" and "recorded, and it was nothing".
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * SUNRISE: WHY THE RAMP NO LONGER STARTS PALE
+ *
+ * The old ramp ran `accentSoft → accent`, and its palest rung was safe only
+ * because the old ground was a cool grey. On the cream ground it collapses:
+ *
+ *     well #F4EFE6  vs  accentSoft #FDECC8   1.02:1,  ΔL* 0.7
+ *
+ * An absent day and the athlete's easiest recorded day became the same object.
+ * That is the one failure this screen cannot have, so the ramp was re-anchored
+ * rather than merely re-hued: its palest rung is now `brand` itself, and it
+ * deepens by mixing toward `ink` (the website's IntensityCalendar does the same
+ * thing with a red heat ramp, but it can afford a pale foot because every one
+ * of its cells prints its load as a numeral — here the fill IS the datum).
+ *
+ *     well #F4EFE6  vs  rung 0 #F59E0B      1.88:1,  ΔL* 22.4
+ *     rungs step 8.5 / 9.1 / 9.0 / 9.6 ΔL* apart — monotonic in greyscale
+ *
+ * Nothing in the ramp is a colour of its own: every rung is a mix of `brand`,
+ * `emberHot` and `ink`. No glyph is ever placed on one.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
@@ -35,7 +57,7 @@ import { dayLabel, localDay, parseLocalDay } from "../../lib/dates";
 import { formatDistance } from "../../lib/units";
 import type { Profile } from "../../lib/types";
 import { layout, radius, ruleWidth, space } from "../../theme/space";
-import { color } from "../../theme/tokens";
+import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /** One day of `calendar`, which rides along outside the `Profile` slice. */
@@ -49,47 +71,101 @@ type CellKind = "absent" | "norun" | "zero" | "load";
 type Cell = { date: string; kind: CellKind; level: number };
 
 /* ------------------------------------------------------------------ *
+ * Panel — the website's information unit (athlete/tabs.tsx:22): a title on the
+ * left, an optional note on the right carrying the caveat, the unit or the
+ * reading instruction, then the content. White card, `shadow.card`, one rule.
+ *
+ * Local to this screen because components/ is not this pass's to change; the
+ * shadow comes from the token, so it cannot drift from any other panel.
+ * ------------------------------------------------------------------ */
+
+function Panel({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.panel}>
+      <View style={styles.panelHead}>
+        <Text style={styles.panelTitle}>{title}</Text>
+        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Grid metrics — every number composed from theme/space.
  * ------------------------------------------------------------------ */
 
-const CELL = space.lg;
+/**
+ * One step up from the old 16px cell. At 16px a 1.5px dotted rule renders as
+ * three or four dots a side and a rest day was indistinguishable from an empty
+ * one at arm's length; 24px gives the dashed/dotted distinction room to exist.
+ */
+const CELL = space.xl;
 const GAP = space.xs;
 const COLUMN = CELL + GAP;
 const ROWS = 7;
 const GRID_HEIGHT = ROWS * COLUMN - GAP;
 /**
  * iOS refuses to draw a dashed or dotted border at radius 0, and absent must
- * stay dashed. The smallest token there is, so cells still read as printed
- * squares rather than dots.
+ * stay dashed. `space.xs` is the smallest step on the scale — the same softened
+ * square the website's cells use, still obviously a printed square.
  */
-const CELL_RADIUS = ruleWidth;
+const CELL_RADIUS = space.xs;
 /** Row labels sit outside the horizontal scroller and must clear "WED". */
 const GUTTER = space.xxl;
 
 /* ------------------------------------------------------------------ *
- * The intensity ramp — accentSoft → accent, mixed from the two tokens so no
- * colour is introduced that is not already in the system.
+ * The intensity ramp — five rungs, `brand` deepening toward `ink`, mixed from
+ * tokens so no colour is introduced that is not already in the system. Five
+ * because that is what the website's IntensityCalendar uses, and the two
+ * surfaces should band an athlete's year identically.
  * ------------------------------------------------------------------ */
 
-function channels(token: string): [number, number, number] {
+type Channels = [number, number, number];
+
+function channels(token: string): Channels {
   const n = parseInt(token.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-const RAMP: string[] = [0, 1, 2, 3].map((step) => {
-  const t = step / 3;
-  const from = channels(color.accentSoft);
-  const to = channels(color.accent);
-  const mixed = from.map((c, i) => Math.round(c + (to[i] - c) * t));
-  return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+function mix(from: Channels, to: Channels, t: number): Channels {
+  return [0, 1, 2].map((i) => Math.round(from[i] + (to[i] - from[i]) * t)) as Channels;
+}
+
+const RUNGS = 5;
+/** The palest rung — see the header note on why it is not paler than this. */
+const RAMP_LOW = channels(color.brand);
+/** The hottest rung: emberHot carried down into ink. */
+const RAMP_HIGH = mix(channels(color.emberHot), channels(color.ink), 0.55);
+
+const RAMP: string[] = Array.from({ length: RUNGS }, (_, step) => {
+  const [r, g, b] = mix(RAMP_LOW, RAMP_HIGH, step / (RUNGS - 1));
+  return `rgb(${r}, ${g}, ${b})`;
 });
 
-function rampIndex(load: number, max: number): number {
-  const ratio = max > 0 ? load / max : 0;
-  if (ratio <= 0.25) return 0;
-  if (ratio <= 0.5) return 1;
-  if (ratio <= 0.75) return 2;
-  return 3;
+/**
+ * The website's thresholds (IntensityCalendar `level()`), against the athlete's
+ * own 95th percentile so one outlier week cannot flatten the year.
+ *
+ * Its `load < 10 → rest` shortcut is deliberately NOT adopted: here a recorded
+ * day is a recorded day, and demoting a short run to "rest" would make the grid
+ * lie about what happened.
+ */
+function rampIndex(load: number, p95: number): number {
+  const x = load / Math.max(p95, 1);
+  if (x < 0.3) return 0;
+  if (x < 0.55) return 1;
+  if (x < 0.75) return 2;
+  if (x < 0.95) return 3;
+  return 4;
 }
 
 /** "2026-10-14" → "Oct". The month vocabulary stays owned by lib/dates. */
@@ -130,7 +206,8 @@ function buildGrid(entries: CalendarDay[], restDays: Set<string>): Grid | null {
     (min, e) => (e.date < min ? e.date : min),
     recorded[0].date,
   );
-  const maxLoad = recorded.reduce((m, e) => (e.load > m ? e.load : m), 0);
+  const loads = recorded.map((e) => e.load).sort((a, b) => a - b);
+  const p95 = loads[Math.min(loads.length - 1, Math.floor(loads.length * 0.95))];
   const totalKm = recorded.reduce((sum, e) => sum + e.km, 0);
 
   const today = localDay();
@@ -153,7 +230,7 @@ function buildGrid(entries: CalendarDay[], restDays: Set<string>): Grid | null {
       kind = "absent";
     } else if (entry.load > 0 || entry.km > 0) {
       kind = "load";
-      level = rampIndex(entry.load, maxLoad);
+      level = rampIndex(entry.load, p95);
     } else if (restDays.has(iso)) {
       kind = "norun";
     } else {
@@ -231,24 +308,30 @@ export default function CalendarScreen() {
         <View style={styles.stats}>
           {!profile ? (
             <>
-              <View style={styles.skeletonStat} />
-              <View style={styles.skeletonStat} />
+              <View style={styles.tile}>
+                <View style={styles.skeletonStat} />
+              </View>
+              <View style={styles.tile}>
+                <View style={styles.skeletonStat} />
+              </View>
             </>
           ) : null}
           {grid ? (
             <>
-              <Stat label="Distance" value={formatDistance(grid.totalKm, 0)} />
-              <Stat
-                label="Days run"
-                value={`${grid.daysRun} ${grid.daysRun === 1 ? "day" : "days"}`}
-              />
+              <View style={styles.tile}>
+                <Stat label="Distance" value={formatDistance(grid.totalKm, 0)} />
+              </View>
+              <View style={styles.tile}>
+                <Stat
+                  label="Days run"
+                  value={`${grid.daysRun} ${grid.daysRun === 1 ? "day" : "days"}`}
+                />
+              </View>
             </>
           ) : null}
         </View>
 
-        <View>
-          <Text style={styles.eyebrow}>Last 12 months · daily load</Text>
-
+        <Panel title="Last 12 months" note="daily load · hotter is harder">
           {/* Reserves the grid's exact height so nothing shifts as data lands. */}
           {!profile ? <View style={styles.skeleton} /> : null}
 
@@ -319,33 +402,31 @@ export default function CalendarScreen() {
               Nothing recorded before {dayLabel(grid.firstRecorded)}.
             </Text>
           ) : null}
-        </View>
+        </Panel>
 
-        <View style={styles.legend}>
-          <Text style={styles.eyebrow}>Reading the grid</Text>
-
-          <View>
-            <Text style={styles.legendLabel}>Blue cell · a day that was run</Text>
-            <View style={styles.rampRow}>
-              {RAMP.map((fill, i) => (
-                <View
-                  key={i}
-                  style={[styles.cell, styles.cellLoad, { backgroundColor: fill }]}
-                />
-              ))}
+        <Panel title="Reading the grid" note="dashed means not recorded">
+          <View style={styles.legend}>
+            <View>
+              <Text style={styles.legendLabel}>Ember cell · a day that was run</Text>
+              <View style={styles.rampRow}>
+                {RAMP.map((fill, i) => (
+                  <View
+                    key={i}
+                    style={[styles.cell, styles.cellLoad, { backgroundColor: fill }]}
+                  />
+                ))}
+              </View>
+              <Text style={styles.note}>
+                Deeper ember is a harder day than a paler one. Even the palest
+                ember cell is a day that was run.
+              </Text>
             </View>
-            <Text style={styles.note}>
-              Deeper blue is a harder day than a paler one.
-            </Text>
-          </View>
 
-          <Absent
-            eyebrow="Dashed cell"
-            label="Nothing recorded for that day."
-          />
-          <Zero eyebrow="Solid white cell" unit="mi" />
-          <NoRun eyebrow="Dotted cell" />
-        </View>
+            <Absent eyebrow="Dashed cell" label="Nothing recorded for that day." />
+            <Zero eyebrow="Solid white cell" unit="mi" />
+            <NoRun eyebrow="Dotted cell" />
+          </View>
+        </Panel>
       </ScrollView>
     </SafeAreaView>
   );
@@ -359,14 +440,47 @@ const styles = StyleSheet.create({
     paddingBottom: layout.section,
     gap: layout.section,
   },
-  stats: { flexDirection: "row", gap: space.xxl, minHeight: space.xxxl },
+
+  /* Panels and tiles carry the same elevation — a shadow is depth here, never
+     emphasis, so no card on this screen is louder than another. */
+  panel: {
+    backgroundColor: color.card,
+    borderWidth: ruleWidth,
+    borderColor: color.ruleSoft,
+    borderRadius: radius.card,
+    padding: layout.cardPadding,
+    ...shadow.card,
+  },
+  panelHead: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  panelTitle: { ...text.baseSemi, color: color.ink },
+  /* muted on `card` is 5.16:1 — the note is small and often the only caveat. */
+  panelNote: { ...text.meta, color: color.muted },
+
+  stats: { flexDirection: "row", gap: space.md },
+  tile: {
+    flex: 1,
+    backgroundColor: color.card,
+    borderWidth: ruleWidth,
+    borderColor: color.ruleSoft,
+    borderRadius: radius.card,
+    padding: layout.cardPadding,
+    ...shadow.card,
+  },
+  /* 48 = the micro label's 16 line-box + space.xs + the stat's 28, so a tile is
+     exactly as tall before the figure lands as after. */
   skeletonStat: {
-    width: space.xxxl * 2,
-    height: space.xl,
+    height: space.xxxl,
     borderRadius: radius.control,
     backgroundColor: color.well,
   },
-  eyebrow: { ...text.micro, color: color.muted, marginBottom: space.md },
+
   failed: { ...text.base, color: color.ink2 },
   note: { ...text.meta, color: color.muted, marginTop: space.md },
 
@@ -398,7 +512,12 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderRadius: CELL_RADIUS,
   },
-  /* The four cell states mirror components/Nothing exactly. */
+  /* The four cell states carry the same meanings as components/Nothing, with
+     one deliberate deviation: at cell size a `ruleSoft` dotted border is a
+     7:1-lighter ghost that vanishes in glare, so a rest day is dotted in
+     `ruleStrong` instead. Dotted still means rest, dashed still means absent —
+     only the weight of the dots changed, so that a rest day cannot be mistaken
+     for a day that has not happened yet. */
   cellAbsent: {
     backgroundColor: color.well,
     borderStyle: "dashed",
@@ -406,7 +525,7 @@ const styles = StyleSheet.create({
   },
   cellNoRun: {
     borderStyle: "dotted",
-    borderColor: color.ruleSoft,
+    borderColor: color.ruleStrong,
   },
   cellZero: {
     backgroundColor: color.card,
@@ -418,7 +537,7 @@ const styles = StyleSheet.create({
     borderColor: color.rule,
   },
 
-  legend: { gap: space.md },
+  legend: { gap: space.lg },
   legendLabel: { ...text.meta, color: color.ink2, marginBottom: space.sm },
   rampRow: { flexDirection: "row", gap: GAP },
 });

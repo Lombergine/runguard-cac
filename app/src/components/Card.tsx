@@ -1,15 +1,25 @@
 /**
- * A card. See ../../../docs/visual-spec.md § "Lines instead of shadows".
+ * A card. The sunrise ground everything else sits on.
  *
- * Defined by one crisp 1.5px rule — heavier than the fashionable hairline,
- * because hairlines vanish in sunlight. NO shadow, NO elevation, no tint, no
- * gradient. Nothing in this app floats; the result should read as printed
- * rather than as glass.
+ * Ported from the website's `Panel`
+ * (website/src/components/athlete/tabs.tsx:22): a white surface, a rounded
+ * corner, one translucent-ink hairline, and the two-layer soft shadow from
+ * globals.css:77-82. The hairline is `ruleSoft` — the website's `--hairline`
+ * at rgba(34,29,21,0.09) — because the shadow, not the border, is now what
+ * separates the card from the cream page; a 0.14 rule on top of a real shadow
+ * reads as a drawn outline rather than a lifted surface.
+ *
+ * This supersedes the old "lines instead of shadows, nothing floats" rule in
+ * ../../../docs/visual-spec.md. Its safety and honesty rules are untouched.
+ *
+ * `shadow.card` is elevation and only elevation. Every card gets the same one.
+ * It must never be dialled up to make one card louder than its neighbours —
+ * that is what type and position are for.
  */
 import { View, StyleSheet } from "react-native";
 
 import { CardProps } from "../lib/types";
-import { color } from "../theme/tokens";
+import { color, shadow } from "../theme/tokens";
 import { layout, radius, ruleWidth } from "../theme/space";
 
 export function Card({ children, padded = true }: CardProps) {
@@ -22,8 +32,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.ruleSoft,
     borderRadius: radius.card,
+    // iOS reads shadow*, Android reads elevation. Both are in the token.
+    ...shadow.card,
   },
   padded: { padding: layout.cardPadding },
 });

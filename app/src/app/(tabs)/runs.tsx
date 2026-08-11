@@ -8,11 +8,12 @@
  *      inventing data.
  *   2. `recentRuns` has no activity type. The session label is recovered by
  *      matching the run's local day against the plan, and when the plan has
- *      nothing for that day the eyebrow carries the date alone rather than a
+ *      nothing for that day the card carries the date alone rather than a
  *      guess.
  */
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
@@ -29,6 +30,15 @@ import { text } from "../../theme/type";
 const SKELETON_ROWS = 3;
 
 /**
+ * The sunrise ground: the warm top fading into the page over 420dp, ported
+ * from the website's body gradient (globals.css:55). It is fixed to the
+ * viewport rather than scrolled with the list, exactly as `background` on the
+ * web body behaves, so the light stays where the light is.
+ */
+const SUNRISE_STOPS = [color.bgTop, color.bg] as const;
+const SUNRISE_HEIGHT = 420;
+
+/**
  * "12 runs" — the numeral and its noun in ONE node, never a bare count with the
  * word rendered beside it.
  */
@@ -36,11 +46,33 @@ function countLabel(n: number): string {
   return `${n} ${n === 1 ? "run" : "runs"}`;
 }
 
+/** The page, over the sunrise ground. Every branch below renders through it. */
+function Screen({ children }: { children: ReactNode }) {
+  return (
+    <View style={styles.root}>
+      <LinearGradient
+        colors={SUNRISE_STOPS}
+        style={styles.sunrise}
+        pointerEvents="none"
+      />
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        {children}
+      </SafeAreaView>
+    </View>
+  );
+}
+
 /**
- * The screen header. `count` is null until the payload lands, and the count is
- * withheld at zero on purpose: an empty log is Absent, and "0 runs" would state
- * a measured fact we do not have. The slot sits beside the heading rather than
- * below it, so nothing moves vertically when the figure appears.
+ * The screen header, in the Panel hierarchy: title, then the figure, then the
+ * note that says how to read the list.
+ *
+ * `count` is null until the payload lands, and the count is withheld at zero on
+ * purpose: an empty log is Absent, and "0 runs" would state a measured fact we
+ * do not have. The slot sits beside the heading rather than below it, so
+ * nothing moves vertically when the figure appears.
+ *
+ * The note takes its own line rather than the Panel's right-hand slot: it is a
+ * whole sentence, and at 360dp beside a 19px title it would have nowhere to go.
  */
 function Header({ count }: { count: number | null }) {
   return (
@@ -60,18 +92,17 @@ function Header({ count }: { count: number | null }) {
 }
 
 /**
- * Reserves the height of the tallest card the log can produce, so the list
- * cannot shift as data lands. Neither of the two things that make a card taller
- * — a missing pace, which renders a bordered `Absent` slot, and a spike, which
- * adds an advisory — is knowable before the payload arrives, so room is held
- * for both. See `runCardMetrics` for why over-reserving is the right trade.
+ * Holds the shape of a card while the payload is in flight. It reserves the
+ * header, and the stats row at its tallest — a missing pace renders a bordered
+ * `Absent` slot, which is not knowable in advance. A spike is not reserved; see
+ * `runCardMetrics` for why that trade flipped once the advisory grew into a
+ * paragraph.
  */
 function RunSkeleton() {
   return (
     <Card>
-      <View style={styles.skeletonEyebrow} />
+      <View style={styles.skeletonHeader} />
       <View style={styles.skeletonStats} />
-      <View style={styles.skeletonSpike} />
     </Card>
   );
 }
@@ -111,20 +142,20 @@ export default function RunsScreen() {
 
   if (failed) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
+      <Screen>
         <View style={styles.page}>
           <Header count={null} />
           <Card>
             <Text style={styles.failed}>Your runs could not be loaded.</Text>
           </Card>
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
+      <Screen>
         <View style={styles.page}>
           <Header count={null} />
           <View style={styles.rows}>
@@ -133,12 +164,12 @@ export default function RunsScreen() {
             ))}
           </View>
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <Screen>
       <FlatList<RecentRun>
         data={runs}
         keyExtractor={(run) => String(run.id)}
@@ -161,7 +192,7 @@ export default function RunsScreen() {
           />
         )}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
@@ -170,7 +201,16 @@ function Separator() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
+  root: { flex: 1, backgroundColor: color.bg },
+  sunrise: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: SUNRISE_HEIGHT,
+  },
+  /** Transparent: the gradient behind it is the ground. */
+  safe: { flex: 1 },
   page: {
     flex: 1,
     paddingHorizontal: layout.page,
@@ -186,7 +226,12 @@ const styles = StyleSheet.create({
   separator: { height: space.md },
 
   header: { marginBottom: layout.section },
-  eyebrow: { ...text.micro, color: color.muted },
+  /**
+   * The ember signature, once per screen, on the eyebrow. `brandText`, never
+   * `brand`: the fill is 2.01:1 and unreadable outdoors, while this measures
+   * 4.88:1 on the page and 4.74:1 on the warm top of the gradient.
+   */
+  eyebrow: { ...text.micro, color: color.brandText },
   headingRow: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -200,8 +245,8 @@ const styles = StyleSheet.create({
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   failed: { ...text.base, color: color.ink2 },
-  skeletonEyebrow: {
-    height: runCardMetrics.eyebrowLine,
+  skeletonHeader: {
+    height: runCardMetrics.headerLine,
     width: "58%",
     borderRadius: radius.control,
     backgroundColor: color.well,
@@ -209,12 +254,6 @@ const styles = StyleSheet.create({
   skeletonStats: {
     height: runCardMetrics.statsRowAbsent,
     marginTop: runCardMetrics.gap,
-    borderRadius: radius.control,
-    backgroundColor: color.well,
-  },
-  skeletonSpike: {
-    height: runCardMetrics.spikeAdvisory,
-    marginTop: runCardMetrics.spikeGap,
     borderRadius: radius.control,
     backgroundColor: color.well,
   },

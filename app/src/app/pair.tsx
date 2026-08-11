@@ -26,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 
 import { Card } from "../components/Card";
@@ -40,6 +41,11 @@ const TOKEN_SHAPE = /^dt_[0-9a-f]{40}$/;
 
 /** Matches lib/api: no health endpoint exists, so a wrong base URL just hangs. */
 const TIMEOUT_MS = 15_000;
+
+/** The website's `--ember` stops and its 135°, which points down-and-right. */
+const EMBER_STOPS = [0, 0.45, 1] as const;
+const EMBER_START = { x: 0, y: 0 } as const;
+const EMBER_END = { x: 1, y: 1 } as const;
 
 /**
  * Static dot path — Expo inlines `EXPO_PUBLIC_*` by textual substitution at
@@ -189,13 +195,31 @@ export default function PairScreen() {
             </Text>
 
             <Pressable
-              style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+              style={styles.action}
               onPress={() => attempt(draft)}
               disabled={checking}
               accessibilityRole="button"
               accessibilityState={{ disabled: checking }}
             >
-              <Text style={styles.actionLabel}>{checking ? "Checking…" : "Pair"}</Text>
+              {({ pressed }) => (
+                <>
+                  {/* Pressing drops the gradient and reveals the flat
+                      `brandStrong` ground beneath it — a deeper, calmer ember,
+                      and a token rather than a hand-mixed press tint. */}
+                  {pressed ? null : (
+                    <LinearGradient
+                      colors={color.ember}
+                      locations={EMBER_STOPS}
+                      start={EMBER_START}
+                      end={EMBER_END}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  )}
+                  <Text style={styles.actionLabel}>
+                    {checking ? "Checking…" : "Pair"}
+                  </Text>
+                </>
+              )}
             </Pressable>
 
             {problem ? (
@@ -239,7 +263,9 @@ const styles = StyleSheet.create({
     ...text.base,
     fontFamily: font.mono,
     color: color.ink,
-    backgroundColor: color.bg,
+    // Sunken against the white card, the way the empty slot is: the field is a
+    // hole to paste into, and on the cream ground `bg` no longer reads as one.
+    backgroundColor: color.well,
     borderWidth: ruleWidth,
     borderColor: color.rule,
     borderRadius: radius.control,
@@ -249,20 +275,30 @@ const styles = StyleSheet.create({
     marginTop: space.xl,
   },
   note: { ...text.meta, color: color.muted, marginTop: space.sm },
-  /** The one place accent is spent on this screen: the thing you tap. */
+  /**
+   * The ember signature, on the one thing you tap. The gradient is laid in
+   * absolutely over this ground, so `brandStrong` is both the pressed state and
+   * the fallback if the gradient ever fails to draw — either way the label keeps
+   * a real background to sit on.
+   */
   action: {
     minHeight: target.min,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: space.lg,
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.accent,
+    backgroundColor: color.brandStrong,
     borderRadius: radius.control,
     marginTop: space.xl,
+    overflow: "hidden",
   },
-  actionPressed: { backgroundColor: color.accentSoft },
-  actionLabel: { ...text.baseSemi, color: color.accent },
+  /**
+   * INK on the ember, not white. White on the lightest stop is 1.67:1 and
+   * illegible in the exact conditions this app is used in; `ink` measures 5.97:1
+   * on the darkest stop, 10.03:1 on the lightest, and 5.25:1 on the pressed
+   * `brandStrong`. This is also why the label is not `brandText`: here the ember
+   * is the ground, not the glyph.
+   */
+  actionLabel: { ...text.baseSemi, color: color.ink },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
   dev: {

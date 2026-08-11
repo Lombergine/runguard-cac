@@ -18,9 +18,18 @@
  * neighbours; the geometry table below is tuned to that and little else, so
  * moving a box means re-checking its neighbours.
  *
- * SUPPORT COLOUR, NOT ACCENT. Selection fills `trackSoft` behind a `track`
- * outline. This is the athlete describing their body, not actuating the system,
- * and the one accent is reserved for the latter.
+ * SUPPORT COLOUR, NOT THE BRAND — and this survives the sunrise re-skin
+ * unchanged. Selection fills `trackSoft` behind a `track` outline. Sunrise stops
+ * rationing colour and makes the ember visible almost everywhere, which makes
+ * this the one place it must be argued for rather than assumed: a tapped region
+ * is the athlete describing their body, not actuating the system, and a region
+ * wearing the brand would read as a control that had fired. `track` is the same
+ * warm family as the ember and unmistakably not it, so the figure still belongs
+ * on the cream ground without ever borrowing the signature.
+ *
+ * The distinction also has to survive greyscale, so it is never carried by hue
+ * alone: an unselected marker has no fill at all and a `rule` outline, a
+ * selected one is filled and outlined at full weight.
  *
  * LATERAL PARTS GET TWO HIT REGIONS, ONE STATE. The contract's `onToggle`
  * takes a bare part key and `selected` holds bare part keys, so both the left

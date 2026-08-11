@@ -1,27 +1,33 @@
 /**
  * One run in the log.
  *
- * Three stats, always Distance / Time / Pace, always that order, mono, to the
- * right of a small route glyph. The eyebrow carries the explicit local date and
- * the team's word for the day ("Long run", "Recovery run") — both arrive
+ * Panel hierarchy, as on the website: the date sits LEFT as the card's title,
+ * the team's word for the day sits RIGHT as the note. Both arrive
  * pre-formatted, because a component that derives a date will eventually derive
- * the wrong one.
+ * the wrong one, and a run with no matching plan day simply has no note rather
+ * than a guessed one.
+ *
+ * Then three stats, always Distance / Time / Pace, always that order, mono, to
+ * the right of a small route glyph. The glyph is drawn in the ember gradient —
+ * the one place the brand signature appears on a run.
  *
  * The payload is kilometres and has no pace field; both display figures are
  * produced here through lib/units, welded to their unit in a single node.
  *
- * When the run spiked, one advisory line sits below the stats inside the card.
- * No modal, no interstitial, no dismiss: nothing here is urgent enough to
- * interrupt, and interrupting would make a description read as a directive.
+ * When the run spiked, an observation sits below the stats inside the card: the
+ * figure, then the provenance of the finding it rests on. No modal, no
+ * interstitial, no dismiss, and no tinted or alarmed surface: nothing here is
+ * urgent enough to interrupt, and interrupting would make a description read as
+ * a directive.
  */
 import { StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 import { Advisory } from "./Advisory";
 import { Card } from "./Card";
 import { Absent } from "./Nothing";
 import { Stat } from "./Stat";
-import type { RunCardProps } from "../lib/types";
+import type { Flag, RunCardProps, SessionSpike } from "../lib/types";
 import { formatDistance, formatDuration, formatPace } from "../lib/units";
 import { layout, ruleWidth, space } from "../theme/space";
 import { color } from "../theme/tokens";
@@ -33,28 +39,70 @@ import { text } from "../theme/type";
  */
 const GLYPH = space.xl;
 
+/** SVG gradient handle. Scoped to this Svg element, so one id is enough. */
+const EMBER = "runCardEmber";
+
 /**
  * One line of the micro scale, taken from the scale itself. The run-log
- * skeleton reserves the eyebrow's height from this, and a locally-guessed line
+ * skeleton reserves the header's height from this, and a locally-guessed line
  * would reserve something other than what renders.
  */
 const MICRO_LINE = text.micro.lineHeight ?? 0;
+
+/**
+ * `spike.level` is information, so it survives as a different advisory state
+ * rather than being flattened to one. `notable` is 25–50% past the athlete's
+ * recent longest; `large` is 50%+ (website/src/lib/risk.ts). StatusDot draws
+ * `watch` and `unusual` as different shapes, so the two stay apart in
+ * greyscale as well as in colour.
+ */
+const SPIKE_FLAG: Record<SessionSpike["level"], Flag> = {
+  notable: "watch",
+  large: "unusual",
+};
+
+/**
+ * The website's wording (components/athlete/tabs.tsx:344-348), ported whole.
+ *
+ * It names the comparison — a percentage, against the longest single run in the
+ * 30 days before this one, with that run's distance quoted — because "longer
+ * than your recent long runs" states neither how much longer nor than what.
+ */
+function spikeReason(spike: SessionSpike): string {
+  return `${spike.pctAbove}% longer than your longest run in the month before it (${formatDistance(
+    spike.longestKm,
+  )}).`;
+}
+
+/**
+ * The provenance, which website/src/lib/risk.ts:352-353 requires the UI to
+ * preserve: the cohort behind the finding, and the fact that its mean age was
+ * 45.8 so nothing equivalent has been shown in adolescents. The athletes
+ * reading this are adolescents, so the caveat is not a footnote to be trimmed —
+ * it is the honest strength of the claim.
+ */
+const SPIKE_PROVENANCE =
+  "In a study of 5,205 adult runners, single sessions well past a runner's " +
+  "recent longest carried a higher injury rate — the clearest load signal " +
+  "there is, though it hasn't been shown specifically in teenagers.";
 
 /**
  * The geometry of a card's content box, exported for the run-log skeleton
  * alone. The card lays itself out from these same values below, so there is one
  * set of numbers rather than two that drift.
  *
- * Two of the heights are data-dependent and so cannot be known before the
- * payload lands: a run with no pace swaps a figure for a bordered `Absent`
- * slot, and a run that spiked adds an advisory. The skeleton therefore reserves
- * BOTH — the tallest card the log can produce. Over-reserving settles into
- * whitespace nobody notices; under-reserving moves content under a thumb at
- * 6am, which is the failure "skeletons reserve exact final height" exists to
- * stop.
+ * The stats row is reserved at its TALLEST: a run with no pace swaps a figure
+ * for a bordered `Absent` slot, which cannot be known before the payload lands,
+ * and that over-reservation settles into whitespace nobody notices.
+ *
+ * A spike is deliberately NOT reserved. It once was, when the advisory was a
+ * single line. It is now a paragraph whose height depends on where the text
+ * wraps, and holding room for it would make three placeholders taller than the
+ * screen — trading a small settle for a screenful of emptiness on every load,
+ * when most runs never spike at all.
  */
 export const runCardMetrics = {
-  eyebrowLine: MICRO_LINE,
+  headerLine: MICRO_LINE,
   gap: space.md,
   /** A stat column: micro label, then the figure. Enforced as a `minHeight`
    *  below, so the reservation holds regardless of how Stat measures. */
@@ -73,42 +121,49 @@ export const runCardMetrics = {
     (text.stat.lineHeight ?? 0) +
     space.xs +
     (text.meta.lineHeight ?? 0),
-  /** Gap between the stats and a spike advisory. */
-  spikeGap: space.md,
-  /** The advisory itself: the dot-and-flag row, then one reason line. */
-  spikeAdvisory:
-    (text.base.lineHeight ?? 0) + space.xs + (text.meta.lineHeight ?? 0),
 } as const;
 
 /**
- * A route mark, drawn flat in the icon line weight — a printed key, not an
+ * A route mark in the ember gradient — the website's 135°, top-left to
+ * bottom-right. Flat, in the icon line weight: a printed key, not an
  * illustration. Decorative, so it is hidden from assistive tech.
  */
 function RouteGlyph() {
   return (
     <Svg width={GLYPH} height={GLYPH} viewBox="0 0 24 24">
+      <Defs>
+        <LinearGradient id={EMBER} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={color.ember[0]} />
+          <Stop offset="0.45" stopColor={color.ember[1]} />
+          <Stop offset="1" stopColor={color.ember[2]} />
+        </LinearGradient>
+      </Defs>
       <Path
         d="M5 19c3.4 0 3.4-4.6 6.8-4.6S15.2 5 19 5"
         fill="none"
-        stroke={color.muted}
+        stroke={`url(#${EMBER})`}
         strokeWidth={ruleWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <Circle cx={5} cy={19} r={2} fill={color.muted} />
+      <Circle cx={5} cy={19} r={2} fill={`url(#${EMBER})`} />
     </Svg>
   );
 }
 
 export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
-  const eyebrow = sessionLabel ? `${dateLabel} · ${sessionLabel}` : dateLabel;
   // Null when there is no distance or no duration to divide. A pace that was
   // never run is absent, and absent is dashed — never a stand-in "0:00 /mi".
   const pace = formatPace(run.durationS, run.km);
 
   return (
     <Card>
-      <Text style={styles.eyebrow}>{eyebrow}</Text>
+      <View style={styles.header}>
+        <Text style={styles.date}>{dateLabel}</Text>
+        {sessionLabel ? (
+          <Text style={styles.session}>{sessionLabel}</Text>
+        ) : null}
+      </View>
 
       <View style={styles.row}>
         <View
@@ -141,11 +196,10 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
       {run.spike ? (
         <View style={styles.spike}>
           <Advisory
-            flag="unusual"
-            reason={`This run was ${formatDistance(
-              run.spike.km - run.spike.longestKm,
-            )} longer than your recent long runs.`}
+            flag={SPIKE_FLAG[run.spike.level]}
+            reason={spikeReason(run.spike)}
           />
+          <Text style={styles.provenance}>{SPIKE_PROVENANCE}</Text>
         </View>
       ) : null}
     </Card>
@@ -153,8 +207,22 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
 }
 
 const styles = StyleSheet.create({
-  /** No local lineHeight: text.micro carries the one the metrics reserve. */
-  eyebrow: { ...text.micro, color: color.muted },
+  /** Title left, note right. No local lineHeight: text.micro carries the one
+   *  the metrics reserve, and both cells sit on the same one. */
+  header: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.md,
+  },
+  date: { ...text.micro, color: color.ink },
+  /** The note: shrinks first, because the date must never be truncated. */
+  session: {
+    ...text.micro,
+    color: color.muted,
+    flexShrink: 1,
+    textAlign: "right",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -170,5 +238,17 @@ const styles = StyleSheet.create({
   },
   /** Equal columns so figures line up down the log, not just across a card. */
   stat: { flex: 1 },
-  spike: { marginTop: runCardMetrics.spikeGap },
+  /**
+   * A soft rule, not a fill. The website tints a spiked row with its status
+   * colour; here that would be a red panel behind a description, which the
+   * advisory rules forbid. A line separates the observation just as well.
+   */
+  spike: {
+    marginTop: space.md,
+    paddingTop: space.md,
+    borderTopWidth: ruleWidth,
+    borderTopColor: color.ruleSoft,
+  },
+  /** muted on card is 5.16:1 — quieter than the reason, still fully readable. */
+  provenance: { ...text.meta, color: color.muted, marginTop: space.sm },
 });

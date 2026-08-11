@@ -5,10 +5,19 @@
  * Both mirror the web athlete portal's HomeTab
  * (`website/src/components/athlete/tabs.tsx`): the same title construction
  * ("Today · Rest day" / "Today · {type}", tabs.tsx:262) and the same countdown
- * (a large numeral of days with the race beneath it, tabs.tsx:194-199). What
- * does NOT come across is the decoration — the web countdown is a `text-shine`
- * numeral inside a `card-ember` panel with a `glow-ember` shadow and an entrance
- * animation. Here: a flat card, one 1.5px rule, no shadow, no gradient.
+ * (a large numeral of days with the race beneath it, tabs.tsx:194-199).
+ *
+ * Both take the website's `Panel` head (tabs.tsx:22) — title on the LEFT, the
+ * muted note on the RIGHT, then the content. The note is the date, which is the
+ * reading instruction for everything under it: "Today · Easy run" is only a fact
+ * once you know which day today is, and non-negotiable #2 forbids a bare
+ * relative label. Putting it opposite the title rather than above it is the only
+ * change to what is said.
+ *
+ * The web countdown is a `text-shine` numeral in a `card-ember` panel with a
+ * `glow-ember` shadow. The ember survives, on the numeral itself and as
+ * `brandText` — glowing panels do not: elevation in this app is `shadow.card`
+ * on a card, and never emphasis.
  *
  * Three distinctions this file exists to keep apart:
  *
@@ -58,14 +67,15 @@ export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
 
   return (
     <Card>
-      {/* text.micro uppercases, so the literal stays sentence case. */}
-      <Text style={styles.eyebrow}>{dateLabel}</Text>
-
-      {/* The portal's own title. `type` is already the team's vocabulary
-          ("Easy run", "Workout: 8×400m") and is printed verbatim. */}
-      <Text style={styles.title}>
-        {!day ? "Today" : isRest ? "Today · Rest day" : `Today · ${day.type}`}
-      </Text>
+      <View style={styles.head}>
+        {/* The portal's own title. `type` is already the team's vocabulary
+            ("Easy run", "Workout: 8×400m") and is printed verbatim. */}
+        <Text style={styles.title}>
+          {!day ? "Today" : isRest ? "Today · Rest day" : `Today · ${day.type}`}
+        </Text>
+        {/* Pre-formatted upstream — this block never derives a date. */}
+        <Text style={styles.note}>{dateLabel}</Text>
+      </View>
 
       <View style={styles.body}>
         {!day ? (
@@ -123,7 +133,10 @@ export function NextRaceBlock({ race }: NextRaceBlockProps) {
 
   return (
     <Card>
-      <Text style={styles.eyebrow}>{`Next race · ${race.dateLabel}`}</Text>
+      <View style={styles.head}>
+        <Text style={styles.title}>Next race</Text>
+        <Text style={styles.note}>{race.dateLabel}</Text>
+      </View>
       {/* Mono while it is a count; on the day itself there is no numeral, and a
           word does not belong in the figure voice. */}
       <Text style={counting ? styles.countdown : styles.raceDay}>
@@ -135,13 +148,26 @@ export function NextRaceBlock({ race }: NextRaceBlockProps) {
 }
 
 const styles = StyleSheet.create({
-  eyebrow: { ...text.micro, color: color.muted },
-  title: { ...text.title, color: color.ink, marginTop: space.md },
+  /** The Panel head: title left, note right, both on the same baseline. */
+  head: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  title: { ...text.title, color: color.ink },
+  note: { ...text.meta, color: color.muted },
   body: { marginTop: space.md },
   status: { ...text.meta, color: color.ink2, marginTop: space.md },
 
-  countdown: { ...text.stat, color: color.ink, marginTop: space.md },
-  raceDay: { ...text.title, color: color.ink, marginTop: space.md },
+  /**
+   * The one ember on this block, and the website's own choice for the
+   * countdown. `brandText`, never `brand`: this is a glyph, and `brand` is
+   * 2.15:1 on card against `brandText`'s 5.21:1.
+   */
+  countdown: { ...text.stat, color: color.brandText, marginTop: space.md },
+  raceDay: { ...text.title, color: color.brandText, marginTop: space.md },
   raceName: { ...text.base, color: color.ink2, marginTop: space.xs },
 });
 
