@@ -70,3 +70,55 @@ export function injuryLabel(key: string, side: Side | null): string {
   if (!part?.lateral) return key;
   return side ? `${key} (${side})` : key;
 }
+
+/**
+ * A STORED body-part string, back to the part it names and the side it carries.
+ *
+ * The database stores what `sorenessLabel` and `injuryLabel` produce — "left
+ * shin", "shin (left)" — not the bare `key`. So a screen holding a stored
+ * string has no way to reach the display name without undoing one of those
+ * formats, and two screens doing that separately is how they came apart:
+ * Profile's injury list showed `hip (left)` while the Stats body scan showed
+ * `Hip / IT band (left)`, for the same injury on the same day.
+ *
+ * The code meant to prevent that could not: `getBodyPart()` takes a `key` and a
+ * stored string is not one, and `injuryLabel(key, null)` returns `key`
+ * unchanged by construction, so the call looked like a conversion and was a
+ * no-op. `npm run check:bodyparts` compares key lists between the app and the
+ * website and cannot see a formatting disagreement inside the app at all.
+ *
+ * Rather than parse, this regenerates: every label the two formatters can
+ * produce is compared against the stored string. That way the reader can never
+ * drift from the writer — if a format changes, this follows it automatically.
+ *
+ * Returns null for a string outside the vocabulary. Free-text rows predate the
+ * 12-part list and still exist; a caller must show them rather than drop them,
+ * because a flagged injury that vanishes is worse than one shown plainly.
+ */
+export function parseStoredPart(
+  raw: string,
+): { part: BodyPart; side: Side | null } | null {
+  const want = raw.trim().toLowerCase();
+  const sides: readonly (Side | null)[] = ["left", "right", "both", null];
+  for (const part of BODY_PARTS) {
+    for (const side of sides) {
+      if (
+        sorenessLabel(part.key, side).toLowerCase() === want ||
+        injuryLabel(part.key, side).toLowerCase() === want
+      ) {
+        // A side on a part that has none is noise; drop it.
+        return { part, side: part.lateral ? side : null };
+      }
+    }
+  }
+  return null;
+}
+
+/** The display name for a stored string, or the string itself if unrecognised. */
+export function storedPartLabel(raw: string): string {
+  const hit = parseStoredPart(raw);
+  if (!hit) return raw;
+  return hit.side && hit.part.lateral
+    ? `${hit.part.label} (${hit.side})`
+    : hit.part.label;
+}

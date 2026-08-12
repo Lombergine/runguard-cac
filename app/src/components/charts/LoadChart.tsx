@@ -15,14 +15,30 @@
  * dropped on the floor. Fed that, `loadSeries` still typechecks and still
  * returns `acute` and `chronic` arrays; every value in them is `undefined`.
  *
- * Measured, because the exact failure matters: `undefined` is not `null`, so
- * `LinePath`'s `runs()` — which splits on `p.value === null` — treats those
- * days as PRESENT and hands `frame.y(undefined)` to the scale. Every point
- * becomes `NaN,NaN`. So the symptom is not two clean missing lines; it is two
- * lines of NaN handed to RNSVG, while `chartData`'s readout (which does guard
- * `undefined`) quietly drops back to "0 load" as though nothing were wrong. The
- * readout is the only thing that degrades gracefully, and that is precisely why
- * it would not be noticed.
+ * WHAT THAT USED TO DO, AND WHAT IT DOES NOW. This block previously described
+ * a NaN failure — `undefined` is not `null`, so `runs()` treated those days as
+ * present and `frame.y(undefined)` produced `NaN,NaN` polylines. That is no
+ * longer true, in two places: `chartData.ts:386,390` coalesce with `?? null`,
+ * and `marks.tsx:131` splits on `isAbsent`, which catches `undefined` and `NaN`
+ * as well as `null` (`scales.ts:69-71`). Both layers were hardened; do not go
+ * hunting for NaN polylines, there are none.
+ *
+ * THE HAZARD IS NOT GONE, IT CHANGED SHAPE, AND THIS PANEL DOES NOT YET GUARD
+ * THE NEW ONE. Fed the trimmed copy today: the bars draw correctly, and both
+ * `LinePath`s render NOTHING AT ALL — every value is null, so `runs()` returns
+ * `[]` and emits no polyline. Nothing on screen says so. `AbsentMarks` below is
+ * drawn on `s.points` alone, and those are all present, so not one dashed mark
+ * appears; meanwhile the key still lists "acute · 7 days" and "chronic · 28
+ * days", the sentence under it still says "When the 7-day line sits above the
+ * 28-day one…", and the assistive label still promises "the 7-day and 28-day
+ * averages drawn over it". Two lines silently missing underneath a legend, a
+ * sentence and a spoken description that all assert they are there — an absence
+ * that draws nothing, which is what `marks.tsx:280` warns is the absence a
+ * reader mistakes for a zero. It is unreachable from the current call site
+ * (`(tabs)/stats.tsx` passes `risk.series`), which is the only reason this is a
+ * note and not a guard. If this component ever grows a second call site, gate
+ * each key item and the sentence on its series having at least one non-absent
+ * point — `isAbsent` is already imported below.
  *
  * `lib/types.ts` says the same thing on `risk.series` ("this one rides inside
  * `risk` at full width"), and `chartData`'s `loadSeries` docblock says it a

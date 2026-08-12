@@ -35,8 +35,16 @@ export default function InfoDot({ text, label }: { text: string; label: string }
         aria-label={`What is ${label}?`}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        // Hover opens only for an actual mouse. A touch browser synthesises
+        // mouseenter before click, so the plain handlers ran setOpen(true) and
+        // then the click toggled it straight back to false: one tap flashed the
+        // tooltip and closed it, and every stat explainer on the Stats and
+        // Recovery tabs was unreadable on a phone. Guarding on pointerType
+        // leaves the mouse behaviour byte-for-byte identical and lets the tap
+        // toggle work. The React Native port refused to carry hover across at
+        // all — see app/src/components/InfoDot.tsx.
+        onPointerEnter={(e) => e.pointerType === "mouse" && setOpen(true)}
+        onPointerLeave={(e) => e.pointerType === "mouse" && setOpen(false)}
         className="flex items-center justify-center rounded-full border text-[9px] font-bold leading-none cursor-help"
         style={{
           width: 14,

@@ -59,10 +59,30 @@ export type TileProps = {
    * figure actually is and where it came from. One of `EXPLAINERS` in
    * ./InfoDot, which is where the copy lives.
    *
-   * Purely additive: omit it and this tile renders exactly the markup it did
-   * before, down to the label being a bare `<Text>` rather than a row. The dot
-   * is drawn at 16px, which is the micro line height, so even when it IS passed
-   * the label row does not get taller and no tile in a grid changes height.
+   * Omit it and this tile renders exactly the markup it did before, down to the
+   * label being a bare `<Text>` rather than a row — verified by rendering both
+   * and diffing the element trees.
+   *
+   * IT IS NOT, HOWEVER, FREE OF LAYOUT COST, and a comment here used to claim it
+   * was ("no tile in a grid changes height"). Passing it costs the label 20px of
+   * width — the 16px dot plus the `space.xs` gap — so a label that fitted on one
+   * line without the dot can wrap to two lines with it, and a wrapped label is a
+   * whole `text.micro` line (16px) taller. Measured against the real font
+   * (Spline Sans Mono 500 at 11.5px is monospaced at 1200/2000 em = 6.90px per
+   * glyph, plus 1.38px letterSpacing = 8.28px per character), in a 154px tile at
+   * the 360px floor the label has 119px bare and 99px with the dot:
+   *
+   *   FITNESS SCORE     107.6px   fits bare, WRAPS with the dot   ← stats row 1
+   *   BODY BATTERY       99.4px   fits bare, wraps with the dot by 0.4px
+   *   SLEEP CONSISTENCY 140.8px   wraps either way
+   *   every other label            fits both ways
+   *
+   * So the row is 16px taller than it would be, not misaligned — the dot itself
+   * is drawn at 16px, exactly `text.micro.lineHeight`, so a SINGLE-line label
+   * row is genuinely the height it always was. The two labels above are the
+   * whole exposure at 360px; a shorter label, a wider screen or a full-width
+   * tile has none. Fixing it means shortening a label or moving the dot, both of
+   * which are layout decisions rather than component ones.
    */
   info?: string;
 };

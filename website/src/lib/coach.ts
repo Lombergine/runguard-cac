@@ -27,14 +27,22 @@ import {
   WEIGHT_PATTERNS,
   MENSTRUAL_PATTERNS,
   CARDIAC_PATTERNS,
-  normalise,
+  forms,
   anyMatch,
 } from "./safety";
 
-/** Match against the same normalised forms safety.ts uses, so a curly
- *  apostrophe or a zero-width character can't slip a topic past this gate. */
+/**
+ * Match against the same normalised forms safety.ts uses, so a curly apostrophe
+ * or a zero-width character can't slip a topic past this gate.
+ *
+ * Give this the RAW message. It folds internally, and it must see BOTH forms —
+ * an earlier fix pre-folded the argument to a single form, which silently
+ * collapsed this two-variant defence to one and let five measured tier-2 safety
+ * topics through to the model. Pre-folding also double-applied `fold`'s
+ * 1000-char slice, so an NFKC-expanding message lost its tail.
+ */
 function matchesAny(q: string, patterns: RegExp[]): boolean {
-  return normalise(q).some((form) => anyMatch(form, patterns));
+  return forms(q).some((form) => anyMatch(form, patterns));
 }
 
 const DEADLINE_MS = 40_000;
@@ -225,8 +233,14 @@ export async function coachAnswer(q: string, p: CoreProfile): Promise<CoachReply
   // STRUCTURAL, not probabilistic: symptom questions never reach the model at
   // all. That is what makes "never diagnoses" a property of a code path you can
   // grep for, rather than a hoped-for property of an 8B's output distribution.
-  const lower = q.toLowerCase();
-  if (isSymptomShaped(lower)) {
+  //
+  // Every gate below takes the RAW `q` and folds internally, across every form.
+  // HARD_RED_FLAG's `can'?t (put weight|bear weight|walk|stand)` was defeated by
+  // the curly apostrophe every phone autocorrects to, so "i can<U+2019>t put
+  // weight on my leg" was not symptom-shaped and went to the 8B. Passing a
+  // single pre-folded string instead was worse again — see `forms()` in
+  // safety.ts. The raw `q` is also what the model is sent, further down.
+  if (isSymptomShaped(q)) {
     return { text: await ruleAnswer(q, p), engine: "rules:symptom" };
   }
 
@@ -242,15 +256,17 @@ export async function coachAnswer(q: string, p: CoreProfile): Promise<CoachReply
   // exclusion on weight still apply, and "my chest feels tight in the cold" gets
   // the asthma answer rather than an urgent-care referral.
   if (
-    matchesAny(lower, WEIGHT_PATTERNS) ||
-    matchesAny(lower, MENSTRUAL_PATTERNS) ||
-    matchesAny(lower, CARDIAC_PATTERNS)
+    matchesAny(q, WEIGHT_PATTERNS) ||
+    matchesAny(q, MENSTRUAL_PATTERNS) ||
+    matchesAny(q, CARDIAC_PATTERNS)
   ) {
     return { text: await ruleAnswer(q, p), engine: "rules:safety-topic" };
   }
 
-  // Scope, before spending a round trip on it.
-  if (OUT_OF_SCOPE.some((re) => re.test(lower))) {
+  // Scope, before spending a round trip on it. Folded too, so "ignore your
+  // instructions" written with a curly apostrophe or a zero-width character
+  // still lands here rather than reaching the model.
+  if (forms(q).some((f) => OUT_OF_SCOPE.some((re) => re.test(f)))) {
     return { text: OUT_OF_SCOPE_REPLY, engine: "guard:out-of-scope" };
   }
 

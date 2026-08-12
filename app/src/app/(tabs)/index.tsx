@@ -549,7 +549,21 @@ function ReadinessHero({
           <View style={styles.readinessPlaceholder} />
         )}
 
-        {insight ? (
+        {/*
+          INSIDE the `known` gate, not beside it.
+
+          This sat outside the branch above, so on the unknown arm the numeral
+          was correctly suppressed and the sentence explaining it was not — the
+          panel read "Readiness · —" with a confident "RunGuard AI: …" paragraph
+          underneath, sourced from the same engine whose figure we had just
+          decided we could not stand behind.
+
+          Non-negotiable #6 is about the claim, not the numeral. A withheld
+          number under a paragraph that speaks anyway is the number leaking out
+          in prose. `aiInsight` is composed from the same inputs `readiness` is,
+          so if one is not founded neither is the other.
+        */}
+        {state.known && insight ? (
           <Text style={styles.insight}>
             <Text style={styles.insightByline}>RunGuard AI: </Text>
             {insight}

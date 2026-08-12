@@ -127,7 +127,8 @@ export const runCardMetrics = {
    *  below, so the reservation holds regardless of how Stat measures. */
   statsRow: MICRO_LINE + space.xs + (text.stat.lineHeight ?? 0),
   /**
-   * The same row when pace is missing and `Absent` takes the third column:
+   * The same row when a figure is missing and `Absent` takes a column — time,
+   * pace, or both, which sit side by side and so measure the same:
    * eyebrow, then a slot with a rule and `layout.cardPadding` on both axes
    * around its `—` and label. Mirrors Absent's box in Nothing.tsx — built from
    * the same tokens, and must track it if that box changes.
@@ -178,7 +179,25 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
   const pace = formatPace(run.durationS, run.km);
 
   const distance = formatDistance(run.km);
-  const duration = formatDuration(run.durationS);
+  /*
+   * Null when the payload carried no duration — and it can. `duration_s` is
+   * `REAL DEFAULT 0` in the schema and `/api/mobile/ingest` rejects only a
+   * NEGATIVE duration (route.ts:72), so a workout synced with `durationS: 0`
+   * and a real distance is stored and reaches this card.
+   *
+   * A run that covered ground did not take zero seconds; that 0 is a duration
+   * NOBODY RECORDED, and `formatDuration` would print it as "0:00" in the same
+   * mono figure as every measured time. `formatPace` already reads the very
+   * same input as absent — it returns null on `durationS <= 0` and the Pace
+   * column goes dashed — so without this the one missing datum rendered two
+   * different ways inside a single card, which is the collapse non-negotiable
+   * #4 exists to forbid. The guard matches `fmtPaceMi`'s exactly so the two
+   * columns can never disagree about whether the duration exists.
+   */
+  const duration =
+    Number.isFinite(run.durationS) && run.durationS > 0
+      ? formatDuration(run.durationS)
+      : null;
 
   /*
    * Everything the card shows, in the order it shows it. See the header: the
@@ -190,7 +209,7 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
     dateLabel,
     sessionLabel,
     `Distance ${distance}`,
-    `Time ${duration}`,
+    duration === null ? "Time not recorded" : `Time ${duration}`,
     pace === null ? "Pace not recorded" : `Pace ${pace}`,
     run.spike ? `${SPIKE_FLAG[run.spike.level]} — ${spikeReason(run.spike)}` : null,
     run.spike ? SPIKE_PROVENANCE : null,
@@ -230,7 +249,11 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
               <Stat label="Distance" value={distance} />
             </View>
             <View style={styles.stat}>
-              <Stat label="Time" value={duration} />
+              {duration === null ? (
+                <Absent eyebrow="Time" />
+              ) : (
+                <Stat label="Time" value={duration} />
+              )}
             </View>
             <View style={styles.stat}>
               {pace === null ? (

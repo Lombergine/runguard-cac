@@ -27,7 +27,34 @@ import {
   MENSTRUAL_REPLY,
   CARDIAC_REPLY,
   SYMPTOM_ESCALATION,
+  forms,
 } from "./safety";
+
+/**
+ * WHY EVERY MATCHER BELOW ITERATES `forms(q)` RATHER THAN LOWERCASING.
+ *
+ * This file used to match against a bare `q.toLowerCase().trim()`, and that was
+ * a hole. Tier 1 (`safetyIntercept`) and coach.ts's tier-2 gate both fold their
+ * input; nothing here did. So every pattern containing an apostrophe —
+ * HARD_RED_FLAG's `can'?t (put weight|bear weight|walk|stand)`, SYMPTOM_WORD's
+ * `can'?t walk`, WEIGHT_PATTERNS' `haven'?t eaten` and `didn'?t eat`,
+ * MENSTRUAL_PATTERNS' `haven'?t (gotten|had|got)`, the knee and hip escalations
+ * — was defeated by the curly apostrophe iOS and Android autocorrect produce BY
+ * DEFAULT. Measured: "i can<U+2019>t put weight on my leg" was NOT
+ * symptom-shaped while the straight-apostrophe spelling was, so the fail-closed
+ * red-flag net did not fire. Same bug safety.ts's header records for `mental`'s
+ * `don'?t`, fixed there and never applied here.
+ *
+ * The first attempt at this fix used `normalise(q)[0]` — one form — and an
+ * adversarial review broke it: see the note on `forms()` in safety.ts. Matching
+ * one variant is worse than matching none, so nothing here may collapse to a
+ * single string. Boolean gates `.some()` across every form; the scorer keeps
+ * the best-scoring form via `bestMatch`.
+ *
+ * For plain-ASCII input with ordinary spacing there is exactly ONE form and it
+ * is byte-identical to `q.toLowerCase().trim()` (fuzzed over 200k random ASCII
+ * strings, zero mismatches), so no existing English message changes route.
+ */
 
 /**
  * `engine` records which path produced the row — 'rules' or 'safety:<id>'. It is
@@ -405,7 +432,7 @@ Tell your athletic trainer this week either way, and sooner if the pain is in th
   {
     id: "heat",
     score: (q) => hit(q, [/hot|heat|humid|summer|sun|weather/], 2),
-    answer: ({ p }) => `Heat is a real physiological load — your heart works 10–20 bpm harder at the same pace, so PACE LIES IN HEAT; effort is the truth. Adjust: slow easy runs 25–50s/mi in real heat and let HR be the guide, shift runs to morning, pre-hydrate with electrolytes not just water, and give yourself 10–14 days to acclimate to a heat wave (it's real adaptation, like altitude). The good news: heat training is a legit fitness stimulus — blood plasma expands and cool-weather racing feels easier after.
+    answer: () => `Heat is a real physiological load — your heart works 10–20 bpm harder at the same pace, so PACE LIES IN HEAT; effort is the truth. Adjust: slow easy runs 25–50s/mi in real heat and let HR be the guide, shift runs to morning, pre-hydrate with electrolytes not just water, and give yourself 10–14 days to acclimate to a heat wave (it's real adaptation, like altitude). The good news: heat training is a legit fitness stimulus — blood plasma expands and cool-weather racing feels easier after.
 
 EMERGENCY, and this one is not a judgement call: if someone gets confused, stops making sense, stumbles or goes wobbly, stops sweating, or collapses in the heat — that is treated as heat stroke until a doctor says otherwise. Get an adult and call 911, and while you wait, get them into cold water — a tub, a stock tank, a kiddie pool, hose and ice packs on the neck, armpits and groin. Cool FIRST, transport second: dropping core temperature within the first 30 minutes is what decides the outcome, and moving them to shade to wait is the thing that loses that window. Do not send them home alone and do not let them "walk it off."
 
@@ -443,7 +470,7 @@ Your watch HR data flows into RunGuard, so hot-day runs won't unfairly ding your
   {
     id: "cadence-form",
     score: (q) => hit(q, [/cadence|form|stride|technique|foot ?strike|posture/], 2),
-    answer: ({ p }) => {
+    answer: () => {
       return `Form advice that's actually evidence-based (most isn't): don't overhaul your natural stride — runners self-optimize remarkably well. The two things worth touching: (1) CADENCE — if you overstride (foot landing far ahead, braking every step), a 5% cadence bump fixes it gently; think "quicker, not bigger" steps, especially downhill. Most efficient high schoolers land around 170–180 at easy pace, but YOUR baseline matters more than the magic number. (2) POSTURE under fatigue — tall through the hips, eyes up, arms driving back not across; when you're dying in the last 400, form IS free speed because slumping costs you oxygen. Everything else (footstrike debates, arm angles) is noise. Strides twice a week are the best form practice that exists: 6×20s smooth accelerations where you practice being fast AND relaxed — that combination is the entire skill.`;
     },
   },
@@ -478,7 +505,13 @@ Your watch HR data flows into RunGuard, so hot-day runs won't unfairly ding your
     score: (q) => hit(q, [/goal|on track|target|\bwill i\b|can i (break|make|hit)/], 2),
     answer: ({ p }) => {
       if (p.goals.length) {
-        const lines = p.goals.map((g) => `${g.event}: target ${g.targetLabel}, currently predicted ${g.predicted}${g.onTrack ? " — on track ✓" : " — still chasing"}`);
+        // `predicted` and `onTrack` are BOTH null when the goal's event has no
+        // prediction (profile.ts:339-340 — any event outside EVENTS, which
+        // POST /api/goal accepts). Interpolated raw, that printed the literal
+        // string "null" for the time and turned "we cannot predict this" into
+        // the verdict "still chasing". Dashed for the unknown number, and no
+        // verdict at all when there is nothing to judge against.
+        const lines = p.goals.map((g) => `${g.event}: target ${g.targetLabel}, currently predicted ${g.predicted ?? "—"}${g.onTrack === null ? "" : g.onTrack ? " — on track ✓" : " — still chasing"}`);
         return `Where you stand against your season goals:\n${lines.join("\n")}\nFitness is ${p.fitness.trend} (score ${p.fitness.score}/100, ${p.fitness.tier} tier). ${p.fitness.trend === "improving" ? "The trend is doing the work — protect the streak: consistency, sleep, and honest easy days." : "The move: one genuinely hard threshold day, one speed day, everything else easier than feels productive, 8h+ sleep. Predictions update after every sync, so you'll see the needle move within 2–3 weeks of clean training."} Goals get hit in the boring weeks, not the heroic ones.`;
       }
       return `You haven't set season goals yet — add PR targets in your Profile tab and I'll track your live predictions against them after every run. A good goal: 2–4% faster than your PR for the season, broken into a process goal you control (miles, sleep, strides) — outcome goals give direction, process goals give progress.`;
@@ -631,6 +664,25 @@ function classify(lower: string): { intent: Intent | null; score: number } {
   return { intent: best, score: bestScore };
 }
 
+/**
+ * Best-scoring interpretation across every normalised form, and the form that
+ * produced it — so the winning intent's own regexes (`/shin/`, `/sharp/`,
+ * `/\bgroin\b/`) see the reading that actually matched. For clean input there is
+ * exactly one form and this is `classify(fs[0])` verbatim.
+ */
+function bestMatch(fs: string[]): { intent: Intent | null; score: number; form: string } {
+  let best: { intent: Intent | null; score: number; form: string } = {
+    intent: null,
+    score: 0,
+    form: fs[0],
+  };
+  for (const f of fs) {
+    const { intent, score } = classify(f);
+    if (score > best.score) best = { intent, score, form: f };
+  }
+  return best;
+}
+
 /** The user message just before the current one (for follow-up continuity). */
 async function previousUserMessage(athleteId: number): Promise<string | null> {
   const rows = await all<{ text: string }>(
@@ -657,10 +709,14 @@ const FOLLOWUP = /^(why|how (long|come|much|often|do i)|what (do|about|else|now|
  * genuinely still leaning on the last turn.
  */
 export function isFollowUp(q: string): boolean {
-  const lower = q.toLowerCase().trim();
-  const words = lower.split(/\s+/).length;
-  if (!(ACK.test(lower) || FOLLOWUP.test(lower) || words <= 4)) return false;
-  return classify(lower).score < 2;
+  const fs = forms(q);
+  // Thin in ANY reading — the fail-closed direction, since a wrong `true` only
+  // re-sends the previous safety reply while a wrong `false` is the race-nerves
+  // bug this exists to prevent. The score guard still uses the BEST score across
+  // all forms, so a message that stands on its own in any reading is a new topic.
+  const thin = fs.some((f) => ACK.test(f) || FOLLOWUP.test(f) || f.split(/\s+/).length <= 4);
+  if (!thin) return false;
+  return bestMatch(fs).score < 2;
 }
 
 /**
@@ -681,36 +737,45 @@ const SYMPTOM_WORD =
 const HARD_RED_FLAG =
   /\bcan'?t (put weight|bear weight|walk|stand)\b|\bgave (out|way)\b|\bwalk(ing)? (funny|weird)\b|\blimp(ing)?\b|\bbrown (pee|urine)\b|\b(pee|urine) (is|was|looked?) (brown|dark|like coke|cola)\b|\bhit my head\b|\bhead injury\b|\bconcussion\b|\bwakes? me (up )?at night\b|\bhurts? at rest\b|\bnight pain\b/;
 
-export function isSymptomShaped(lower: string): boolean {
-  if (HARD_RED_FLAG.test(lower)) return true;
-  return BODY_PART.test(lower) && SYMPTOM_WORD.test(lower);
+/**
+ * Takes the RAW message and folds internally, across every form. Callers used to
+ * pass their own lowercased string and got it wrong in two different ways — a
+ * curly apostrophe defeated `can'?t walk`, and a later fix that passed a single
+ * folded form defeated the zero-width variant. Folding here means no caller can
+ * reintroduce either; `fold` is idempotent, so passing an already-folded string
+ * is still correct.
+ */
+export function isSymptomShaped(q: string): boolean {
+  return forms(q).some(
+    (f) => HARD_RED_FLAG.test(f) || (BODY_PART.test(f) && SYMPTOM_WORD.test(f))
+  );
 }
 
 export async function ruleAnswer(q: string, p: CoreProfile): Promise<string> {
-  const lower = q.toLowerCase().trim();
-  const words = lower.split(/\s+/).length;
-  const { intent, score } = classify(lower);
+  const fs = forms(q);
+  const { intent, score, form: lower } = bestMatch(fs);
 
   // Fail closed on hard red flags BEFORE intent scoring. "my leg gave out" and
   // "i can't put weight on it" have no useful non-escalation answer, and left to
   // the scorer they land on whichever intent happens to share a substring.
-  if (HARD_RED_FLAG.test(lower)) return SYMPTOM_ESCALATION;
+  // Across every form: one reading carrying a red flag is a red flag.
+  if (fs.some((f) => HARD_RED_FLAG.test(f))) return SYMPTOM_ESCALATION;
 
   // Strong direct match wins immediately.
   if (intent && score >= 2) return intent.answer({ p, q: lower });
 
   // Pure acknowledgement — keep it human and short.
-  if (ACK.test(lower) && words <= 5) {
+  if (fs.some((f) => ACK.test(f) && f.split(/\s+/).length <= 5)) {
     return `Anytime. I'm here whenever you want to dig into today's run, your race plan, a niggle, sleep, fueling — whatever's on your mind. 👊`;
   }
 
   // Thin follow-up ("how long?", "why?", "what do I do") — continue the last topic.
-  if ((FOLLOWUP.test(lower) || words <= 4) && score < 2) {
+  if (fs.some((f) => FOLLOWUP.test(f) || f.split(/\s+/).length <= 4) && score < 2) {
     const prev = await previousUserMessage(p.athlete.id);
     if (prev) {
-      const prevMatch = classify(prev.toLowerCase());
+      const prevMatch = bestMatch(forms(prev));
       if (prevMatch.intent && prevMatch.score > 0) {
-        return prevMatch.intent.answer({ p, q: `${prev.toLowerCase()} ${lower}` });
+        return prevMatch.intent.answer({ p, q: `${prevMatch.form} ${lower}` });
       }
     }
   }
@@ -721,7 +786,7 @@ export async function ruleAnswer(q: string, p: CoreProfile): Promise<string> {
   // Nothing matched. If it describes a body part with something wrong, the warm
   // clarifier below is the wrong answer — it reads as competent and offers to
   // discuss pacing. Escalate instead.
-  if (isSymptomShaped(lower)) return SYMPTOM_ESCALATION;
+  if (isSymptomShaped(q)) return SYMPTOM_ESCALATION;
 
   // Smart fallback: reason with any number they gave, else warm clarifier.
   const numMatch = lower.match(/(\d{2,3})\s*(mile|mi|km|k)\b/);
@@ -741,12 +806,20 @@ export async function ruleAnswer(q: string, p: CoreProfile): Promise<string> {
 export function dataContext(p: CoreProfile): string {
   const r = p.risk;
   return [
-    `Athlete: ${p.athlete.name}, grade ${p.athlete.grade}, ${p.athlete.school}. Events: ${p.athlete.events.join(", ")}.`,
+    // `?? "n/a"` rather than raw interpolation: `grade` is `number | null` and
+    // printed the literal string "null" into the model's context, which
+    // COACH_SYSTEM then tells it to quote. "n/a" is the token the rest of this
+    // digest already uses for absent, and the prompt says not to cite it.
+    `Athlete: ${p.athlete.name}, grade ${p.athlete.grade ?? "n/a"}, ${p.athlete.school}. Events: ${p.athlete.events.join(", ") || "n/a"}.`,
     `Readiness ${p.readiness}/100 (shown to the athlete; mostly self-report). Internal-only diagnostics, NOT shown and not to be quoted as a risk score: legacy risk ${r.score}, ACWR ${r.acwr ?? "n/a"}, week ${miNum(r.weekKm)} mi (ramp ${r.rampPct ?? 0}%), monotony ${r.monotony ?? "n/a"}, days since rest ${r.daysSinceRest}.`,
     `Recovery: resting HR ${r.recovery.restingHr ?? "n/a"} (baseline ${r.recovery.restingHrBaseline ?? "n/a"}, Δ${r.recovery.restingHrDelta ?? 0}), HRV ${r.recovery.hrv ?? "n/a"} ms (${r.recovery.hrvDeltaPct ?? 0}% vs baseline), sleep ${r.recovery.sleepAvg ?? "n/a"}h avg, sleep debt ${p.patterns.sleepDebtH ?? 0}h, VO2max ${p.fitness.vo2max ?? "n/a"}.`,
     `Fitness ${p.fitness.score}/100 (${p.fitness.trend}), tier ${p.fitness.tier}, freshness ${p.fitness.freshness}. Patterns: monotony ${p.patterns.monotony}, high-effort streak ${p.patterns.highEffortStreak}, overreaching ${p.patterns.overreaching}, illness flag ${p.illness}.`,
     `Predictions: 800m ${p.predictions["800m"].label}, Mile ${p.predictions["Mile"].label}, 5K ${p.predictions["5K"].label}, XC ${p.predictions["XC 5K"].label}. PRs: ${p.prs.map((x) => `${x.event} ${x.label}`).join(", ")}.`,
-    `Goals: ${p.goals.map((g) => `${g.event} ${g.targetLabel} (${g.onTrack ? "on track" : "chasing"})`).join(", ") || "none set"}.`,
+    // Same null-is-a-verdict bug as the `goals` intent above, but worse here:
+    // this digest is the model's only source of truth, and `unsourcedNumber`
+    // treats it as authoritative — so "chasing" invented from a missing
+    // prediction would be grounded, quoted and defended.
+    `Goals: ${p.goals.map((g) => `${g.event} ${g.targetLabel} (${g.onTrack === null ? "n/a" : g.onTrack ? "on track" : "chasing"})`).join(", ") || "none set"}.`,
     p.races.upcoming[0] ? `Next race: ${p.races.upcoming[0].name} (${p.races.upcoming[0].event}) in ${p.races.upcoming[0].daysUntil} days.${p.plan.taperMode ? " Taper mode active." : ""}` : "No upcoming race.",
     `Today's plan: ${p.plan.days.find((d) => d.isToday)?.type ?? "rest"}. Injury history: ${p.injuries.map((i) => `${i.body_part} (${i.date.slice(0, 7)})`).join(", ") || "none"}.`,
     p.todayCheckin

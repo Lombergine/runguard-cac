@@ -26,7 +26,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Card } from "./Card";
 import { Absent } from "./Nothing";
-import { getBodyPart, injuryLabel } from "../lib/bodyParts";
+import { storedPartLabel } from "../lib/bodyParts";
 import { dayLabel } from "../lib/dates";
 import type { Badge, Goal, Injury } from "../lib/types";
 import { ruleWidth, space } from "../theme/space";
@@ -197,8 +197,15 @@ export function InjuryHistory({ injuries }: { injuries: Injury[] | undefined }) 
   return (
     <Card padded={false}>
       {ordered.map((inj, i) => {
-        const lateral = getBodyPart(inj.body_part)?.lateral === true;
-        const name = lateral ? injuryLabel(inj.body_part, null) : inj.body_part;
+        // ONE resolver, shared with the Stats body scan — see lib/bodyParts.
+        // This used to be `getBodyPart(body_part)` plus `injuryLabel(key, null)`,
+        // which could not work: the stored string is "hip (left)", not a key, so
+        // the lookup always missed, and `injuryLabel(key, null)` returns `key`
+        // unchanged by construction. Both branches rendered the raw string, so
+        // Profile said `hip (left)` where the body scan said `Hip / IT band
+        // (left)` for the same injury. An unrecognised string still shows as
+        // itself: a flagged injury that vanishes is worse than one shown plainly.
+        const name = storedPartLabel(inj.body_part);
         return (
           <View key={inj.id} style={[styles.row, i > 0 && styles.divided]}>
             <Text style={styles.rowEyebrow}>

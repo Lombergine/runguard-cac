@@ -14,9 +14,10 @@
  * The whole component turns on one question — what does an empty square mean?
  * The payload cannot answer it on its own, so this file answers it explicitly:
  *
- *   ABSENT  we have nothing for that day. Days before the athlete's first
- *           recorded activity, and the pad days at the start of the first week
- *           column. Dashed, `well` fill — the only dashed object in the app.
+ *   ABSENT  we have nothing for that day. Days before the first recorded
+ *           activity IN THIS PAYLOAD — not the athlete's first ever, which the
+ *           payload does not carry — and the pad days at the start of the first
+ *           week column. Dashed, `well` fill — the only dashed object in the app.
  *   NO RUN  the plan scheduled rest and nothing was recorded. Dotted, no fill,
  *           recedes. Only the current plan week can produce this.
  *   ZERO    inside the observed period, nothing was run. Solid rule, `card`
@@ -82,9 +83,16 @@ type Cell = {
  * left, an optional note on the right carrying the caveat, the unit or the
  * reading instruction, then the content. White card, `shadow.card`, one rule.
  *
- * Local, as it was on the screen this came from: every value is a token, so it
- * cannot drift from any other panel in the app even though the code is not
- * shared.
+ * Local, as it was on the screen this came from. This used to claim that being
+ * built from tokens meant it "cannot drift from any other panel in the app even
+ * though the code is not shared". It had already drifted when the claim was
+ * written: the same head is spelled out TWELVE times across the app, in two
+ * different title sizes (`text.baseSemi` here and on the charts, `text.meta` +
+ * `font.bodySemi` on chat/profile/settings), with the note able to shrink in
+ * only three of the twelve. Tokens keep the colours and the spacing honest;
+ * they do not keep the structure honest. The copies belong in one
+ * `components/Panel.tsx` — a change that crosses eleven other files, so it is
+ * not made here.
  * ------------------------------------------------------------------ */
 
 function Panel({
@@ -308,11 +316,34 @@ function buildGrid(entries: CalendarDay[], restDays: Set<string>): Grid | null {
  *
  * `Pressable` cancels on move, so the taps do not fight the horizontal
  * ScrollView and no scroll-offset arithmetic is needed: `locationY` is relative
- * to the column that was pressed, whatever the scroll position.
+ * to the column that was pressed, whatever the scroll position. Neither
+ * scroller can perturb it — only `pageX/pageY` carry scroll offset, and this
+ * reads `locationY`.
+ *
+ * `pointerEvents="box-only"` IS LOAD-BEARING, not tidiness. `locationY` is
+ * measured against the touch TARGET, and the target is the deepest view that
+ * hit-tests, not the view whose handler runs — iOS takes `uiTouch.view` and
+ * walks up to the nearest Fabric view (`RCTSurfaceTouchHandler.mm:59,79-90`),
+ * Android subtracts the target view's origin (`TouchesHelper.kt:61-64`).
+ * Without this prop the seven cell `View`s are all valid targets, so a tap
+ * landing on a cell — 24 of every 28px, i.e. six sevenths of the column —
+ * reported a `locationY` inside that 24px CELL, and `locationY / COLUMN` was
+ * then 0 for every one of them. The grid answered every tap with Monday of the
+ * pressed week: tap Thursday's ember square, read Monday's sentence, with
+ * Monday's date printed as if it were the day you touched. Only a tap in a 4px
+ * gap between cells landed on the column and mapped correctly.
+ *
+ * `box-only` makes the column itself the target and its children none
+ * (`RCTViewComponentView.mm:779-780`, `TouchTargetHelper.kt:351-352`), which is
+ * what the arithmetic below has always assumed. Nothing else changes: the cells
+ * are inert `View`s with no handlers of their own.
  *
  * This is the same interaction the charts settled on (`components/chart/Plot`) —
  * tap to select, one persistent readout beneath, pre-filled so the first read is
- * free. One answer to "how do I read a value", not two.
+ * free. One answer to "how do I read a value", not two. Note `Plot` puts its
+ * `Pressable` above the drawing as an empty `absoluteFill` overlay with no
+ * children, so it is the target by construction; this grid nests its targets
+ * inside the pressable and needs the prop to get the same guarantee.
  *
  * What has NOT changed: no animation, no per-cell chrome, no tooltip, and the
  * grid is still one accessibility node with one sentence.
@@ -327,7 +358,7 @@ const LEVEL_WORD = ["Recovery", "Easy", "Moderate", "Hard", "Max effort"] as con
  * What one day says. FOUR different sentences, because the grid draws four
  * different facts and non-negotiable #4 exists to stop them collapsing:
  *
- *   absent  we have nothing for this day — it is before the first synced run
+ *   absent  we have nothing for this day
  *   norun   the plan scheduled a rest day
  *   zero    a day inside the recorded period with no run on it
  *   load    a run, with its distance and the model's load figure
@@ -339,12 +370,26 @@ const LEVEL_WORD = ["Recovery", "Easy", "Moderate", "Hard", "Max effort"] as con
  * `load` is deliberately NOT dressed as a measurement: it is a model output with
  * no unit, and the sentence says so rather than printing a bare number that
  * looks like one.
+ *
+ * THE ABSENT SENTENCE CLAIMS NOTHING ABOUT WHY. It used to end "This is before
+ * your first synced run", which is the same false claim the footnote below
+ * carried until an audit removed it, for the same reason: `firstRecorded` is
+ * the earliest RECORDED day inside a fixed 366-day payload window, so a dashed
+ * cell means only that this window has nothing for that day — the athlete may
+ * well have been running, and on the dev roster all 14 athletes have activities
+ * older than the window. A dashed cell can also be a pad day at the head of the
+ * first column, or a day the payload simply does not carry, neither of which is
+ * "before your first run" either. So the sentence says what is true of all
+ * three: nothing recorded. The footnote already tells the reader where the
+ * window starts, which is the part the grid actually knows.
  */
 function readoutFor(cell: Cell): string {
   const day = dayLabel(cell.date);
   switch (cell.kind) {
     case "absent":
-      return `${day} — nothing recorded. This is before your first synced run.`;
+      // The same words as the legend's <Absent/> swatch, so the tapped cell and
+      // the key that explains it cannot describe the same square differently.
+      return `${day} — nothing recorded for this day.`;
     case "norun":
       return `${day} — rest day, no run scheduled.`;
     case "zero":
@@ -424,6 +469,10 @@ export function YearGrid({
                       <Pressable
                         key={i}
                         style={styles.column}
+                        /* The column must BE the touch target — see the header.
+                           Without this the cells are the targets and every tap
+                           on one resolves to row 0. */
+                        pointerEvents="box-only"
                         // The row is derived from where in the column the thumb
                         // landed; each row is CELL + GAP tall.
                         onPress={(e) => {
@@ -547,8 +596,14 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   panelTitle: { ...text.baseSemi, color: color.ink },
-  /* muted on `card` is 5.16:1 — the note is small and often the only caveat. */
-  panelNote: { ...text.meta, color: color.muted },
+  /* muted on `card` is 5.16:1 — the note is small and often the only caveat.
+     `flexShrink` because a Text in a flex row does not shrink by default in
+     React Native: without it a note long enough to overflow squeezes the title
+     off its own baseline at the 360px floor instead of wrapping. Three of the
+     app's twelve copies of this head already carried it and nine did not; this
+     is the behaviour the shared component should keep when they are folded into
+     one. */
+  panelNote: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   gridRow: { flexDirection: "row" },
   gutter: { width: GUTTER },

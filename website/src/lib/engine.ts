@@ -190,7 +190,19 @@ export function detectPatterns(
    * `RecoverySnapshot.sleepAvg`. This brings the two sleep figures into line
    * with both.
    */
-  const sleepWindowStart = localDayOffset(6);
+  /*
+   * `localDayOffset(7)`, not 6, to match `recovery.sleepAvg` — `risk.ts:222`
+   * counts a night with `ago <= 7`, which is eight calendar days including
+   * today. A 7-day window here left a night exactly a week old counting for one
+   * tile and not the one beside it, which is a smaller version of the very
+   * disagreement this fix exists to remove.
+   *
+   * Both are therefore eight days while the copy around them says "the last 7
+   * nights". Reported rather than corrected here: narrowing it changes
+   * `sleepAvg`, a figure both surfaces already show, and that is a decision
+   * rather than a repair.
+   */
+  const sleepWindowStart = localDayOffset(7);
   const last7Sleep = metrics
     .filter((m) => m.sleep_hours != null && m.date >= sleepWindowStart)
     .slice(-7)
@@ -435,8 +447,23 @@ export function weeklyPlan(
   const todayIso = localDay(now);
 
   const raceDate = nextRace ? new Date(nextRace.date + "T12:00:00") : null;
+  /*
+   * THE THIRD COPY of this calculation, and the last. `profile.ts` had two and
+   * both were fixed; this one it never passes its result to, so on race morning
+   * the app showed three different numbers for one fact on one screenful: the
+   * Races tab said "Race day", the notification said "Race in 1 day", and the
+   * taper countdown said 1.
+   *
+   * Worse here than a wrong label — `dtr` below selects the TEMPLATE, so before
+   * local noon on race day the plan prescribed "Pre-race shakeout" for today and
+   * "RACE DAY" for tomorrow, and taper mode started half a day late.
+   *
+   * Both sides anchored at local noon, then differenced: whole days regardless
+   * of clock time, and noon keeps clear of the DST hour. Today is 0.
+   */
+  const todayNoon = new Date(localDay(now) + "T12:00:00").getTime();
   const daysToRace = raceDate
-    ? Math.ceil((raceDate.getTime() - now.getTime()) / DAY_MS)
+    ? Math.round((raceDate.getTime() - todayNoon) / DAY_MS)
     : null;
   const taperMode = daysToRace !== null && daysToRace >= 0 && daysToRace <= 6;
 
@@ -466,7 +493,14 @@ export function weeklyPlan(
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     const iso = localDay(d);
-    const dtr = raceDate ? Math.ceil((raceDate.getTime() - d.getTime()) / DAY_MS) : null;
+    // Same anchoring as `daysToRace` above — `d` is a plan day at whatever
+    // clock time `monday` was built with, so it needs the noon anchor too or a
+    // row's taper template shifts against the banner's countdown.
+    const dtr = raceDate
+      ? Math.round(
+          (raceDate.getTime() - new Date(iso + "T12:00:00").getTime()) / DAY_MS
+        )
+      : null;
     const inTaper = taperMode && dtr !== null && dtr >= 0 && dtr <= 6;
     const t = inTaper ? taperTemplate(dtr as number) : template[i];
     days.push({

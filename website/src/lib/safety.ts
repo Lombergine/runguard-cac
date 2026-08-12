@@ -51,6 +51,16 @@ const DASH = /[‐-―−]/g;
  * control" failure the Spanish block was added to prevent, reintroduced by
  * spelling. Decomposing and dropping the marks makes the unaccented patterns
  * match both spellings. English input has no marks, so this is a no-op there.
+ *
+ * The trailing NFC recomposes what survives. Without it the output stays
+ * decomposed, which is harmless for Latin but leaves Hangul as conjoining jamo
+ * (한 → 3 code points; jamo are not `\p{M}`, so stripping does not touch them).
+ *
+ * CONSEQUENCE FOR ANY FUTURE PATTERN: this is lossy for languages where a mark
+ * carries meaning rather than accent. Vietnamese tone marks are destroyed —
+ * `đầu` folds to `đau` — so a Vietnamese or Tagalog pattern added to the arrays
+ * below must be authored WITHOUT tone marks, exactly as the Spanish ones are
+ * authored without accents, or it will never match.
  */
 const COMBINING = /\p{M}+/gu;
 
@@ -60,6 +70,7 @@ function fold(input: string, zeroWidthAs: "" | " "): string {
     .normalize("NFKC")
     .normalize("NFD")
     .replace(COMBINING, "")
+    .normalize("NFC")
     .replace(ZERO_WIDTH, zeroWidthAs)
     .replace(APOSTROPHE, "'")
     .replace(QUOTE, '"')
@@ -88,6 +99,27 @@ export function normalise(input: string): string[] {
   const stripped = fold(input, "");
   const spaced = fold(input, " ");
   return stripped === spaced ? [stripped] : [stripped, spaced];
+}
+
+/**
+ * The forms a caller must iterate. Use this, never `normalise(q)[0]`.
+ *
+ * Taking only the first variant is STRICTLY WORSE than not folding at all, and
+ * that is not obvious. In a RAW string a zero-width character is itself a `\b`
+ * word boundary, so unfolded matching already behaved like the second variant;
+ * collapsing to `[0]` throws that away and mangles the word instead. Measured:
+ * a message whose single space was replaced by U+200B was symptom-shaped when
+ * matched raw and stopped being symptom-shaped when matched against `[0]`
+ * alone. This is not only an evasion concern — U+00AD, the soft hyphen, arrives
+ * inside ordinary text pasted from a web page or a PDF and folds the same way.
+ *
+ * Never returns an empty array. `normalise` returns `[]` for a non-string,
+ * which would make every `.some()` gate below evaluate false — i.e. fail OPEN
+ * on a safety path. `[""]` fails closed instead.
+ */
+export function forms(input: string): string[] {
+  const f = normalise(input);
+  return f.length ? f : [""];
 }
 
 /* ------------------------------------------------------------------ */

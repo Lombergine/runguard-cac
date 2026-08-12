@@ -114,6 +114,27 @@ export function athleteInsights(risk: RiskSnapshot): string[] {
       out.push(
         `You're rebuilding after time off. Your engine is ready before your bones and tendons are — keep the jumps small even when it feels easy.`
       );
+    } else if (weekKm <= 2) {
+      /*
+       * THE FLOOR THIS BRANCH WAS MISSING.
+       *
+       * Without it, an athlete who has not run falls past every case above —
+       * `acwr < 0.6` is guarded by `weekKm > 2`, so it does not catch them —
+       * and lands in the `else` below. Observed live: load ratio 0.05, last
+       * activity 14 days ago, `weekKm` 0, and the Recovery tab told them
+       * "right in the sweet spot. You're building fitness about as fast as
+       * your body can absorb it."
+       *
+       * Not training narrated as optimal training, to a teenager, under a
+       * heading reading "What your data is showing". A ratio near zero is not
+       * a good ratio; it is the arithmetic of having nothing to divide.
+       *
+       * The coach-facing `insights` in risk.ts guards this case. This is the
+       * athlete rewrite, and the guard was dropped in the rewriting.
+       */
+      out.push(
+        `There's almost no running in the last week, so there's not much here to read yet. The ratio below compares recent training against your usual, and it needs recent training to mean anything.`
+      );
     } else {
       out.push(
         `Your load ratio is ${acwr?.toFixed(2)} — right in the sweet spot. You're building fitness about as fast as your body can absorb it.`

@@ -270,20 +270,41 @@ function PlanRow({ day, dateLabel, expanded, onToggle }: PlanRowProps) {
    * threw the fresh write away. Neither is expressible now.
    */
   const [written, setWritten] = useState<{ to: WorkoutStatus | null } | null>(null);
-  /* React's documented "adjust state when a prop changes", done in render so
-     the stale value is never committed and nothing flashes. */
   const [seenStatus, setSeenStatus] = useState(day.status);
-  if (seenStatus !== day.status) {
-    setSeenStatus(day.status);
-    setWritten(null);
-  }
-  /* Tests the WRAPPER, never `written?.to ?? day.status` — a confirmed clear
-     is `to: null`, and `??` would fall through it back to the prop. */
-  const current = written ? written.to : day.status;
-
   /** A write in flight. `next: null` is a clear — see `choose`. */
   const [pending, setPending] = useState<{ next: WorkoutStatus | null } | null>(null);
   const [failed, setFailed] = useState(false);
+
+  /*
+   * React's documented "adjust state when a prop changes", done in render so
+   * the stale value is never committed and nothing flashes. It sits below all
+   * four `useState` calls only because it needs their setters; it declares no
+   * hook itself, so the hook order is unaffected.
+   *
+   * `failed` IS CLEARED HERE TOO, and that is not tidiness. A write can commit
+   * on the server and still reach the `catch` — a lost response, a timeout, the
+   * app backgrounded mid-request — which leaves `failed` true over a status the
+   * server does hold. The next payload then lights the selected fill, and the
+   * row rendered "That didn't save. Tap again." directly beneath a filled
+   * button. The sentence is an instruction, and obeying it DELETES the status:
+   * `choose` reads `current === value` and sends the clear. So the one line
+   * that reports a failed write has to expire on exactly the same event as the
+   * memo of a successful one — the moment the payload says something new about
+   * this day, this row's memory of what happened to it is out of date, whether
+   * that memory is a success or a failure.
+   *
+   * A write that failed and left `day.status` UNCHANGED still reports itself:
+   * the prop did not move, so this block does not run.
+   */
+  if (seenStatus !== day.status) {
+    setSeenStatus(day.status);
+    setWritten(null);
+    setFailed(false);
+  }
+
+  /* Tests the WRAPPER, never `written?.to ?? day.status` — a confirmed clear
+     is `to: null`, and `??` would fall through it back to the prop. */
+  const current = written ? written.to : day.status;
 
   async function choose(value: WorkoutStatus) {
     if (pending) return;

@@ -215,8 +215,17 @@ export async function buildProfile(
   }));
 
   const nextRace = races[0] ?? null;
+  // The SAME off-by-one as `daysUntil` below, in a second place — see the long
+  // note there. This one feeds `weeklyPlan`, so before local noon the taper
+  // window and the race-day row both shifted a day: on race morning the plan
+  // showed "Pre-race shakeout" for today and "RACE DAY" for tomorrow. Two
+  // copies of one calculation is why the first fix did not cover it.
   const daysToRace = nextRace
-    ? Math.ceil((new Date(nextRace.date + "T12:00:00").getTime() - now.getTime()) / DAY_MS)
+    ? Math.round(
+        (new Date(nextRace.date + "T12:00:00").getTime() -
+          new Date(localDay(now) + "T12:00:00").getTime()) /
+          DAY_MS
+      )
     : null;
 
   const statuses = new Map<string, string>(statusRows.map((r) => [r.date, r.status]));

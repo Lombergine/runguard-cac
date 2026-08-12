@@ -26,12 +26,15 @@
  * label covering all of them, and the individual marks are not accessibility
  * nodes at all.
  *
- * NO SIDE-PARSER LIVES HERE. `sorenessLabel` ("left shin") and `injuryLabel`
- * ("shin (left)") in lib/bodyParts already own the two stored formats; this
- * file reads a stored string by REGENERATING it from them and comparing, so
- * there is exactly one description of each format in the app. A string that
- * matches neither is still counted and still named — see `unplaced`. Losing a
- * flagged area silently is worse than admitting the diagram cannot place it.
+ * NO SIDE-PARSER LIVES HERE. `parseStoredPart` in lib/bodyParts owns reading a
+ * stored string — it regenerates every label `sorenessLabel` ("left shin") and
+ * `injuryLabel` ("shin (left)") can produce and compares, so the reader cannot
+ * drift from the writer. This file used to hold a private copy of that loop,
+ * which is how the app came to show `Hip / IT band (left)` here and `hip (left)`
+ * on Profile for the same injury; both surfaces now go through the one function.
+ * A string that matches neither format is still counted and still named — see
+ * `unplaced`. Losing a flagged area silently is worse than admitting the diagram
+ * cannot place it.
  *
  * NO CARD OF ITS OWN: this is a section, and the screen that composes it owns
  * the surface it sits on.
@@ -39,13 +42,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { BodyMap, MarkSwatch } from "./BodyMap";
-import {
-  BODY_PARTS,
-  BodyPart,
-  injuryLabel,
-  Side,
-  sorenessLabel,
-} from "../lib/bodyParts";
+import { parseStoredPart } from "../lib/bodyParts";
 import { BodyMark, Injury, SorenessEntry } from "../lib/types";
 import { space } from "../theme/space";
 import { color } from "../theme/tokens";
@@ -61,32 +58,6 @@ export type BodyScanProps = {
 /** The scale every soreness figure is reported on. */
 const MAX_SEVERITY = 10;
 
-/** The sides each formatter can produce, `null` (bare) checked last. */
-const SIDES: readonly (Side | null)[] = ["left", "right", "both", null];
-
-type Format = (key: string, side: Side | null) => string;
-
-/**
- * Read a stored part string by regenerating every string the formatters can
- * produce and comparing. `null` when the string is outside the vocabulary —
- * older rows came through the website's 19 free-text regions.
- */
-function resolve(
-  raw: string,
-  format: Format,
-): { part: BodyPart; side: Side | null } | null {
-  const want = raw.trim().toLowerCase();
-  for (const part of BODY_PARTS) {
-    for (const side of SIDES) {
-      if (format(part.key, side).toLowerCase() === want) {
-        // A side on a part that has none is noise; drop it.
-        return { part, side: part.lateral ? side : null };
-      }
-    }
-  }
-  return null;
-}
-
 /** One flagged area, already resolved to a spot on the figure. */
 type Row = {
   /** e.g. "Hip / IT band (left)". */
@@ -97,14 +68,21 @@ type Row = {
 /**
  * A stored string becomes one row per lit side. "both", and a lateral part
  * stored with no side at all, become two.
+ *
+ * `parseStoredPart` accepts EITHER stored format, where this used to be handed
+ * the one formatter matching the row's table. That is strictly a widening —
+ * checked by generating all 77 strings the two formatters can produce and
+ * comparing: no string resolves to a different part or side than before, and 61
+ * that the row's own formatter would have rejected now resolve. So a soreness
+ * row that somehow holds "shin (left)" is placed on the figure instead of
+ * falling through to `unplaced`, and nothing that used to be placed moves.
  */
 function rowsFor(
   raw: string,
   kind: BodyMark["kind"],
   severity: number | undefined,
-  format: Format,
 ): Row[] | null {
-  const found = resolve(raw, format);
+  const found = parseStoredPart(raw);
   if (!found) return null;
 
   const { part, side } = found;
@@ -141,13 +119,13 @@ export function BodyScan({ injuries, soreness }: BodyScanProps) {
   // current injury and a healed one.
   for (const injury of injuries ?? []) {
     if (injury.resolved_at !== null) continue;
-    const rows = rowsFor(injury.body_part, "injury", undefined, injuryLabel);
+    const rows = rowsFor(injury.body_part, "injury", undefined);
     if (rows) injuryRows.push(...rows);
     else unplaced.push(injury.body_part.trim());
   }
 
   for (const entry of soreness) {
-    const rows = rowsFor(entry.part, "soreness", entry.severity, sorenessLabel);
+    const rows = rowsFor(entry.part, "soreness", entry.severity);
     if (rows) sorenessRows.push(...rows);
     else unplaced.push(entry.part.trim());
   }

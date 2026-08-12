@@ -238,12 +238,18 @@ export default function ConnectScreen() {
   const lastAt = last ? syncLabel(last.at) : null;
   const readNothing = last !== null && last.read.workouts === 0 && last.read.metrics === 0;
   /**
-   * Entries the server REFUSED, when it said. Undefined means a record written
-   * before the count existed — unknown, not zero — so this stays false and the
-   * line below simply does not appear rather than asserting nothing was lost.
+   * Entries the server REFUSED, when there were any and when it said so.
+   *
+   * `rejected` undefined means a record written before the count existed —
+   * UNKNOWN, not zero — and lands here as null exactly like "none were refused"
+   * does. That collapse is deliberate and it is the safe direction: the only
+   * thing either state suppresses is a warning, so an unknown never becomes a
+   * reassurance, and the next sync fills the field in.
    */
-  const refused = last?.rejected ?? null;
-  const refusedAny = refused !== null && (refused.workouts > 0 || refused.metrics > 0);
+  const refused =
+    last?.rejected && (last.rejected.workouts > 0 || last.rejected.metrics > 0)
+      ? last.rejected
+      : null;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -351,7 +357,7 @@ export default function ConnectScreen() {
                         above cannot be told apart from a healthy repeat sync:
                         both read N and import 0, and the caption below used to
                         say a zero could only mean "nothing had changed". */}
-                    {refusedAny && refused ? (
+                    {refused ? (
                       <Text style={styles.problem} accessibilityLiveRegion="polite">
                         Your server refused{" "}
                         {refused.workouts > 0
@@ -369,9 +375,7 @@ export default function ConnectScreen() {
                         second sentence is only true when nothing was refused. */}
                     <Text style={styles.caption}>
                       New counts only the workouts your server had not already stored.
-                      {refusedAny
-                        ? ""
-                        : " Zero means nothing had changed since the last sync."}
+                      {refused ? "" : " Zero means nothing had changed since the last sync."}
                     </Text>
                   </View>
                 ) : null}

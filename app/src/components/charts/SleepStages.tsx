@@ -108,7 +108,22 @@ function stageAvg(nights: SleepDay[], key: StageKey): number | null {
 }
 
 export type SleepStagesProps = {
-  /** Last 30 nights, oldest first and sparse. Optional on `Profile`. */
+  /**
+   * The last 30 metric ROWS, oldest first — **not** the last 30 nights, and not
+   * sparse. `lib/types.ts:622-628` is explicit: `sleepTrend` is
+   * `metrics.slice(-30)`, so the rows are however many consecutive RECORDED
+   * nights it took to reach 30, and the newest one is the last night recorded,
+   * NOT last night. Measured 2026-08-11: 2026-06-29 → 2026-07-28, i.e. the
+   * newest row was a fortnight old.
+   *
+   * That matters here more than anywhere else in the app, because this
+   * component windows by `slice(-7)` — the last seven ENTRIES — and has no date
+   * test anywhere in it. Its note therefore quotes a count and calls the nights
+   * "recent" on the strength of this array's ordering alone. The type doc's
+   * standing instruction is "never label a chart of this 'last 30 nights'; read
+   * the dates off the entries", and this component does not read them. See the
+   * audit note in the header. Optional on `Profile`.
+   */
   sleep30?: SleepDay[];
 };
 

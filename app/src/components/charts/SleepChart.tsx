@@ -59,10 +59,21 @@ import { text } from "../../theme/type";
 
 export type SleepChartProps = {
   /**
-   * Last 30 nights, oldest first and SPARSE — optional on `Profile`, so
-   * `undefined` is an ordinary state and renders the not-enough-data slot
-   * rather than throwing. `sleepSeries` densifies whatever arrives onto a
-   * continuous local-day axis; nothing here re-derives a day or a label.
+   * The last 30 metric ROWS, oldest first — **not** the last 30 nights.
+   * `lib/types.ts:622-628`: `sleepTrend` is `metrics.slice(-30)`, so the span is
+   * however long it took to accumulate 30 rows and the newest entry is the last
+   * night RECORDED, not last night. Measured 2026-08-11: 2026-06-29 →
+   * 2026-07-28.
+   *
+   * The panel title above IS honest about "last 30 nights" even so, and only
+   * because of what happens next: `sleepSeries` densifies whatever arrives onto
+   * a continuous local-day axis anchored on today, so the x axis really is the
+   * last 30 nights and every night the array does not reach draws as a dashed
+   * unknown. Take that densify away and the title becomes the exact label
+   * `types.ts` forbids. Nothing here re-derives a day or a label.
+   *
+   * Optional on `Profile`, so `undefined` is an ordinary state and renders the
+   * not-enough-data slot rather than throwing.
    */
   sleep30?: SleepDay[];
 };
@@ -125,8 +136,28 @@ export function SleepChart({ sleep30 }: SleepChartProps) {
         >
           {(frame) => (
             <>
-              {/* Behind the data. */}
-              <RefLine frame={frame} value={SLEEP_TARGET_H} />
+              {/* Behind the data — and in `muted`, NOT `RefLine`'s default.
+                  That default is `color.ok` (`chart/marks.tsx:254`), the green
+                  verdict token, which is what the website strokes its own 8 h
+                  line with (the `<ReferenceLine y={8}>` in `charts.tsx`'s own
+                  `SleepChart`). It does not survive the port, for the reason
+                  `AcwrChart` spells out at length for the same mark:
+                  tokens.ts carries the website's own rule for `ok` /
+                  `watch` / `unusual` — "verdicts only, never chrome" — and the
+                  visual spec says status colour is "semantic only, never
+                  decorative, never on non-status elements". A green rule at 8 h
+                  is a verdict painted on furniture: it says "8 h is good" in
+                  the one colour the spec refuses the accent slot precisely
+                  because "green reads 'good', and a blank must never read as
+                  fine". On this chart of all charts — where most of the axis is
+                  dashed unknowns — a green line is the thing those unknowns get
+                  measured against. `muted` clears 4.5:1 on card, so the rule is
+                  unmistakably a drawn line, and quieter than the bars. */}
+              <RefLine
+                frame={frame}
+                value={SLEEP_TARGET_H}
+                stroke={color.muted}
+              />
               {/* Real readings only. A null night draws no bar at all — see
                   the header: this is where the website's `hours ?? 0` would
                   have put a floor-height bar under a night nobody measured. */}
