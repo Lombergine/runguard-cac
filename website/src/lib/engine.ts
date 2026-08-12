@@ -607,25 +607,63 @@ export function readinessScore(risk: RiskSnapshot, checkin: CheckinRow | null, s
   }
 
   // ---- what the sensors reported, as trends against personal baselines ----
+  /*
+   * NULL WHEN THE SENSORS SAID NOTHING, and that is the whole point.
+   *
+   * `objective` starts at 100 and only ever decrements on data it has, so with
+   * no HRV, no resting HR and no sleep it stays a confident 100 — a perfect
+   * score computed from silence. It was then weighted at 45% of the result,
+   * which meant it did not merely appear, it actively pulled the athlete's own
+   * report upward.
+   *
+   * Measured on the dev database before this change: an athlete reporting three
+   * separate 10-out-of-10 sorenesses scored `subjective` 40, `objective` 100
+   * from no readings at all, and a combined **67 — "Good to go"**. Reporting
+   * more soreness changed nothing, because the soreness penalty is capped at 60
+   * and they were already at the cap, so the screen looked broken. It was not
+   * broken; it was being told the athlete was fine by a number that knew
+   * nothing.
+   *
+   * The fallback below already handles the mirror case correctly: no check-in
+   * means `subjective` is null and the sensors carry the score alone. This makes
+   * the two symmetric.
+   *
+   * The test is THE THREE READINGS THIS FUNCTION ACTUALLY USES, not
+   * `recovery.hasData`. `hasData` is `metrics.length > 0` over a long window, so
+   * it stays true for an athlete whose watch stopped syncing months ago — the
+   * same never-goes-false shape as `hasActivityHistory`. Measured: with
+   * `hasData` as the gate, an athlete with 365 stale metric rows and all three
+   * deltas null still scored a full objective 100, and two 10-out-of-10
+   * sorenesses still read "Good to go". Any ONE real reading is enough to
+   * compute a partial objective score; none of them means there is no score.
+   */
   const r = risk.recovery;
-  let objective = 100;
-  if (r.hrvDeltaPct !== null && r.hrvDeltaPct < 0) {
-    objective -= Math.min(30, Math.abs(r.hrvDeltaPct) * 1.2);
+  const sensed =
+    r.hrvDeltaPct !== null || r.restingHrDelta !== null || r.sleepAvg !== null;
+  let objective: number | null = null;
+  if (sensed) {
+    let o = 100;
+    if (r.hrvDeltaPct !== null && r.hrvDeltaPct < 0) {
+      o -= Math.min(30, Math.abs(r.hrvDeltaPct) * 1.2);
+    }
+    if (r.restingHrDelta !== null && r.restingHrDelta > 0) {
+      o -= Math.min(25, r.restingHrDelta * 4);
+    }
+    if (r.sleepAvg !== null && r.sleepAvg < 7) {
+      o -= Math.min(25, (7 - r.sleepAvg) * 6);
+    }
+    objective = clamp(o, 0, 100);
   }
-  if (r.restingHrDelta !== null && r.restingHrDelta > 0) {
-    objective -= Math.min(25, r.restingHrDelta * 4);
-  }
-  if (r.sleepAvg !== null && r.sleepAvg < 7) {
-    objective -= Math.min(25, (7 - r.sleepAvg) * 6);
-  }
-  objective = clamp(objective, 0, 100);
 
-  // With no check-in there is nothing subjective to weight, so this falls back
-  // to the sensors alone rather than treating silence as "fine".
+  // Each half falls back to the other. With neither, the caller is holding a
+  // figure derived from nothing at all — every surface gates on `todayCheckin`
+  // before printing this, and `app/src/lib/readiness.ts` is the reference.
   const combined =
     subjective === null
-      ? objective
-      : SUBJECTIVE_WEIGHT * subjective + (1 - SUBJECTIVE_WEIGHT) * objective;
+      ? objective ?? 100
+      : objective === null
+        ? subjective
+        : SUBJECTIVE_WEIGHT * subjective + (1 - SUBJECTIVE_WEIGHT) * objective;
 
   return Math.round(clamp(combined, 0, 100));
 }

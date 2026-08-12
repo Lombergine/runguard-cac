@@ -368,6 +368,22 @@ export default function CheckInScreen() {
     invalidateProfile();
   }
 
+  /**
+   * Close the reopened soreness card, and re-read what it changed.
+   *
+   * Readiness is recomputed server-side from the soreness rows, so it has to be
+   * fetched rather than guessed — a 10/10 shin takes it from 100 to 50, and the
+   * screen behind this card would otherwise keep showing the figure from before
+   * the soreness existed. `finish()` does the same thing for the same reason;
+   * without it, the whole point of reopening is invisible.
+   */
+  async function closeSoreness() {
+    setReopened(false);
+    const refreshed = await getHome().catch(() => null);
+    if (refreshed) setProfile(refreshed);
+    invalidateProfile();
+  }
+
   if (loadError !== "none") {
     // An unpaired device is not an error state, it is a first run — and until
     // this button existed it was a dead end: the copy explained the problem and
@@ -506,7 +522,7 @@ export default function CheckInScreen() {
               sorenessError={sorenessError}
               failed={submitFailed}
               sorenessOnly={reopened}
-              onDone={() => setReopened(false)}
+              onDone={closeSoreness}
             />
             {/* No receipt means no check-in today — `readinessState` is
                 `{known:false}` by construction, so this footer is given no way
