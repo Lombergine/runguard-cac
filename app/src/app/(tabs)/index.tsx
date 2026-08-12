@@ -423,7 +423,7 @@ export default function CheckInScreen() {
             hitSlop={hitSlopFor(styles.headerAction)}
             style={styles.headerAction}
           >
-            <Text style={styles.headerActionLabel}>Coach</Text>
+            <Text style={styles.headerActionLabel}>RunGuard AI</Text>
           </Pressable>
           <Pressable
             onPress={() => router.push("/settings")}
