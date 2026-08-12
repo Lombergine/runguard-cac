@@ -67,7 +67,7 @@ import { Tile } from "../../components/Tile";
 import { Notifications } from "../../components/Notifications";
 import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
 import { WeekProgress } from "../../components/WeekProgress";
-import { getHome, isUnauthorized, postCheckin } from "../../lib/api";
+import { ApiError, getHome, isUnauthorized, postCheckin } from "../../lib/api";
 import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
 import { useInvalidateProfile } from "../../lib/profileStore";
 import {
@@ -152,6 +152,11 @@ export default function CheckInScreen() {
   const [loadError, setLoadError] = useState<"none" | "unpaired" | "failed">("none");
   /** Set only when this session submitted the check-in — the one time we know. */
   const [submittedAt, setSubmittedAt] = useState<Date | null>(null);
+  /**
+   * The athlete asked to add soreness AFTER today's check-in was already done.
+   * Suppresses the receipt branch so the card comes back; see the control there.
+   */
+  const [reopened, setReopened] = useState(false);
   /**
    * THE MIRROR OF WHAT THE SERVER HOLDS, keyed "left knee" → 0–10.
    *
@@ -271,11 +276,17 @@ export default function CheckInScreen() {
     setSorenessError(null);
     try {
       await postCheckin({ sorenessPart: key, sorenessSeverity: severity });
-    } catch {
+    } catch (err) {
+      // The reason, not just the outcome. This catch was bare, so a revoked
+      // token, a timed-out request and a BASE_URL pointing at localhost from a
+      // physical phone all produced one sentence — and the one thing an athlete
+      // could do about each of them is different. `request()` already lifts a
+      // 400's `error` string onto ApiError.message; the race forms surface it.
+      const why = err instanceof ApiError ? ` ${err.message}` : "";
       setSorenessError(
         severity === null
-          ? `That didn't clear — ${key} is still recorded. Tap the score again.`
-          : `That didn't save. Nothing was recorded for ${key}. Tap the number again.`
+          ? `That didn't clear — ${key} is still recorded. Tap the score again.${why}`
+          : `That didn't save. Nothing was recorded for ${key}. Tap the number again.${why}`
       );
       setSubmitting(false);
       return;
@@ -397,8 +408,11 @@ export default function CheckInScreen() {
   }
 
   let receipt: string | null = null;
-  if (submittedAt) receipt = receiptLabel(submittedAt);
-  else if (profile && checkedInToday(profile) && profile.todayCheckin) {
+  // `reopened` suppresses the receipt so the card renders again — the athlete
+  // asked to add something, and the receipt branch cannot take input.
+  if (reopened) receipt = null;
+  else if (submittedAt) receipt = receiptLabel(submittedAt);
+  else if (!reopened && profile && checkedInToday(profile) && profile.todayCheckin) {
     // `checkedInToday`, not `todayCheckin !== null` — the same gate readiness
     // uses, for the same reason. A soreness-only write creates a checkins row
     // with every self-report column NULL, and "Checked in" over a row the
@@ -451,6 +465,29 @@ export default function CheckInScreen() {
           <Animated.View style={{ opacity: reveal }}>
             <CheckInReceipt label={receipt} />
             <SorenessNote stored={stored} />
+            {/*
+              THE WAY BACK IN.
+
+              This branch had no soreness affordance at all, and it is the only
+              screen in the app that writes soreness — so once any self-report
+              existed for today, soreness became unaddable for the rest of the
+              day, silently. One accidental tap on "No" was enough, since that
+              submits on the tap; so was checking in on the website.
+
+              The website has no such door: its body-part chips sit on Home all
+              day. This reopens the card in its `askingWhere` state, with
+              everything already logged lit from the same `logged` mirror, so
+              adding a second sore spot at 4pm works exactly like adding the
+              first at 7am.
+            */}
+            <Pressable
+              style={styles.addSoreness}
+              onPress={() => setReopened(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Add or change soreness for today"
+            >
+              <Text style={styles.addSorenessLabel}>Add or change soreness</Text>
+            </Pressable>
             <ReadinessHero
               state={readinessState(profile)}
               insight={profile.aiInsight}
@@ -468,6 +505,8 @@ export default function CheckInScreen() {
               submitting={submitting}
               sorenessError={sorenessError}
               failed={submitFailed}
+              sorenessOnly={reopened}
+              onDone={() => setReopened(false)}
             />
             {/* No receipt means no check-in today — `readinessState` is
                 `{known:false}` by construction, so this footer is given no way
@@ -907,6 +946,22 @@ const styles = StyleSheet.create({
   // does not guarantee once one tile carries a sub-line. A row with one tile in
   // it is the full-width tile.
   gridRow: { flexDirection: "row", gap: space.md },
+
+  /**
+   * The way back into soreness after the check-in is done. An outlined control,
+   * not the ember: the ember is reserved for the card's one system action, and
+   * this is a door rather than a commitment.
+   */
+  addSoreness: {
+    minHeight: target.min,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.card,
+    marginTop: space.md,
+  },
+  addSorenessLabel: { ...text.base, color: color.ink2 },
 
   footer: { marginTop: layout.section },
 });

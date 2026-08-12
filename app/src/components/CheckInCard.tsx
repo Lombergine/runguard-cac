@@ -180,6 +180,22 @@ const metrics = {
   promptBlock: PROMPT_LINE * 2,
   /** Comfortably over the 48px floor, with room for a wrapped label. */
   answer: target.min + space.sm,
+  /**
+   * How tall the card is when it is only a question.
+   *
+   * Composed from the pieces rather than picked: the head, the two-line prompt,
+   * the air the spec asks for, and the answer row. It is a FLOOR, not a height —
+   * the panel grows past it once the body map is disclosed. Before that, on any
+   * phone taller than this, the card still reads as the full-bleed hero it is
+   * meant to be, because the spacer takes the slack.
+   */
+  panelMin:
+    layout.cardPadding * 2 +
+    (text.title.lineHeight as number) +
+    PROMPT_LINE * 2 +
+    space.xl * 2 +
+    target.min +
+    space.sm,
 } as const;
 
 /**
@@ -211,6 +227,17 @@ function EmberEdge() {
 }
 
 type CheckInCardProps = {
+  /**
+   * Open on the soreness picker, skipping the sleep question.
+   *
+   * For an athlete who already checked in today and came back to add a sore
+   * spot. Without it, the only screen in the app that writes soreness is
+   * replaced by a receipt for the rest of the day, and one accidental "No" tap
+   * is enough to trigger that.
+   */
+  sorenessOnly?: boolean;
+  /** Called by Done in `sorenessOnly` mode. Closes the card; posts nothing. */
+  onDone?: () => void;
   /**
    * Pre-formatted local day, e.g. "Tue 14 Oct" — the panel's note. Never
    * derived here; see lib/dates. The card supplies the "before practice" half
@@ -255,9 +282,18 @@ export function CheckInCard({
   submitting,
   sorenessError,
   failed,
+  sorenessOnly = false,
+  onDone,
 }: CheckInCardProps) {
+  /*
+   * `sorenessOnly` opens straight on the picker, for an athlete who already
+   * checked in today and came back to add a sore spot. Sleep is not re-asked —
+   * it was answered this morning, and asking again would either overwrite that
+   * answer or discard the new one. `onComplete` is not reachable in this mode
+   * (see the footer), so nothing re-posts `energy`.
+   */
   const [sleep, setSleep] = useState<SleepAnswer | null>(null);
-  const [gate, setGate] = useState<SoreGate | null>(null);
+  const [gate, setGate] = useState<SoreGate | null>(sorenessOnly ? "yes" : null);
   const [part, setPart] = useState<string | null>(null);
   const [side, setSide] = useState<Side | null>(null);
 
@@ -316,12 +352,13 @@ export function CheckInCard({
     onLogSoreness(part, side, currentSeverity === value ? null : value);
   }
 
-  const askingSoreness = sleep !== null;
-  const askingWhere = gate === "yes";
+  // In `sorenessOnly` the sleep question is not asked at all — see the header.
+  const askingSoreness = sorenessOnly || sleep !== null;
+  const askingWhere = gate === "yes";  // `sorenessOnly` seeds the gate above.
   const ready = entries.length > 0;
 
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, !askingWhere && styles.panelHero]}>
       <EmberEdge />
       <View style={styles.body}>
         {/* The Panel head: title left, muted note right. The note carries the
@@ -339,7 +376,10 @@ export function CheckInCard({
         {/* Pushes the targets into the bottom third, one-handed reach. */}
         <View style={styles.spacer} />
 
-        {askingSoreness ? (
+        {sorenessOnly ? null : askingSoreness ? (
+          // Hidden in `sorenessOnly`: tapping "Add soreness" WAS the yes, and a
+          // "No" here would call onComplete with no sleep answer — a dead
+          // control that looks live.
           <AnswerRow
             options={SORE_OPTIONS}
             selected={gate}
@@ -361,20 +401,22 @@ export function CheckInCard({
           // and nothing carries a margin that doubles up inside a nested one.
           <View style={styles.disclosed}>
             <Text style={styles.micro}>Where</Text>
-            {/*
-              `selected` and `severity` are both the RECORDED state and nothing
-              else: a lit region means a score exists for that part, and its
-              fill ramps with that score. A part being scored right now but not
-              yet answered is deliberately NOT passed as selected — with no
-              severity to go with it the figure would fill it at full intensity,
-              which is a blank drawn as the worst possible reading.
-            */}
-            <BodyMap
-              selected={selectedParts}
-              onToggle={pickPart}
-              severity={severityByPart}
-            />
 
+            {/*
+              THE EDITOR SITS ABOVE THE MAP, not below it.
+
+              It used to follow the figure, which put the side picker and the
+              0-10 scale ~540pt down the card — off-screen on every phone, and
+              unreachable at all while the panel could not scroll. Even with the
+              card scrolling, tapping a knee and having the control appear half a
+              screen away is a poor answer: the athlete loses the figure they
+              just touched.
+
+              Above it, one tap reveals the scale within a thumb's reach of the
+              region, and the map stays visible underneath as the thing being
+              annotated. Before a part is chosen this is one line of hint text,
+              so the figure is still the first thing on the card.
+            */}
             {part === null ? (
               <Text style={styles.hint}>Tap where it hurts to score it.</Text>
             ) : (
@@ -408,6 +450,20 @@ export function CheckInCard({
               </View>
             )}
 
+            <BodyMap
+              selected={selectedParts}
+              onToggle={pickPart}
+              severity={severityByPart}
+            />
+
+            {/*
+              `selected` and `severity` are both the RECORDED state and nothing
+              else: a lit region means a score exists for that part, and its
+              fill ramps with that score. A part being scored right now but not
+              yet answered is deliberately NOT passed as selected — with no
+              severity to go with it the figure would fill it at full intensity,
+              which is a blank drawn as the worst possible reading.
+            */}
             {ready ? (
               <SorenessList lead="Logged: " entries={entries} />
             ) : (
@@ -425,7 +481,11 @@ export function CheckInCard({
               accessibilityState={{ disabled: !ready || submitting }}
               disabled={!ready || submitting}
               onPress={() => {
-                if (sleep !== null) onComplete(sleep);
+                // In `sorenessOnly` there is no sleep answer to submit and the
+                // check-in already happened — Done just closes. Every severity
+                // was written the moment it was tapped, so nothing is pending.
+                if (sorenessOnly) onDone?.();
+                else if (sleep !== null) onComplete(sleep);
               }}
               style={[styles.done, ready && styles.doneReady]}
             >
@@ -465,7 +525,7 @@ export function CheckInCard({
  */
 export function CheckInCardSkeleton() {
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, styles.panelHero]}>
       <EmberEdge />
       <View style={styles.body}>
         <View style={styles.head}>
@@ -696,7 +756,33 @@ const styles = StyleSheet.create({
    * two-layer shadow every surface in the system gets.
    */
   panel: {
-    flex: 1,
+    /*
+     * `minHeight`, NOT `flex: 1`.
+     *
+     * `flex: 1` is `flexBasis: 0`, so this panel's height was distributed space
+     * rather than content — it resolved to exactly the viewport, which made the
+     * parent ScrollView's contentSize equal its frame, which meant THE SCREEN
+     * COULD NOT SCROLL. The body map is a fixed 320 x 540 and the editor below
+     * it another ~300, so once "Yes" was tapped the card needed ~1090pt and had
+     * ~514: the lower half of the figure — knee, shin, calf, achilles, heel,
+     * foot, i.e. everything a runner actually reports — was drawn outside the
+     * panel, invisible and on iOS not hit-testable, and the severity scale and
+     * Done sat past a fold with nothing to scroll to. Tapping a body part
+     * appeared to do nothing.
+     *
+     * With `minHeight` the card still FILLS the viewport while it is only a
+     * question (the hero proportions § "The signature" asks for), and GROWS past
+     * it once the map appears, at which point the ScrollView has real overflow
+     * and scrolls. The spec sanctions this directly — § Accessibility: "it may
+     * scroll, but the three answer targets stay reachable."
+     *
+     * The map is deliberately NOT scaled down to fit: one SVG unit is one point
+     * there, and that is the only thing making a 48-unit hit box a real 48pt
+     * target.
+     */
+    minHeight: metrics.panelMin,
+    // NOTE: `panelHero` below adds `flex: 1` back while the card is only a
+    // question. See its comment — the two together are the whole fix.
     backgroundColor: color.card,
     borderWidth: ruleWidth,
     borderColor: color.ruleSoft,
@@ -709,7 +795,25 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.card,
     borderTopRightRadius: radius.card,
   },
-  body: { flex: 1, padding: layout.cardPadding },
+  /**
+   * `flex: 1`, but ONLY while the body map is not disclosed.
+   *
+   * That is the distinction the old code missed by applying it always. As a
+   * question the card SHOULD fill the viewport — § "The signature" wants the
+   * empty slot to be the loudest thing on the screen, and with short content
+   * `flex: 1` gives exactly that. The moment the 540pt map appears it becomes
+   * a cage: `flex: 1` is `flexBasis: 0`, so the panel is pinned to the viewport,
+   * the ScrollView's contentSize equals its frame, the screen cannot scroll, and
+   * everything past ~514pt — the lower half of the figure and the entire
+   * severity scale — is unreachable.
+   *
+   * So: hero while it asks, content-sized once it listens.
+   */
+  panelHero: { flex: 1 },
+
+  // Grows with its content; `panelHero` is what fills the screen before
+  // disclosure.
+  body: { flexGrow: 1, padding: layout.cardPadding },
 
   head: {
     flexDirection: "row",
@@ -722,7 +826,13 @@ const styles = StyleSheet.create({
   note: { ...text.meta, color: color.muted },
 
   prompt: { ...text.prompt, color: color.ink, marginTop: space.lg },
-  spacer: { flex: 1, minHeight: space.xl },
+  /*
+   * Pushes the three answers into the bottom third while the card is only a
+   * question. `flexGrow` rather than `flex` so it takes leftover space when
+   * there is some and collapses to its minimum when the disclosed content has
+   * used it all — otherwise it would fight the map for room.
+   */
+  spacer: { flexGrow: 1, flexShrink: 1, minHeight: space.xl },
   row: { flexDirection: "row", gap: target.gap },
   answer: {
     flex: 1,
