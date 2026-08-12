@@ -379,7 +379,33 @@ export async function buildProfile(
     energyTrend,
     races: {
       upcoming: races.map((r) => {
-        const d = Math.ceil((new Date(r.date + "T12:00:00").getTime() - now.getTime()) / DAY_MS);
+        /*
+         * CALENDAR DAYS BETWEEN TWO DATES — not hours-until-noon, rounded up.
+         *
+         * This was `ceil((raceNoon - now) / DAY_MS)`, which mixes a date with a
+         * clock: before local noon the race instant is still ahead of `now` on
+         * the race's OWN day, so it ceils to 1. Every countdown was one too
+         * large for the whole local morning, every morning.
+         *
+         * Measured at 10:32 on the dev server: a race 5 days out returned 6, one
+         * 40 days out returned 41. On race day it returned 1 — so the app told
+         * an athlete standing on the start line "tomorrow", right through the
+         * 6am hour docs/visual-spec.md is explicitly designed for.
+         *
+         * It was not only a label. `IMMINENT_DAYS = 7` gates the ember strip and
+         * the pre-race checklist, and `taperMode`/`taperCountdown` inherit this
+         * number, so a race exactly a week out silently lost all of it until
+         * noon.
+         *
+         * Both sides are anchored at local noon and then differenced, so the
+         * result is whole days regardless of clock time, and noon keeps it clear
+         * of the DST hour where a day is 23 or 25 hours long. Today is 0.
+         */
+        const d = Math.round(
+          (new Date(r.date + "T12:00:00").getTime() -
+            new Date(localDay(now) + "T12:00:00").getTime()) /
+            DAY_MS
+        );
         const ev = (EVENTS.includes(r.event as EventName) ? r.event : "5K") as EventName;
         return {
           ...r,

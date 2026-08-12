@@ -26,6 +26,15 @@ export async function POST(request: Request) {
     );
   }
 
+  // `source` is provenance the UI shows as a label ("manual" vs "calibrated"),
+  // so quietly rewriting an unrecognised one to "manual" would attribute the
+  // number to something the caller never claimed.
+  if (body.source !== undefined && body.source !== "manual" && body.source !== "calibrated") {
+    return Response.json(
+      { error: "source must be 'manual' or 'calibrated'." },
+      { status: 400 }
+    );
+  }
   const source = body.source === "calibrated" ? "calibrated" : "manual";
   await setAthleteHrMax(athlete.id, value, source);
   return Response.json({ ok: true, hrMax: value, source });

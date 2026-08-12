@@ -56,6 +56,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Absent } from "../Nothing";
 import { Card } from "../Card";
+import { isAbsent } from "../chart/scales";
 import type { SleepDay } from "../../lib/types";
 import { radius, ruleWidth, space } from "../../theme/space";
 import { color } from "../../theme/tokens";
@@ -101,7 +102,7 @@ const STAGE_LABEL: Record<StageKey, string> = {
 function stageAvg(nights: SleepDay[], key: StageKey): number | null {
   const v = nights
     .map((n) => n[key])
-    .filter((x): x is number => x !== null && Number.isFinite(x));
+    .filter((x): x is number => !isAbsent(x));
   if (v.length === 0) return null;
   return v.reduce((s, x) => s + x, 0) / v.length;
 }
@@ -192,7 +193,7 @@ export function SleepStages({ sleep30 }: SleepStagesProps) {
    * figure the note is quoting.
    */
   const contributing = nights.filter(
-    (n) => n.deep !== null || n.rem !== null || n.light !== null,
+    (n) => !isAbsent(n.deep) || !isAbsent(n.rem) || !isAbsent(n.light),
   ).length;
 
   // Nothing to meter. See the header: three empty tracks would read as the
@@ -206,7 +207,7 @@ export function SleepStages({ sleep30 }: SleepStagesProps) {
             // The two are genuinely different facts, so they get different
             // sentences: nothing synced at all, versus a watch that timed the
             // night without breaking it down.
-            nights.some((n) => n.hours !== null)
+            nights.some((n) => !isAbsent(n.hours))
               ? "Your watch recorded how long you slept, but not which stages."
               : "No sleep synced yet, so there are no stages to average."
           }

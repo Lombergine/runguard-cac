@@ -25,6 +25,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Bars } from "../chart/marks";
+import { isAbsent } from "../chart/scales";
 import { weeklyKmSeries } from "../../lib/chartData";
 import type { Profile } from "../../lib/types";
 import { layout, radius, ruleWidth, space } from "../../theme/space";
@@ -75,7 +76,7 @@ export function WeeklyKmChart({ weeks }: { weeks?: Profile["weeks"] }) {
   }
 
   const n = s.points.length;
-  const missing = s.points.filter((p) => p.value === null).length;
+  const missing = s.points.filter((p) => isAbsent(p.value)).length;
 
   return (
     <Panel title="Weekly mileage" note={`last ${n} ${n === 1 ? "week" : "weeks"}`}>

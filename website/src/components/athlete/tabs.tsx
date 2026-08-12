@@ -215,7 +215,9 @@ export function HomeTab({ p }: { p: CoreProfile }) {
           label="Sleep · 7d"
           value={r.sleepAvg !== null ? String(r.sleepAvg) : "—"}
           unit={r.sleepAvg !== null ? "h" : undefined}
-          sub={r.sleepAvg !== null && r.sleepAvg < 7.5 ? "below 8h target" : "on target"}
+          // No reading is not "on target" — with sleepAvg null the value is "—"
+          // and the tile must not caption it with a verdict nobody measured.
+          sub={r.sleepAvg === null ? undefined : r.sleepAvg < 7.5 ? "below 8h target" : "on target"}
           accent={r.sleepAvg !== null && r.sleepAvg < 7 ? "var(--status-warning)" : undefined}
         />
         <BentoTile
@@ -517,14 +519,22 @@ export function StatsTab({ p }: { p: CoreProfile }) {
           <tbody>
             {p.prs.map((pr) => {
               const pred = p.predictions[pr.event];
-              const faster = pr.timeS !== null && pred.timeS < pr.timeS;
+              // `predictRaces` substitutes a VO₂max guess when it has no reading,
+              // so with no runs at all it still returns a specific finishing time
+              // for every event — a number invented from nothing, printed here as
+              // "Predicted now". The race tab already withholds predictions behind
+              // exactly this gate; this table did not, and it is the surface where
+              // the invented time sits next to a real PR as if they were the same
+              // kind of fact.
+              const known = p.risk.hasActivityHistory;
+              const faster = known && pr.timeS !== null && pred.timeS < pr.timeS;
               return (
                 <tr key={pr.event} className="border-t" style={{ borderColor: "var(--hairline)" }}>
                   <td className="px-5 py-2.5 font-medium">{pr.event}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums" style={{ color: "var(--ink-2)" }}>{pr.label}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold" style={{ color: faster ? "var(--status-good)" : "var(--ink)" }}>{pred.label}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold" style={{ color: faster ? "var(--status-good)" : known ? "var(--ink)" : "var(--ink-muted)" }}>{known ? pred.label : "—"}</td>
                   <td className="px-5 py-2.5 text-right text-xs hidden sm:table-cell" style={{ color: faster ? "var(--status-good)" : "var(--ink-muted)" }}>
-                    {pr.timeS === null ? "race it to set a PR" : faster ? "PR predicted ✓" : "keep building"}
+                    {pr.timeS === null ? "race it to set a PR" : !known ? "—" : faster ? "PR predicted ✓" : "keep building"}
                   </td>
                 </tr>
               );
@@ -594,10 +604,15 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
           color={r.restingHrDelta !== null && r.restingHrDelta >= 5 ? "var(--status-critical)" : undefined}
           info="Your heart rate at rest, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery — it's an early warning, often before you feel it."
         />
+        {/* Freshness is derived from acute-vs-chronic load, and under no load at
+            all that ratio falls back to 1 — which scores 67/100. An athlete the
+            app has never seen run was being told their body battery was 67. The
+            sibling "Fitness score" tile already withholds itself behind this
+            same gate; this one did not. */}
         <Stat
           label="Body battery"
-          value={String(p.fitness.freshness)}
-          sub="freshness 0-100"
+          value={p.risk.hasActivityHistory ? String(p.fitness.freshness) : "—"}
+          sub={p.risk.hasActivityHistory ? "freshness 0-100" : "no training data yet"}
           info="How fresh your legs are: how far this week's training sits below what your body is used to. High after an easy week or a taper, low mid-block. Not the same as fitness — you can be very fit and very tired."
         />
         <Stat

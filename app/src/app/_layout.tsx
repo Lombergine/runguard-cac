@@ -61,7 +61,16 @@ export default function RootLayout() {
  * exist in the tree. That is stronger than hiding them: a screen that never
  * mounts cannot fetch, cannot hold state, and cannot leave the last athlete's
  * data on the glass. It also means a deep link to `/settings` while signed out
- * has nothing to resolve to and falls through to the auth group.
+ * names a route that is not in the navigator's `routeNames`, so the action is
+ * dropped and you stay on the auth group.
+ *
+ * EVERY ROUTE FILE MUST BE NAMED BELOW. `Stack.Protected` is a DENY-LIST, not
+ * an allow-list: `useFilterScreenChildren` can only add a screen to the
+ * excluded set if that screen was declared inside a guarded group, and
+ * `getSortedChildren` then appends every remaining filesystem route to the
+ * navigator anyway (expo-router 57, `build/useScreens.js:118`). A new file
+ * under `src/app/` that nobody declares here is therefore reachable in BOTH
+ * session states, silently. Adding a screen is the only thing that gates it.
  *
  * `status === "loading"` renders neither group, because guessing wrong for one
  * frame is exactly how a signed-out phone flashes someone else's readiness.
@@ -114,6 +123,14 @@ function Gate() {
         {/* Reachable either way: required by App Review, and contains nothing
             athlete-derived. */}
         <Stack.Screen name="privacy" />
+
+        {/* Also reachable either way, and declared rather than left out so that
+            it is a decision instead of an oversight. `/gallery` is the specimen
+            sheet: it renders fixtures only, never a fetch and never a byte of
+            anyone's data, and `gallery.tsx` returns null when `!__DEV__`.
+            Leaving it undeclared did not gate it — see the note above — it just
+            hid the fact that it was ungated. */}
+        <Stack.Screen name="gallery" />
       </Stack>
     </ProfileProvider>
   );

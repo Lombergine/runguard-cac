@@ -406,7 +406,7 @@ export function YearGrid({
                 <View
                   accessible
                   accessibilityRole="image"
-                  accessibilityLabel={`Training grid. ${daysLabel(grid.daysRun)} run in the last 12 months, ${formatDistance(grid.totalKm, 0)} total. Nothing recorded before ${dayLabel(grid.firstRecorded)}.`}
+                  accessibilityLabel={`Training grid. ${daysLabel(grid.daysRun)} run in the last 12 months, ${formatDistance(grid.totalKm, 0)} total. This grid starts at ${dayLabel(grid.firstRecorded)}; anything earlier is outside it.`}
                 >
                   <View style={styles.monthRow}>
                     {grid.monthMarks.map((mark) => (
@@ -481,7 +481,22 @@ export function YearGrid({
               {`${daysLabel(grid.daysRun)} run · ${formatDistance(grid.totalKm, 0)} in the last 12 months.`}
             </Text>
             <Text style={styles.footnote}>
-              Nothing recorded before {dayLabel(grid.firstRecorded)}.
+              {/*
+                NOT "Nothing recorded before …", which is what this said and
+                which is FALSE for every athlete on the roster: `firstRecorded`
+                is the earliest day in the PAYLOAD, and the payload is a fixed
+                366-day window ending today (`dailySeries(acts, 366)`) — nothing
+                to do with when the athlete started. An audit checked the dev
+                database: all 14 of 14 athletes have runs older than that window,
+                161 activities in total, the oldest 378 days ago. The grid was
+                stating as fact something it has no way to know.
+
+                It knows where its own window starts, so that is what it says.
+                The true answer needs an earliest-activity field on the payload,
+                which `CoreProfile` does not carry.
+              */}
+              This grid starts at {dayLabel(grid.firstRecorded)}. Anything
+              earlier is outside it.
             </Text>
           </>
         )}

@@ -554,18 +554,35 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
   const [event, setEvent] = useState(events[0]);
   const [time, setTime] = useState("");
   const [place, setPlace] = useState("");
-  const [feel, setFeel] = useState("ok");
+  // An untouched select is not an answer. This defaulted to "ok", so an athlete
+  // who never opened it filed a verdict on their own race that they never gave.
+  // `race_results` has no UPDATE and no DELETE path anywhere in the repo, so it
+  // would stand forever. /api/race-result treats an omitted `feel` as "not
+  // reported" — absent is a first-class value there, and now here too.
+  const [feel, setFeel] = useState("");
   const [msg, setMsg] = useState("");
   const router = useRouter();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const m = time.trim().match(/^(\d{1,2}):(\d{2})(?:\.\d+)?$/);
+    // Seconds are 00–59. `\d{2}` accepted "18:60" and stored 19:00 — a minute
+    // that was never run, and `race_results` has no UPDATE or DELETE path
+    // anywhere, so it would sit in PR history and feed predictions forever.
+    const m = time.trim().match(/^(\d{1,2}):([0-5]\d)(?:\.\d+)?$/);
     if (!m) {
       setMsg("Time format: M:SS (e.g. 5:04)");
       return;
     }
     const timeS = parseInt(m[1]) * 60 + parseInt(m[2]);
+    // `place ? parseInt(place) : undefined` turned "3rd" into 3 and "abc" into
+    // NaN — which JSON.stringify sends as null, which the route reads as "no
+    // place reported". The entry vanished and the form still said "Logged ✓".
+    const entered = place.trim();
+    const placeNum = entered ? Number(entered) : null;
+    if (placeNum !== null && (!Number.isInteger(placeNum) || placeNum < 1)) {
+      setMsg("Place must be a whole number, 1 or higher.");
+      return;
+    }
     const res = await fetch("/api/race-result", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -573,16 +590,22 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
         athleteId,
         event,
         timeS,
-        place: place ? parseInt(place) : undefined,
-        feel,
+        place: placeNum ?? undefined,
+        feel: feel || undefined,
       }),
     });
     if (res.ok) {
       setMsg("Logged ✓");
       setTime("");
       setPlace("");
+      setFeel("");
       router.refresh();
-    } else setMsg("Couldn't save.");
+    } else {
+      // The route explains exactly which field it rejected; swallowing that and
+      // printing "Couldn't save." left the athlete with nothing to correct.
+      const d = await res.json().catch(() => ({}));
+      setMsg(d.error || "Couldn't save.");
+    }
   }
 
   return (
@@ -595,6 +618,7 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
       <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="Time (5:04)" className="w-28 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Place" className="w-20 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <select value={feel} onChange={(e) => setFeel(e.target.value)} className="rounded-xl border px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)", background: "var(--page)" }}>
+        <option value="">How did it feel? (optional)</option>
         <option value="great">Felt great</option>
         <option value="ok">Felt ok</option>
         <option value="rough">Felt rough</option>

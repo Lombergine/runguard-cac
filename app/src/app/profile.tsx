@@ -3,10 +3,9 @@
  * training is scored against, and the fact that this phone is the paired
  * device.
  *
- * A STACK route, not a tab. The bar has four items deliberately and this is not
- * one of them; `chat.tsx` is the precedent for a pushed route with its own
- * header. Nothing links here yet — the nav entry has to be added by whoever
- * owns `(tabs)/_layout.tsx`.
+ * A STACK route, not a tab. The bar's five items are the daily surfaces and this
+ * is not one of them; `chat.tsx` is the precedent for a pushed route with its
+ * own header. `settings.tsx` links here.
  *
  * Ported from the website's `ProfileTab`
  * (website/src/components/athlete/tabs.tsx ~:760), with three deliberate

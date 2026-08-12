@@ -65,8 +65,41 @@ export function describeTarget(): string {
 
 /* ---------------- sqlite ---------------- */
 
+/**
+ * Creating a database is only ever right from the website package.
+ *
+ * DB_PATH defaults to `<cwd>/data/milemarker.db`, so `npx tsx website/scripts/x.ts`
+ * from the repo root — or anything run from `app/` — did not fail. It built a
+ * second, empty database under that directory and applied the schema to it, and
+ * the app then came up with an empty roster and no error anywhere. The rule
+ * against it was written in CLAUDE.md and enforced by nobody.
+ *
+ * This checks only the case that does the damage: a file that does not exist yet
+ * and no explicit DATABASE_PATH. Opening a database that is already there is
+ * untouched, and DATABASE_PATH remains the escape hatch (the Dockerfile sets it),
+ * so no deployment path goes through this.
+ */
+function assertCanCreateHere(): void {
+  if (process.env.DATABASE_PATH || fs.existsSync(DB_PATH)) return;
+  let pkg: string | null = null;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")).name;
+  } catch {
+    pkg = null;
+  }
+  if (pkg === "milemarker") return;
+  throw new Error(
+    `Refusing to create a new SQLite database at ${DB_PATH}. The path is resolved ` +
+      `from the working directory, which is ${process.cwd()} — not the website ` +
+      `package — so this would be a second, empty database rather than the real one, ` +
+      `and the app would come up with an empty roster. Run npm/tsx from inside ` +
+      `website/, or set DATABASE_PATH if you meant a database at this location.`
+  );
+}
+
 function sqlite(): Database.Database {
   if (global.__mmdb) return global.__mmdb;
+  assertCanCreateHere();
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   const db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");

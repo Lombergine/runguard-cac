@@ -51,6 +51,7 @@ import { LoadChart } from "../../components/charts/LoadChart";
 import { PaceChart } from "../../components/charts/PaceChart";
 import { WeeklyKmChart } from "../../components/charts/WeeklyKmChart";
 import { useProfile } from "../../lib/profileStore";
+import { fitnessKnown } from "../../lib/readiness";
 import type { Badge, Profile, ZoneMinutes } from "../../lib/types";
 import { formatDistance } from "../../lib/units";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
@@ -303,7 +304,10 @@ export default function StatsScreen() {
   }
 
   const fitness = profile.fitness;
-  const hasHistory = profile.risk.hasActivityHistory;
+  // `fitnessKnown`, not `hasActivityHistory` — see lib/readiness.ts. The
+  // latter never goes false, so it cannot tell a real score from the model's
+  // `score = 50` fallback.
+  const hasHistory = fitnessKnown(profile);
   const prs = profile.prs ?? [];
   const predictions = profile.predictions ?? {};
 
@@ -383,10 +387,20 @@ export default function StatsScreen() {
               <Tile
                 label="7-day mi"
                 info={EXPLAINERS.sevenDayMi}
-                /* A rolling window, not since Monday. `weekKm` is always a
-                   real number, so a genuinely empty week reads "0 mi" — a
-                   measured fact, styled like every other fact. */
-                value={formatDistance(profile.risk.weekKm)}
+                /* A rolling window, not since Monday.
+
+                   `weekKm` is always a real number, so the guard is
+                   `hasActivityHistory`, not the value — the same guard
+                   `(tabs)/index.tsx:593` already puts on this exact figure,
+                   and the one `(tabs)/recovery.tsx` cites as precedent. This
+                   screen was the one place the figure went out ungated: with
+                   nothing ever synced it read "0 mi · target 42.3 mi", which
+                   is a blank wearing the clothes of a measured fact.
+
+                   Past the gate, "0 mi" stays a measured zero and keeps the
+                   solid, un-dashed treatment — a week the athlete really did
+                   not run is a fact, not an absence. */
+                value={hasHistory ? formatDistance(profile.risk.weekKm) : null}
                 sub={
                   profile.weeklyTargetKm !== undefined
                     ? `target ${formatDistance(profile.weeklyTargetKm)}`
@@ -398,8 +412,18 @@ export default function StatsScreen() {
               <Tile
                 label="Longest streak"
                 info={EXPLAINERS.longestStreak}
-                /* Read out of a badge caption — see longestStreak(). */
-                value={longestStreak(profile.badges)}
+                /* Read out of a badge caption — see longestStreak().
+
+                   Gated as well, because the parse cannot tell the two zeros
+                   apart. `computeBadges` (engine.ts:636-643, 656) always ships
+                   four badges, and with no synced running the caption is the
+                   well-formed sentence "Longest streak: 0 days" — which the
+                   digit match reads perfectly and turns into "0 days". That is
+                   the claim "you have never trained two days running" made
+                   about an athlete nothing is known about, which the note on
+                   longestStreak() says this tile must never make. Past the
+                   gate a real 0 stays a 0: no runs in 120 days is a fact. */
+                value={hasHistory ? longestStreak(profile.badges) : null}
                 sub="in a row · last 120 days"
               />
             </View>
@@ -437,7 +461,7 @@ export default function StatsScreen() {
             are the weekly series alone, so it cannot apply the gate itself;
             it has to be applied here, at the call site.
           */}
-          {profile.risk.hasActivityHistory ? (
+          {fitnessKnown(profile) ? (
             <FitnessChart weekly={profile.fitness?.weekly} />
           ) : null}
           <AcwrChart series={profile.risk.series} />

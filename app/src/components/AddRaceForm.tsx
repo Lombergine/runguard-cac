@@ -276,7 +276,16 @@ function DateField({
                 glyph="−"
                 step={step.label}
                 forward={false}
-                onPress={() => onChange(back < today ? today : back)}
+                onPress={() => {
+                  // The floor is read HERE, not from `today` above. Nothing
+                  // re-renders this form at midnight, so a form left open
+                  // across it holds yesterday in `today`, and clamping to that
+                  // would step the date onto a day the server will refuse.
+                  // `atFloor` can still be a render stale — the worst that
+                  // costs is a button that clamps to the same day it is on.
+                  const floor = localDay();
+                  onChange(back < floor ? floor : back);
+                }}
                 disabled={disabled || atFloor}
               />
               <Step
@@ -547,7 +556,14 @@ const styles = StyleSheet.create({
     minHeight: target.min,
   },
   /** An event name and a distance never need the full width, and say so. */
-  shortInput: { fontFamily: font.mono, alignSelf: "flex-start", minWidth: target.min * 3 },
+  shortInput: {
+    fontFamily: font.mono,
+    // Mandatory on any mono numeral (theme/type.ts) — `text.base` does not
+    // carry it, so overriding the family to mono has to bring it along.
+    ...tabular,
+    alignSelf: "flex-start",
+    minWidth: target.min * 3,
+  },
 
   /** The same sunken ground as an input: this is the control's value. */
   dateWell: {

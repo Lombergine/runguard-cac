@@ -33,8 +33,8 @@
  * matches neither is still counted and still named — see `unplaced`. Losing a
  * flagged area silently is worse than admitting the diagram cannot place it.
  *
- * NO CARD OF ITS OWN, matching RecoveryTiles: this is a section, and the screen
- * that composes it owns the surface it sits on.
+ * NO CARD OF ITS OWN: this is a section, and the screen that composes it owns
+ * the surface it sits on.
  */
 import { StyleSheet, Text, View } from "react-native";
 

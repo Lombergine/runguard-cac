@@ -7,11 +7,23 @@ export async function POST(request: Request) {
   const athlete = await resolveAthlete(request, body.athleteId ?? null);
   if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
 
-  const name = typeof body.name === "string" ? body.name.slice(0, 120) : "";
+  // `.trim()` before the emptiness test, or `{name: "   "}` is a race whose name
+  // is three spaces: it passes `!name`, stores, and renders as a blank row that
+  // looks like missing data rather than like the bad input it was.
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, 120) : "";
   const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : "";
-  const event = typeof body.event === "string" ? body.event.slice(0, 20) : "";
-  const distanceM = typeof body.distanceM === "number" && body.distanceM > 0 ? body.distanceM : null;
-  const location = typeof body.location === "string" ? body.location.slice(0, 120) : null;
+  const event = typeof body.event === "string" ? body.event.trim().slice(0, 20) : "";
+  const distanceM =
+    typeof body.distanceM === "number" && Number.isFinite(body.distanceM) && body.distanceM > 0
+      ? body.distanceM
+      : null;
+
+  // Optional, but a `location` that was sent and is not text was silently
+  // dropped to null behind an `{ok: true}`.
+  if (body.location !== undefined && body.location !== null && typeof body.location !== "string") {
+    return Response.json({ error: "Location must be text." }, { status: 400 });
+  }
+  const location = typeof body.location === "string" ? body.location.trim().slice(0, 120) || null : null;
 
   const missing: string[] = [];
   if (!name) missing.push("race name");

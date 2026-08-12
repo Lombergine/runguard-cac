@@ -376,14 +376,26 @@ export default function ActivityScreen() {
 
 function Detail({ activity }: { activity: ActivityDetail }) {
   const started = startLabel(activity.startTime);
-  const title = activity.name?.trim() || activity.type.trim() || "This run";
-  const type = activity.type.trim() || null;
+  // Optional-chained even though `type` is declared non-nullable: a declared
+  // field the route stops sending arrives `undefined` and typechecks clean, and
+  // `.trim()` on it would white-screen the whole run rather than dash one cell.
+  const title = activity.name?.trim() || activity.type?.trim() || "This run";
+  const type = activity.type?.trim() || null;
 
   // Server-derived, with the divide-by-zero guard the web page has. Never
   // re-derived here: a screen dividing for itself has to rediscover that a
   // zero-distance run has no pace, and one that forgot would print "0:00 /mi".
   const pace =
     activity.avgPaceSecPerKm === null ? null : formatPaceFromKmPace(activity.avgPaceSecPerKm);
+
+  // The same finiteness test `rounded` applies to the nullable figures, for the
+  // two that are declared non-nullable. A route that stops sending one of them
+  // hands over `undefined`, and `NaN mi` / `NaN:NaN` are not measurements — a
+  // figure we cannot read is absent, never a number and never a zero.
+  const distanceMi = Number.isFinite(activity.distanceM)
+    ? miNumFromMeters(activity.distanceM)
+    : null;
+  const durationS = Number.isFinite(activity.durationS) ? activity.durationS : null;
 
   const elevationFt =
     activity.elevationGainM === null || !Number.isFinite(activity.elevationGainM)
@@ -414,7 +426,7 @@ function Detail({ activity }: { activity: ActivityDetail }) {
             <View style={styles.cell}>
               <Metric
                 label="Distance"
-                value={miNumFromMeters(activity.distanceM)}
+                value={distanceMi}
                 unit="mi"
                 format={(mi) => `${mi} mi`}
               />
@@ -422,7 +434,7 @@ function Detail({ activity }: { activity: ActivityDetail }) {
             <View style={styles.cell}>
               <Metric
                 label="Time"
-                value={activity.durationS}
+                value={durationS}
                 unit="min"
                 format={fmtDuration}
               />

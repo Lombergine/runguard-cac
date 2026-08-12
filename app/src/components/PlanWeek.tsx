@@ -250,22 +250,36 @@ function PlanRow({ day, dateLabel, expanded, onToggle }: PlanRowProps) {
   const invalidate = useInvalidateProfile();
 
   /*
-   * The last write the SERVER confirmed, held as the value the prop carried
-   * when it was made (`from`) and the value it made (`to`).
+   * The last write the SERVER confirmed.
    *
    * It exists because `invalidate()` refetches 57 KB: without it a button would
    * sit unmoved for as long as that took after a write that had already
-   * succeeded. Holding the `from` value is what lets it expire on its own —
-   * the moment the prop is anything other than what we wrote over, this row's
-   * memory is out of date and `day.status` wins. That covers both the refetch
-   * landing and a coach editing the same day, with no effect and no second
-   * copy of the truth to keep in step.
+   * succeeded. It expires the moment `day.status` CHANGES AT ALL — at that
+   * point the payload has said something new about this day and the prop is
+   * the truth, whatever it says. That covers the refetch landing and a coach
+   * editing the same day, with no second copy of the truth to keep in step.
+   *
+   * The expiry is a comparison against the prop as last SEEN, not against the
+   * value we wrote over. Holding `from` and testing `written.from ===
+   * day.status` looked equivalent and was not: it re-matched whenever the
+   * server returned to the value the write replaced, so marking a day done
+   * here and then clearing it on the web portal left this row showing "done"
+   * with the selected fill — and that fill means "the server has this on
+   * record". It also read `day.status` from the press-time closure, so a
+   * refetch landing mid-write recorded a `from` the prop no longer had and
+   * threw the fresh write away. Neither is expressible now.
    */
-  const [written, setWritten] = useState<{
-    from: WorkoutStatus | null;
-    to: WorkoutStatus | null;
-  } | null>(null);
-  const current = written && written.from === day.status ? written.to : day.status;
+  const [written, setWritten] = useState<{ to: WorkoutStatus | null } | null>(null);
+  /* React's documented "adjust state when a prop changes", done in render so
+     the stale value is never committed and nothing flashes. */
+  const [seenStatus, setSeenStatus] = useState(day.status);
+  if (seenStatus !== day.status) {
+    setSeenStatus(day.status);
+    setWritten(null);
+  }
+  /* Tests the WRAPPER, never `written?.to ?? day.status` — a confirmed clear
+     is `to: null`, and `??` would fall through it back to the prop. */
+  const current = written ? written.to : day.status;
 
   /** A write in flight. `next: null` is a clear — see `choose`. */
   const [pending, setPending] = useState<{ next: WorkoutStatus | null } | null>(null);
@@ -286,7 +300,7 @@ function PlanRow({ day, dateLabel, expanded, onToggle }: PlanRowProps) {
       await setWorkoutStatus(day.date, next);
       // Only now, and not one line earlier: until this point nothing on screen
       // has claimed the change landed.
-      setWritten({ from: day.status, to: next });
+      setWritten({ to: next });
       invalidate();
     } catch {
       /*

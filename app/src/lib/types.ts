@@ -22,7 +22,16 @@ export type PrePractice = {
   flag: ServerFlag;
   /** Coach-facing, third person ("They reported…"). Do NOT show to an athlete. */
   reason: string;
-  /** Athlete-facing phrasing of the same observation. */
+  /**
+   * Athlete-facing phrasing of the same observation.
+   *
+   * Optional here, but `engine.ts:480` declares it REQUIRED and all four
+   * branches set it, so it is always on the wire. The `?` is honesty about
+   * HTTP, not an invitation to `athleteReason ?? reason` — `reason` is the
+   * coach-facing third-person text two lines up, and falling back to it puts
+   * "They reported…" on the athlete's own screen. If it is ever missing, that
+   * is an `Absent`.
+   */
   athleteReason?: string;
 };
 
@@ -219,7 +228,18 @@ export type UpcomingRace = {
   /** null = coach- or seed-created. */
   created_by_athlete_id: number | null;
   team_id: number | null;
-  /** Whole days from today; 0 is race day, and past races are not sent. */
+  /**
+   * Whole days from today; past races are not sent.
+   *
+   * OFF BY ONE UNTIL LOCAL NOON. `profile.ts:219` is
+   * `ceil((date@12:00 − now) / DAY_MS)`, so any fetch before midday adds a
+   * fraction that `ceil` rounds up: measured 2026-08-11 10:32, a 2026-08-16
+   * race came back as 6 when the calendar difference is 5. On race MORNING it
+   * yields 1, so a screen branching on `daysUntil <= 0` prints "1 day to go" to
+   * an athlete standing on the start line and only flips at noon. `0 is race
+   * day` is the intent, not what arrives. `plan.taperCountdown` is the same
+   * arithmetic and can therefore exceed its declared 0–6.
+   */
   daysUntil: number;
   /** Split-by-split advice, one sentence per entry. */
   pacing: string[];
@@ -229,7 +249,14 @@ export type UpcomingRace = {
   canEdit: boolean;
 };
 
-/** A server-composed nudge. Advisory copy; render it as description, not alarm. */
+/**
+ * A server-composed nudge. Advisory copy; render it as description, not alarm.
+ *
+ * `critical` is declared because the server's own union declares it, but
+ * `engine.ts` emits only `info` and `warning` — nothing constructs a critical
+ * notification today. Keep handling it (an unhandled severity would render
+ * unstyled), but do not design a screen around a state that never arrives.
+ */
 export type Notification = {
   type: string;
   text: string;
@@ -282,13 +309,30 @@ export type ZoneMinutes = { z1: number; z2: number; z3: number; z4: number; z5: 
  * `score` and `freshness` are 0–100 model outputs, not measurements, and
  * `tier` is a bucket of `score` — none of them is a verdict on the athlete.
  * `vo2max` is null when no wearable ever reported one: `Absent`, never 0.
+ *
+ * THREE OF THESE FIELDS ARE FABRICATED FROM NOTHING WHEN THERE IS NOTHING,
+ * not just `freshness` — and `risk.hasActivityHistory` does NOT cover them.
+ * `computeFitness` (engine.ts) builds `weekly` only from weeks holding more
+ * than 5 km of runs longer than 2 km, then falls back to `score = 50` when
+ * `weekly` is empty and no wearable ever reported a VO2max. 50 buckets to
+ * "Intermediate", and `trend` compares the score against itself and reports
+ * "plateau". `hasActivityHistory` is `activities.length > 0`, so one short run
+ * opens the gate while the fallback is still firing: the athlete is told
+ * "50 / 100 · plateau · Intermediate tier" on the strength of no qualifying
+ * training at all. `weekly.length > 0` is the condition that actually
+ * distinguishes a computed score from the fallback — gate on that.
  */
 export type Fitness = {
   score: number;
   tier: "Elite" | "Advanced" | "Intermediate" | "Developing";
   /** This week against the average of the last four (engine.ts:199). */
   trend?: "improving" | "plateau" | "declining";
-  /** Season trend line; `week` is already a formatted label, e.g. "Mar 3". */
+  /**
+   * Season trend line; `week` is already a formatted label, e.g. "Mar 3".
+   *
+   * EMPTY IS THE TELL. An empty array is not a flat season — it is the
+   * condition under which `score`, `tier` and `trend` above are invented.
+   */
   weekly: { week: string; score: number }[];
   /**
    * 0–100 form / "Body Battery". Higher = fresher.
@@ -316,9 +360,18 @@ export type Patterns = {
   monotony: number | null;
   overreaching: boolean;
   undertraining: boolean;
-  /** Hours accumulated against an 8h target over the last 7 days. */
+  /**
+   * Hours accumulated against an 8h target — over the last 7 SLEEP ROWS, NOT
+   * the last 7 days. `engine.ts:168` filters to rows with `sleep_hours` and
+   * takes `.slice(-7)` with no calendar window, so a watch that stopped syncing
+   * a fortnight ago still yields a confident figure from a fortnight-old week.
+   * `risk.recovery.sleepAvg` IS windowed and goes null in that case, so the two
+   * disagree in the same payload — measured on the wire at 2026-08-11 with
+   * `sleepAvg: null` beside `sleepDebtH: 3.6`. Show either one only alongside
+   * the date of the data it came from, or gate both on `sleepAvg !== null`.
+   */
   sleepDebtH: number | null;
-  /** 0–100. */
+  /** 0–100. Same stale-window caveat as `sleepDebtH` — read it there. */
   sleepConsistency: number | null;
   daysSinceHardEffort: number | null;
 };
@@ -350,13 +403,25 @@ export type MentalDay = {
   stress: boolean;
 };
 
-/** Season bests. Mirrors `PersonalStats` in website/src/lib/athleteView.ts. */
+/**
+ * Season bests. Mirrors `PersonalStats` in website/src/lib/athleteView.ts.
+ *
+ * The three numbers are NOT NULLABLE and start at 0 (`athleteView.ts:69-81`),
+ * so an athlete with no synced runs gets a "biggest week" and a "longest run"
+ * of 0 — a zero where the spec demands a dash. `fastestPace` is the only field
+ * that can say "never recorded"; branch on it being null before showing any of
+ * the others as a season best.
+ */
 export type PersonalStats = {
   /** KILOMETRES. Convert through lib/units. */
   biggestWeekKm: number;
   /** KILOMETRES. Convert through lib/units. */
   longestRunKm: number;
-  /** Pre-formatted, e.g. "4:12/km". Never a bare number. */
+  /**
+   * Pre-formatted AND ALREADY IN MILES, e.g. "6:53/mi" — `fmtPace`
+   * (athleteView.ts:24) multiplies by `KM_PER_MI` and welds the unit on. Print
+   * it verbatim; do not put it through lib/units, which would convert twice.
+   */
   fastestPace: string | null;
   runsLast30: number;
 };
@@ -369,7 +434,12 @@ export type Injury = {
   id: number;
   /** Local day, YYYY-MM-DD. Format through lib/dates before display. */
   date: string;
-  /** Vocabulary from lib/bodyParts. */
+  /**
+   * The INJURY STORAGE FORMAT, not a bare `lib/bodyParts` key: the side is
+   * baked into the string, e.g. "achilles (right)", "shin (both)", "lower
+   * back". `getBodyPart()` returns `undefined` for these — parse the side off
+   * first, the way `lib/bodyParts.ts:67` documents. Verified on the wire.
+   */
   body_part: string;
   note: string | null;
   resolved_at: string | null;
@@ -478,7 +548,13 @@ export type Profile = {
     school: string;
     teamName: string | null;
     hue: number;
-    /** Events contested, e.g. ["800m", "Mile", "5K", "XC 5K"]. */
+    /**
+     * Events contested — but `profile.ts:337` returns the LITERAL CONSTANT
+     * ["800m", "Mile", "5K", "XC 5K"] for every athlete and never reads the
+     * `athletes.event_group` column. It is right by coincidence for a distance
+     * runner and wrong for the first sprinter. Treat it as the team's event
+     * menu, not as this athlete's events, until the server reads the column.
+     */
     events?: string[];
   };
   /** ALWAYS a number, and 100 when nothing is known. Never render directly. */
@@ -523,6 +599,13 @@ export type Profile = {
   /**
    * This week's mileage goal, in KILOMETRES — the denominator for `risk.weekKm`.
    * Convert both through lib/units before display.
+   *
+   * ONLY SOMETIMES A GOAL. `profile.ts:344` uses the athlete's `weekly_km` goal
+   * if one exists and otherwise INVENTS one: `max(round(weekKm * 1.05), 20)`.
+   * An athlete who has set no goal and never run is handed a confident 20 km
+   * target, and a progress bar reading "0 of 12 mi" against a number nobody
+   * chose — the same fabricated-from-nothing failure as `readiness` scoring 100.
+   * Nothing in the payload distinguishes a real goal from the fallback.
    */
   weeklyTargetKm?: number;
   /** One server-written sentence about this athlete's current training. */
@@ -536,9 +619,19 @@ export type Profile = {
 
   fitness?: Fitness;
   patterns?: Patterns;
-  /** Last 30 nights, oldest first. Sparse: only days a metric was recorded. */
+  /**
+   * The last 30 metric ROWS, oldest first — not the last 30 nights.
+   * `engine.ts:711` is `metrics.slice(-days)`, so the span is however long it
+   * took to accumulate 30 rows and its last entry is the last night RECORDED,
+   * not last night. Measured 2026-08-11: 2026-06-29 → 2026-07-28. Never label a
+   * chart of this "last 30 nights"; read the dates off the entries.
+   */
   sleep30?: SleepDay[];
-  /** Last 30 days of check-ins, oldest first. Sparse in the same way. */
+  /**
+   * The last 30 check-in ROWS, oldest first. Same `slice(-30)` as `sleep30`
+   * (`engine.ts:723`) and the same caveat, only worse — check-ins are sparser,
+   * so the window stretches further. Measured 2026-08-11: 30 rows over 37 days.
+   */
   mental30?: MentalDay[];
   /**
    * The server's illness heuristic (elevated resting HR + suppressed HRV).
@@ -593,12 +686,30 @@ export type Profile = {
   weeks?: { week: string; km: number }[];
   /**
    * A year of daily load — `yearDays` on the server, renamed by
-   * /api/mobile/me. A day with no run is PRESENT with `load: 0`; a day before
-   * the athlete's first record is absent from the array entirely. Those are two
-   * different nothings and the calendar renders them differently.
+   * /api/mobile/me.
+   *
+   * THIS ARRAY CANNOT EXPRESS "we have no record of that day." `dailySeries`
+   * (risk.ts:131) pre-fills all 366 slots with `{load: 0, km: 0}` before
+   * bucketing a single activity, so the array is ALWAYS 366 long and every
+   * unknown day is indistinguishable from a rest day. A brand-new athlete gets
+   * a full year of rest days; an athlete whose watch stopped syncing a
+   * fortnight ago gets fourteen. Verified on the wire 2026-08-11.
+   *
+   * A grid drawn straight off this reads "did not run" over a period we know
+   * nothing about, which is the absent/zero collapse the spec forbids. The only
+   * client-side bound available is the athlete's first and last known activity.
    */
   calendar?: { date: string; load: number; km: number }[];
-  /** Every source that has ever written data for this athlete, e.g. "strava". */
+  /**
+   * Every source that has ever written data for this athlete, e.g. "strava".
+   *
+   * NEVER EMPTY, AND THAT IS THE TRAP. `profile.ts:131` substitutes the
+   * one-element array `["No data yet"]` when the real set is empty, so an
+   * absence arrives dressed as a data element and a screen that maps this to
+   * chips renders a source called "No data yet". There is no honest signal in
+   * the array itself — the only test is the sentinel string, which
+   * `app/src/app/connect.tsx` keeps as `NO_SOURCES`. Match it before rendering.
+   */
   connectedSources?: string[];
 };
 

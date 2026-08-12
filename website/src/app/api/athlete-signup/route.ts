@@ -24,8 +24,6 @@ export async function POST(request: Request) {
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const joinCode = typeof body.joinCode === "string" ? body.joinCode.trim() : "";
-  const grade = Number.isInteger(body.grade) ? body.grade : null;
-  const eventGroup = typeof body.eventGroup === "string" ? body.eventGroup : "distance";
 
   if (!name || !email || !password) {
     return Response.json({ error: "Fill in your name, email, and password." }, { status: 400 });
@@ -36,6 +34,35 @@ export async function POST(request: Request) {
   if (password.length < 8) {
     return Response.json({ error: "Use at least 8 characters for your password." }, { status: 400 });
   }
+
+  // NOT ANSWERED and ANSWERED WRONGLY are two different things, and folding them
+  // together is the silent-drop this project keeps finding. `grade` was
+  // `Number.isInteger(body.grade) ? body.grade : null`, so "11" — or any value
+  // the client failed to coerce — was stored as "no answer" and the response
+  // still said ok. Absent or null still means unanswered; a value that is present
+  // and not an integer is now refused rather than discarded.
+  const gradeGiven = body.grade !== undefined && body.grade !== null;
+  if (gradeGiven && !Number.isInteger(body.grade)) {
+    return Response.json(
+      { error: "Grade must be a whole number, or left blank." },
+      { status: 400 }
+    );
+  }
+  const grade: number | null = gradeGiven ? body.grade : null;
+
+  // Same split. An unrecognised event group used to be silently replaced by
+  // "distance", which stores an answer the athlete never gave and reports
+  // success — a fabricated value wearing the athlete's name. Absent still takes
+  // the default the schema documents; present-but-unknown is refused.
+  const EVENT_GROUPS = ["distance", "mid", "sprint"] as const;
+  const groupGiven = body.eventGroup !== undefined && body.eventGroup !== null;
+  if (groupGiven && !EVENT_GROUPS.includes(body.eventGroup)) {
+    return Response.json(
+      { error: "Choose an event group: distance, mid, or sprint." },
+      { status: 400 }
+    );
+  }
+  const eventGroup: string = groupGiven ? body.eventGroup : "distance";
 
   // Signup stays open — an athlete can join solo, that is the product. What is
   // capped is the RATE, because a success here mints a live device_token (see

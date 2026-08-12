@@ -1,5 +1,5 @@
 /**
- * Settings. A STACK route, not a tab — the tab bar's four items are the daily
+ * Settings. A STACK route, not a tab — the tab bar's five items are the daily
  * surfaces and this is not one of them.
  *
  * This screen is not a port: the website has no settings page, so it is designed

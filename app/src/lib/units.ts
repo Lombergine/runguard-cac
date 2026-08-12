@@ -31,28 +31,15 @@ export function kmToMi(km: number): number {
   return km * MI_PER_KM;
 }
 
-/** Metres → miles (number). */
-export function miFromMeters(m: number): number {
-  return m / M_PER_MI;
-}
-
 /**
  * Metres → a rounded feet number. Elevation is the one figure the API sends in
  * metres and the interface shows in feet, and feet are whole: nobody climbs
- * 412.7 ft.
+ * 412.7 ft. The caller welds the "ft" on (activity/[id]'s `Metric`), so a
+ * non-finite metre reading must be screened out there as `Absent` — this
+ * returns a number and cannot express "not recorded".
  */
 export function ftNumFromMeters(m: number): number {
   return Math.round(m / M_PER_FT);
-}
-
-/**
- * Metres → "412 ft", the unit welded on (non-negotiable #3). Returns null for a
- * non-finite input rather than "NaN ft" — a figure that cannot be computed is
- * not recorded, and the caller must render it through `Absent`.
- */
-export function fmtFeetFromMeters(m: number): string | null {
-  if (!Number.isFinite(m)) return null;
-  return `${ftNumFromMeters(m)} ft`;
 }
 
 /** Kilometres → a rounded miles number. */
@@ -69,11 +56,6 @@ export function miNumFromMeters(m: number, digits = 1): number {
 /** Kilometres → "3.4 mi". */
 export function fmtMiles(km: number, digits = 1): string {
   return `${miNum(km, digits)} mi`;
-}
-
-/** Metres → "3.4 mi". */
-export function fmtMilesFromMeters(m: number, digits = 1): string {
-  return fmtMiles(m / 1000, digits);
 }
 
 /** Seconds → "38:12", or "1:04:30" past the hour. The run card's Time stat. */

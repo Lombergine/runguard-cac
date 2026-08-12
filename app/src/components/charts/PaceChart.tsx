@@ -52,6 +52,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Dots, LinePath } from "../chart/marks";
+import { isAbsent } from "../chart/scales";
 import { paceSeries } from "../../lib/chartData";
 import type { Profile } from "../../lib/types";
 import { fmtPaceMiFromKm } from "../../lib/units";
@@ -107,7 +108,7 @@ export function PaceChart({ paceSeason }: { paceSeason?: Profile["paceSeason"] }
   }
 
   const n = s.points.length;
-  const missing = s.points.filter((p) => p.value === null).length;
+  const missing = s.points.filter((p) => isAbsent(p.value)).length;
 
   /**
    * The value phrase, unit welded in. Formatted from the SOURCE row's sec/km

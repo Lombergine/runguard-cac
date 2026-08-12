@@ -39,11 +39,27 @@ const ZERO_WIDTH = /[​-‍⁠﻿­]/g;
 const APOSTROPHE = /[‘’ʼ‛′＇]/g;
 const QUOTE = /[“”″＂]/g;
 const DASH = /[‐-―−]/g;
+/**
+ * Combining marks, stripped so the Spanish patterns below actually fire.
+ *
+ * They are all written unaccented — `hacerme dano`, `provocarme el vomito`,
+ * `vomitar despues de comer` — but the CORRECT spellings are `daño`, `vómito`,
+ * `después`, and that is what a Spanish keyboard and Spanish autocorrect
+ * produce. NFKC composes rather than decomposes, so `ñ` stayed `ñ` and every
+ * accented Spanish crisis and purge phrase passed the whole tier-1 net
+ * untouched — the exact "English-only net routes these straight past every
+ * control" failure the Spanish block was added to prevent, reintroduced by
+ * spelling. Decomposing and dropping the marks makes the unaccented patterns
+ * match both spellings. English input has no marks, so this is a no-op there.
+ */
+const COMBINING = /\p{M}+/gu;
 
 function fold(input: string, zeroWidthAs: "" | " "): string {
   return input
     .slice(0, 1000)
     .normalize("NFKC")
+    .normalize("NFD")
+    .replace(COMBINING, "")
     .replace(ZERO_WIDTH, zeroWidthAs)
     .replace(APOSTROPHE, "'")
     .replace(QUOTE, '"')

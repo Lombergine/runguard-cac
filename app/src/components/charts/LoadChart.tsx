@@ -46,6 +46,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Bars, LinePath } from "../chart/marks";
+import { isAbsent } from "../chart/scales";
 import { DAILY_DAYS, loadSeries } from "../../lib/chartData";
 import type { DailyPoint } from "../../lib/types";
 import { layout, radius, ruleWidth, space } from "../../theme/space";
@@ -110,7 +111,7 @@ function Panel({
 
 export function LoadChart({ series }: { series?: DailyPoint[] }) {
   const s = loadSeries(series);
-  const recorded = s.points.filter((p) => p.value !== null).length;
+  const recorded = s.points.filter((p) => !isAbsent(p.value)).length;
 
   return (
     <Panel title="Training load" note={`last ${DAILY_DAYS} days`}>

@@ -46,6 +46,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Band, LinePath, RefLine } from "../chart/marks";
+import { isAbsent } from "../chart/scales";
 import {
   ACWR_BAND,
   ACWR_DANGER,
@@ -135,7 +136,7 @@ function Panel({
  */
 export function AcwrChart({ series }: { series?: DailyPoint[] }) {
   const s = acwrSeries(series);
-  const recorded = s.points.filter((p) => p.value !== null).length;
+  const recorded = s.points.filter((p) => !isAbsent(p.value)).length;
 
   return (
     <Panel

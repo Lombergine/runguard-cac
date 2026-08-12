@@ -46,11 +46,31 @@ function signTeam(teamId: number): string {
   return `${teamId}.${sig}`;
 }
 
-/** Returns the team id if the cookie value is a valid coach session, else null. */
+/**
+ * Returns the team id if the cookie value is a valid coach session, else null.
+ *
+ * A legacy branch used to live here: a cookie equal to `HMAC(secret(), "coach")`
+ * was accepted as a session for team 1, from before teams had accounts. It was
+ * deleted because it was a CREDENTIAL-FREE LOGIN, not merely a stale format.
+ *
+ * `secret()` above returns the literal `"milemarker-dev-secret"` when
+ * `SESSION_SECRET` is unset — that string is published in this file, in this
+ * repository. So the value of the accepted cookie was computable by anyone who
+ * could read this line. An audit computed it and demonstrated the result:
+ * `/dashboard` returned 200, and `GET /api/chat?athleteId=1` returned a real
+ * athlete's private chat transcript. No password, no account, no token.
+ *
+ * Two things kept it from being an emergency and neither is a defence:
+ * `secret()` throws rather than returning the default once deployed, so a
+ * correctly-configured production instance was not reachable this way; and
+ * nothing has *produced* this cookie since accounts landed, so the branch was
+ * dead code. A dead branch that grants a session is worse than a live one,
+ * because nobody exercises it and nobody notices it.
+ *
+ * Do not reinstate it. There is no cookie in circulation that needs it.
+ */
 function verifyCoachCookie(value: string | undefined): number | null {
   if (!value) return null;
-  // legacy single-team cookie (pre-accounts): treat as demo team 1
-  if (value === crypto.createHmac("sha256", secret()).update("coach").digest("hex")) return 1;
   const dot = value.lastIndexOf(".");
   if (dot < 0) return null;
   const teamId = Number(value.slice(0, dot));

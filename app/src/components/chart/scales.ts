@@ -42,6 +42,35 @@ export type Scale = (v: number) => number;
 export type ChartPoint = { label: string; value: number | null };
 
 /**
+ * Is this value unknown? THE single absence predicate for the whole chart
+ * system — marks, gates and readouts all call this one function.
+ *
+ * It lives here, in the leaf, for the same reason `ChartPoint` does: this is
+ * the module that defines what a point IS, so it is the module that defines
+ * what a missing one is. `marks.tsx` decides whether to draw a bar or a dashed
+ * mark with it, and `lib/chartData.ts` decides both whether there is enough
+ * data to draw at all and what the readout says. If those ever used different
+ * tests, a point could fall between them and get neither a bar nor a dashed
+ * mark — a silent hole — or a chart could pass its "enough data" gate on rows
+ * that every mark then draws as unknown. One predicate, no exceptions.
+ *
+ * It is deliberately wider than `=== null`, because the type is not a fence
+ * across HTTP. `ChartPoint.value` is typed `number | null`, so `undefined`
+ * should be impossible — but the type describes what the payload CLAIMS, and
+ * `/api/mobile/me` ships a trimmed `series` whose rows are missing fields
+ * `DailyPoint` declares. A point built from one arrives holding `undefined`
+ * with nothing complaining, and `frame.y(undefined)` is `NaN`: a broken
+ * picture rather than an honest gap. `NaN` itself is caught for the same
+ * reason. All three mean the same thing to a reader — we don't know.
+ *
+ * NOTE: a MEASURED ZERO is not absent. `isAbsent(0) === false`, always. That
+ * is the whole point — see the `ChartPoint` doc above. Never write `value ?? 0`.
+ */
+export function isAbsent(value: number | null | undefined): boolean {
+  return value === null || value === undefined || !Number.isFinite(value);
+}
+
+/**
  * `domain[0]` → `range[0]`, `domain[1]` → `range[1]`, linearly, unclamped.
  *
  * A zero-width domain (every value identical) would divide by zero, so it

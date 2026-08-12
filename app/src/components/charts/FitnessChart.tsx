@@ -23,23 +23,46 @@
  * From `fitnessSeries`, mirroring `charts.tsx:325`. An axis rescaled to the
  * data would turn three points of drift across a season into a mountain range.
  *
- * ── The line breaks ────────────────────────────────────────────────────────
- * A week the server could not score stays null and `LinePath` breaks at it,
- * with the 12px dashed mark on the baseline saying so. No interpolation, here
- * or anywhere else in the chart system.
+ * ── The line breaks — WHERE IT CAN ─────────────────────────────────────────
+ * `LinePath` splits at every null and `AbsentMarks` puts the 12px dashed mark
+ * on the baseline, exactly as on every other chart. There is no interpolation
+ * here or anywhere else in the chart system.
+ *
+ * BUT DO NOT READ THAT AS A GUARANTEE ABOUT THIS SERIES. `Fitness["weekly"]`
+ * types `score` as a plain `number` (`lib/types.ts:336`), and
+ * `computeFitness` (`website/src/lib/engine.ts:246`) does
+ * `if (score !== null) weekly.push(...)` — a week it could not score is DROPPED
+ * FROM THE ARRAY rather than pushed with a null. So the nulls this component
+ * breaks at never arrive: the unscored weeks are simply not in `weekly`, the
+ * surviving weeks close up evenly spaced, and the line runs straight across a
+ * stretch of season the model had nothing to say about. That is the same
+ * silent gap-closing `PaceChart`'s header names as the website's mistake —
+ * `paceTrend` avoids it by emitting `pace: null`, and `computeFitness` does
+ * not.
+ *
+ * It is not fixable from inside this component: `weekly` carries only the
+ * pre-formatted label ("Mar 3") and no ISO week start, so there is nothing here
+ * to notice a gap with, and deriving a date in a component is barred by
+ * non-negotiable #2. The fix is server-side — push `{ week, score: null }`
+ * instead of skipping. The null handling below is kept as the defence for the
+ * day that lands.
  *
  * ── One caveat this component cannot fix from inside ───────────────────────
- * `(tabs)/stats.tsx` gates its Fitness score TILE on `risk.hasActivityHistory`,
- * because a score with no synced running behind it is the model talking to
- * itself. The call-site contract for this chart passes only `fitness.weekly`,
- * so the only guard available here is `fitnessSeries`' three-week threshold
- * (`charts.tsx:319`). If the screen wants the same gate the tile has, it should
- * render this component conditionally rather than have it grow a second prop.
+ * `(tabs)/stats.tsx:460` gates this chart on `risk.hasActivityHistory`, the
+ * same flag its Fitness score TILE uses, because a score with no synced running
+ * behind it is the model talking to itself. Worth knowing what that gate is
+ * actually worth: `risk.ts:650` computes it as `activities.length > 0` over the
+ * athlete's whole history, so it is a LIFETIME flag that never goes false again
+ * once an athlete has ever synced a run. It excludes a brand-new athlete and
+ * nobody else — it says nothing about whether the season on screen is founded.
+ * The only real guard here is `fitnessSeries`' three-week threshold
+ * (`charts.tsx:319`).
  */
 import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, LinePath } from "../chart/marks";
+import { isAbsent } from "../chart/scales";
 import { fitnessSeries } from "../../lib/chartData";
 import type { Fitness } from "../../lib/types";
 import { layout, radius, ruleWidth, space } from "../../theme/space";
@@ -93,7 +116,7 @@ export function FitnessChart({ weekly }: { weekly?: Fitness["weekly"] }) {
     );
   }
 
-  const weeks = s.points.filter((p) => p.value !== null).length;
+  const weeks = s.points.filter((p) => !isAbsent(p.value)).length;
 
   return (
     <Panel title={TITLE} note={NOTE}>

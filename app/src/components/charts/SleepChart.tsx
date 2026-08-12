@@ -45,11 +45,11 @@
  * bare — `<SleepChart sleep30={profile.sleep30} />` — and must not add a
  * heading of its own.
  */
-import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Card } from "../Card";
 import { AbsentMarks, Bars, RefLine } from "../chart/marks";
+import { isAbsent } from "../chart/scales";
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { SLEEP_TARGET_H, sleepSeries } from "../../lib/chartData";
 import type { SleepDay } from "../../lib/types";
@@ -78,11 +78,21 @@ function Head({ note }: { note?: string }) {
 }
 
 export function SleepChart({ sleep30 }: SleepChartProps) {
-  const series = useMemo(() => sleepSeries(sleep30), [sleep30]);
+  /*
+   * Deliberately NOT memoised, for the reason `MentalChart` states at its own
+   * call: `sleepSeries(sleep30, now = new Date())` anchors BOTH the 30-night
+   * window and every `dayLabel()` on the clock inside the call. A memo keyed on
+   * `[sleep30]` would go on naming yesterday's nights — and go on ending the
+   * window a day short — for as long as the app stayed mounted across midnight,
+   * which breaks non-negotiable #2 in the one component whose whole subject is
+   * which nights are missing. Thirty iterations is not a cost worth that; every
+   * other chart in the app calls its series builder bare for the same reason.
+   */
+  const series = sleepSeries(sleep30);
 
   // Counted off the densified series, not off `sleep30`, so "not recorded"
   // means "no row on that day" as well as "a row with no hours in it".
-  const missing = series.points.filter((p) => p.value === null).length;
+  const missing = series.points.filter((p) => isAbsent(p.value)).length;
   const recorded = series.points.length - missing;
 
   if (!series.enough) {

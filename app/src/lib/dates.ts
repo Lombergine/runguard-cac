@@ -57,11 +57,6 @@ export function dayLabel(iso: string): string {
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-/** "2026-10-14" → "TUE 14 OCT · BEFORE PRACTICE". The check-in card eyebrow. */
-export function checkinHeader(iso: string): string {
-  return `${dayLabel(iso).toUpperCase()} · BEFORE PRACTICE`;
-}
-
 /** A Date → "6:12am". Lowercase, no leading zero on the hour. */
 export function timeLabel(d: Date): string {
   const h24 = d.getHours();

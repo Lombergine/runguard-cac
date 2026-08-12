@@ -31,7 +31,11 @@ export async function GET(request: Request) {
   if (!profile) return Response.json({ error: "Not found" }, { status: 404 });
 
   return Response.json({
-    athlete: profile.athlete,
+    // WITHOUT `deviceToken` — see the note in ../me/route.ts. `buildProfile`
+    // attaches it for the coach dashboard's pairing panel, and returning
+    // `profile.athlete` whole put the app's own bearer credential inside every
+    // home-screen response.
+    athlete: (({ deviceToken: _t, ...rest }) => rest)(profile.athlete),
     readiness: profile.readiness,
     prePractice: profile.prePractice,
     todayCheckin: profile.todayCheckin,

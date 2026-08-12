@@ -237,7 +237,36 @@ function recoveryTips(p: Profile): string[] {
     );
   }
 
-  if (p.patterns?.sleepDebtH != null && p.patterns.sleepDebtH > SLEEP_DEBT_H) {
+  /*
+    GATED ON `sleepAvg`, FOR THE REASON THE SLEEP-CONSISTENCY TILE IS — the two
+    figures come out of the SAME line of the engine.
+
+    `engine.ts:168` builds `last7Sleep` as `metrics.filter(has sleep).slice(-7)`
+    — the last seven metric ROWS carrying a sleep value, drawn from a 400-day
+    query with no date filter at all. Both `sleepDebtH` (engine.ts:172) and
+    `sleepConsistency` (engine.ts:175) are computed from it, so both inherit the
+    same window; `sleepDebtH` is the worse of the two because it needs only ONE
+    row to return a number, where consistency needs four.
+
+    Its declared contract says otherwise — `lib/types.ts:319` and the engine's
+    own comment at `engine.ts:132` both say "over the last 7 days" — and this
+    sentence welds "this week" onto the figure. On the demo athlete on
+    2026-08-11 it read 1.3 h, accumulated over the nights of 22–28 July, the
+    last seven the watch ever synced. Below the threshold, so no tip printed;
+    the same arithmetic over a worse fortnight prints one.
+
+    `recovery.sleepAvg` is the mean of the last seven CALENDAR nights and is
+    null when none of them carries sleep, which is exactly the condition under
+    which a debt figure is describing some other week. Same gate, same reason,
+    same residual: it does not prove all seven rows are inside the window, only
+    that the window is not empty. The real fix is a windowed `sleepDebtH` in the
+    engine — reported for this stage.
+  */
+  if (
+    r.sleepAvg !== null &&
+    p.patterns?.sleepDebtH != null &&
+    p.patterns.sleepDebtH > SLEEP_DEBT_H
+  ) {
     out.push(
       `You are carrying ${p.patterns.sleepDebtH} h of sleep debt this week. About half of that is what a single early night covers.`,
     );

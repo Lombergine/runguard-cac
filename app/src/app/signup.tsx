@@ -37,6 +37,7 @@ import { useRouter } from "expo-router";
 import { Card } from "../components/Card";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
+import { useSession } from "../lib/session";
 import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
@@ -188,6 +189,7 @@ async function signUp(
 
 export default function SignupScreen() {
   const router = useRouter();
+  const { refresh } = useSession();
   const [joinCode, setJoinCode] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -237,6 +239,11 @@ export default function SignupScreen() {
       // never in it.
       setPassword("");
       setBusy(false);
+      // Writing the keychain is not signing in — see the same call in
+      // `login.tsx`. The gate reads `useSession().status`, resolved once at
+      // launch; without `refresh()` it stays "out", the authed group stays
+      // unmounted, and `replace("/")` has no screen to land on.
+      await refresh();
       router.replace("/");
     })();
   }

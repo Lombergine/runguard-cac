@@ -238,7 +238,13 @@ export async function setHrMax(value: number | null): Promise<void> {
  * ------------------------------------------------------------------ */
 
 type CheckinScores = {
-  /** 1–10. Anything outside the range is stored as null, not rejected. */
+  /**
+   * 1–10. OMITTING one leaves whatever is already stored for today alone;
+   * SENDING one outside the range is a 400 ("Enter energy and RPE as a number
+   * from 1 to 10.", naming every offending field), not a silent discard. Not
+   * required to be a whole number — the column is REAL and holds values like
+   * 5.7, so the route checks `Number.isFinite` and the range only.
+   */
   rpe?: number;
   energy?: number;
   motivation?: number;
@@ -257,8 +263,8 @@ type CheckinScores = {
  *
  * It also makes the two legs of the pair mandatory TOGETHER, which the previous
  * pair of independent optionals did not. `{ sorenessPart }` alone used to
- * compile and, because the route folds an out-of-range severity to null, it
- * DELETED that part's soreness. Clearing is a real operation, but it must be
+ * compile and, because the route then folded an out-of-range severity to null,
+ * it DELETED that part's soreness. Clearing is a real operation, but it must be
  * asked for — `severity: null` — not arrived at by forgetting a field.
  *
  * Written as flat `sorenessPart` / `sorenessSeverity` keys, matching the wire,
@@ -269,12 +275,17 @@ type CheckinScores = {
 type CheckinSoreness =
   | { sorenessPart?: undefined; sorenessSeverity?: undefined }
   | {
-      /** A key from lib/bodyParts. */
+      /** A key from lib/bodyParts. Truncated to 60 characters server-side. */
       sorenessPart: string;
       /**
-       * 0–10, or **null to DELETE** this part's soreness for today. The route
-       * range-checks: anything outside 0–10 is treated as null, i.e. as a
-       * delete. Truncated to 60 characters server-side.
+       * A WHOLE NUMBER 0–10, or **null to DELETE** this part's soreness for
+       * today. Those are the only two things the route accepts. Anything else —
+       * 11, -1, 4.5 — is a 400 ("Soreness severity must be a whole number from
+       * 0 to 10, or null to clear it."), which arrives as `ApiError.message`.
+       *
+       * It did NOT used to be: an out-of-range value was folded to null and
+       * silently deleted the score. The route now refuses it, so clearing is
+       * something a caller has to ask for rather than fall into.
        */
       sorenessSeverity: number | null;
     };
@@ -290,8 +301,18 @@ type CheckinSoreness =
  *    A phone in a different timezone from the server files under the server's
  *    day.
  *  - Exactly ONE soreness part per request. Report three sore parts with three
- *    calls. Each call also re-upserts the scores half, so send the scores once
- *    and then the parts, or send the same scores every time.
+ *    calls. The two halves are independent: a soreness-only call does not touch
+ *    the scores, and an omitted score keeps the value already stored for today
+ *    (`COALESCE(excluded.x, checkins.x)`, website/src/lib/db.ts:420). Send them
+ *    in separate calls, in either order. The corollary is that a score cannot
+ *    be UN-set — there is no clear signal for rpe, energy, motivation or
+ *    academicStress the way `null` clears a soreness.
+ *
+ * An empty body is a 400 ("Nothing to record — send a score, or a soreness part
+ * and severity."). The route no longer manufactures a `checkins` row for a
+ * request that reported nothing, because a row EXISTING is not the athlete
+ * having answered — that empty row is how "Readiness 100/100 · Good to go" once
+ * appeared over three tiles reading "Not recorded".
  */
 export type CheckinInput = CheckinScores & CheckinSoreness;
 
@@ -416,26 +437,33 @@ export type RaceResultInput = {
   timeS: number;
   /** YYYY-MM-DD. Omitted, the route files it under its own local today. */
   date?: string;
-  /** Finishing position. */
+  /** Finishing position — a whole number, 1 or greater. */
   place?: number;
-  /**
-   * How it felt. The route DROPS anything outside these three words to null
-   * without complaining, so this union is the only thing standing between a
-   * typo and a silently lost answer.
-   */
+  /** How it felt. Anything outside these three words is a 400. */
   feel?: RaceFeel;
-  /** Free text, e.g. "cold, windy". Truncated to 120 characters. */
+  /**
+   * Free text, e.g. "cold, windy". Truncated to 120 characters. An empty or
+   * all-whitespace string is stored as NULL — "not reported", not a blank
+   * answer — so there is no need to strip one before sending.
+   */
   conditions?: string;
 };
 
 /**
  * POST /api/race-result — log a finished race.
  *
- * The route's only 400 is "Need event and timeS (seconds)", and it is what an
- * out-of-range `timeS` produces too: a non-number, a NaN (which
- * `JSON.stringify` sends as null), and a 4-hour marathon all land on that one
- * sentence. A form should therefore say what the bounds ARE next to the field,
- * rather than relying on the rejection to explain itself.
+ * EVERY optional field is now validated rather than coerced: a `date` that is
+ * not YYYY-MM-DD, a `place` that is not a whole number ≥ 1, a `feel` outside
+ * the three words and a non-string `conditions` are each their own 400 with
+ * their own sentence, which arrives as `ApiError.message`. They used to be
+ * folded to null — or, for `date`, silently refiled under TODAY — behind an
+ * `{ ok: true }`. Do not re-check them here: the server's message is the one
+ * that should reach the athlete, and a second copy is how the two drift.
+ *
+ * `timeS` is the exception worth designing around. A non-number, a NaN (which
+ * `JSON.stringify` sends as null) and a 4-hour marathon all land on the single
+ * sentence "Need event and timeS (seconds)", so a form should say what the
+ * bounds ARE next to the field rather than rely on the rejection to explain.
  *
  * Appends a row every time — there is no upsert and no id to update. Two taps
  * are two results, so the caller must not retry blind on a timeout.

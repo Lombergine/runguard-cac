@@ -466,11 +466,24 @@ const METRIC_CAP = 800;
 /** Matches lib/api: no health endpoint exists, so a bad base URL just hangs. */
 const TIMEOUT_MS = 30_000;
 
-type IngestResult = { importedWorkouts: number; importedMetrics: number };
+type IngestResult = {
+  importedWorkouts: number;
+  importedMetrics: number;
+  rejectedWorkouts: number;
+  rejectedMetrics: number;
+};
 
 /**
  * One POST. `importedWorkouts` counts rows that were actually INSERTED —
  * `ON CONFLICT DO NOTHING` means an already-known workout counts zero.
+ *
+ * `rejected*` counts entries the server REFUSED, and is read for the reason the
+ * route gives for sending it: `imported` alone cannot tell "your server already
+ * had this one" from "your server threw this one away". Both are zero imports.
+ * A refused workout is not retried into existence either — once this sync
+ * succeeds, `lastSync.at` advances and the next `since` only reaches back
+ * OVERLAP_DAYS, so anything older than that window is gone for good. Dropping
+ * these counts on the floor is what made that loss silent.
  */
 async function postIngest(payload: IngestPayload): Promise<IngestResult> {
   const token = await getToken();
@@ -505,6 +518,8 @@ async function postIngest(payload: IngestPayload): Promise<IngestResult> {
   return {
     importedWorkouts: typeof body?.importedWorkouts === "number" ? body.importedWorkouts : 0,
     importedMetrics: typeof body?.importedMetrics === "number" ? body.importedMetrics : 0,
+    rejectedWorkouts: typeof body?.rejectedWorkouts === "number" ? body.rejectedWorkouts : 0,
+    rejectedMetrics: typeof body?.rejectedMetrics === "number" ? body.rejectedMetrics : 0,
   };
 }
 
@@ -530,6 +545,21 @@ export type SyncRecord = {
   at: string;
   read: { workouts: number; metrics: number };
   imported: { workouts: number; metrics: number };
+  /**
+   * What the server REFUSED — the third question, and the one that was missing.
+   *
+   * `read` and `imported` together still cannot distinguish "the server already
+   * had all of it" from "the server threw some of it away": both read N and
+   * import 0. Only this tells them apart, which is exactly why the route
+   * reports it.
+   *
+   * OPTIONAL BECAUSE ABSENT IS NOT ZERO. A record persisted by a build that
+   * predates this field, or answered by a server too old to send it, genuinely
+   * does not know how many entries were refused — and `{workouts: 0}` would be
+   * a claim that none were. Undefined means unknown; render nothing rather than
+   * a reassuring zero. `sync()` always populates it.
+   */
+  rejected?: { workouts: number; metrics: number };
 };
 
 export type HealthState = {
@@ -564,6 +594,14 @@ export async function getState(): Promise<HealthState> {
 }
 
 async function saveState(state: HealthState): Promise<void> {
+  // NOTHING IS WRITTEN BACK AFTER A SIGN-OUT. `clearAllStoredState()` erases
+  // STATE_KEY along with the token, but a sync or a permission prompt already
+  // in flight when that lands resolves afterwards and used to re-create the key
+  // — restoring the previous athlete's last-sync date and their read/new counts
+  // for whoever holds the phone next, which is the exact leak that erase exists
+  // to close. `getToken()` is null once the session has ended (sign-out also
+  // revokes the dev fallback), so no token means no write.
+  if (!(await getToken())) return;
   try {
     await SecureStore.setItemAsync(STATE_KEY, JSON.stringify(state));
   } catch {
@@ -609,6 +647,7 @@ export async function sync(): Promise<SyncRecord> {
   const { workouts, metrics } = await readSince(since);
 
   const imported = { workouts: 0, metrics: 0 };
+  const rejected = { workouts: 0, metrics: 0 };
   for (let w = 0, m = 0; w < workouts.length || m < metrics.length; ) {
     const page = {
       workouts: workouts.slice(w, w + WORKOUT_CAP),
@@ -617,6 +656,8 @@ export async function sync(): Promise<SyncRecord> {
     const result = await postIngest(page);
     imported.workouts += result.importedWorkouts;
     imported.metrics += result.importedMetrics;
+    rejected.workouts += result.rejectedWorkouts;
+    rejected.metrics += result.rejectedMetrics;
     w += page.workouts.length;
     m += page.metrics.length;
   }
@@ -625,6 +666,7 @@ export async function sync(): Promise<SyncRecord> {
     at: new Date().toISOString(),
     read: { workouts: workouts.length, metrics: metrics.length },
     imported,
+    rejected,
   };
   await saveState({ ...before, lastSync: record });
   return record;

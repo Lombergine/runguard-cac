@@ -52,7 +52,7 @@
 import { Circle, Line, Polyline, Rect } from "react-native-svg";
 
 import { Frame } from "./Plot";
-import { ChartPoint } from "./scales";
+import { ChartPoint, isAbsent } from "./scales";
 import { ruleWidth, space } from "../../theme/space";
 import { color } from "../../theme/tokens";
 
@@ -115,21 +115,13 @@ export function Bars({
  * Line
  * ------------------------------------------------------------------ */
 
-/**
- * Is this point unknown?
- *
- * `ChartPoint.value` is typed `number | null`, so `undefined` should be
- * impossible — but the type describes what the payload CLAIMS, and /api/mobile/me
- * ships a trimmed `series` whose rows are missing fields `DailyPoint` declares.
- * A point built from one arrives holding `undefined` with nothing complaining.
- *
- * A strict `=== null` treats that as PRESENT, and `frame.y(undefined)` is `NaN`,
- * so the line renders as `NaN,NaN` — a broken picture rather than an honest gap.
- * Absence is checked in one place, and it means both.
+/*
+ * `isAbsent` is imported from `./scales`, not defined here. It is the one
+ * absence predicate for the whole chart system — `lib/chartData.ts` gates its
+ * charts and writes its readouts with the same function these marks draw with,
+ * so a gate can never say "enough data" about rows every mark then draws as
+ * unknown. See its doc comment in scales.ts for why it is wider than `=== null`.
  */
-function isAbsent(value: number | null | undefined): boolean {
-  return value === null || value === undefined || !Number.isFinite(value);
-}
 
 /** Index ranges of contiguous known values. */
 function runs(data: ChartPoint[]): number[][] {

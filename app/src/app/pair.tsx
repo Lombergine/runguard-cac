@@ -32,6 +32,7 @@ import { useRouter } from "expo-router";
 import { Card } from "../components/Card";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
+import { useSession } from "../lib/session";
 import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
@@ -50,9 +51,15 @@ const EMBER_END = { x: 1, y: 1 } as const;
 /**
  * Static dot path — Expo inlines `EXPO_PUBLIC_*` by textual substitution at
  * build time, so a computed lookup comes back undefined. Same read as
- * `lib/auth.ts`.
+ * `lib/auth.ts`, `__DEV__` guard included.
+ *
+ * That guard is the whole point: `__DEV__` is a compile-time constant, so in a
+ * release bundle this expression folds to `null` and neither the token nor the
+ * button that spends it reaches the shipped JavaScript. Without it, a release
+ * build produced on a machine with the variable set would bake a live,
+ * non-expiring device token for a real athlete into a bundle anyone can read.
  */
-const DEV_TOKEN = process.env.EXPO_PUBLIC_DEV_TOKEN || null;
+const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
 
 /**
  * The outcomes worth telling apart. The three that matter are a token that is
@@ -116,6 +123,7 @@ async function verify(token: string): Promise<Problem | null> {
 
 export default function PairScreen() {
   const router = useRouter();
+  const { refresh } = useSession();
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<Problem | null>(null);
   const [checking, setChecking] = useState(false);
@@ -149,6 +157,11 @@ export default function PairScreen() {
       // point can put it back on screen.
       setDraft("");
       setChecking(false);
+      // Writing the keychain is not signing in — see the same call in
+      // `login.tsx`. The gate reads `useSession().status`, resolved once at
+      // launch; without `refresh()` it stays "out", the authed group stays
+      // unmounted, and `replace("/")` has no screen to land on.
+      await refresh();
       router.replace("/");
     })();
   }

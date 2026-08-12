@@ -340,10 +340,12 @@ export function FitnessChart({ data }: { data: { week: string; score: number }[]
 /** Sleep hours over 30 days with the 8h target line. */
 export function SleepChart({ data }: { data: { date: string; hours: number | null }[] }) {
   if (!hasEnoughData(data, 5, (d) => d.hours !== null)) return <InsufficientData />;
-  const pts = data.map((d) => ({ ...d, hours: d.hours ?? 0 }));
+  // A night with no reading is NOT a night of no sleep. Passing `null` straight
+  // through leaves that day's bar unrendered — a gap in the row — rather than
+  // coercing it to 0 and drawing a floor-height bar that reads as "slept ~none".
   return (
     <ResponsiveContainer width="100%" height={190}>
-      <ComposedChart data={pts} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
         <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={40} />
         <YAxis domain={[0, 10]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
@@ -352,8 +354,8 @@ export function SleepChart({ data }: { data: { date: string; hours: number | nul
           cursor={{ fill: "rgba(34,29,21,0.045)" }}
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null;
-            const p = payload[0].payload as { date: string; hours: number };
-            return <TooltipBox label={fmtDay(p.date)} rows={[["Sleep", p.hours ? p.hours.toFixed(1) + " h" : "no data"]]} />;
+            const p = payload[0].payload as { date: string; hours: number | null };
+            return <TooltipBox label={fmtDay(p.date)} rows={[["Sleep", p.hours != null ? p.hours.toFixed(1) + " h" : "no data"]]} />;
           }}
         />
         <Bar dataKey="hours" fill={SERIES_1} radius={[3, 3, 0, 0]} maxBarSize={12} isAnimationActive={false} />
@@ -419,8 +421,13 @@ export function MentalChart({ data }: { data: { date: string; energy: number | n
               );
             }}
           />
-          <Line type="monotone" dataKey="energy" stroke={BRAND} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-          <Line type="monotone" dataKey="motivation" stroke={SERIES_1} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+          {/* No `connectNulls`: a day with no check-in is not a data point, and a
+              line drawn straight across it invents a reading for every day in the
+              gap. The line breaks instead. Dots are on so a single check-in with
+              no neighbours still renders — without them an isolated day would
+              have neither a segment nor a mark and would vanish entirely. */}
+          <Line type="monotone" dataKey="energy" stroke={BRAND} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: BRAND }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="motivation" stroke={SERIES_1} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: SERIES_1 }} isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
       <div className="flex gap-4 pl-2 pt-1 text-xs" style={{ color: "#55503f" }}>

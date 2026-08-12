@@ -69,7 +69,7 @@ import { Card } from "../Card";
 import { Absent } from "../Nothing";
 import { AbsentMarks, Dots } from "../chart/marks";
 import { ChartAbsent, Frame, Plot } from "../chart/Plot";
-import { ChartPoint } from "../chart/scales";
+import { ChartPoint, isAbsent } from "../chart/scales";
 import { prSeries } from "../../lib/chartData";
 import type { PrPoint } from "../../lib/types";
 import { fmtDuration } from "../../lib/units";
@@ -128,11 +128,11 @@ function StepPath({
     <>
       {data.map((p, i) => {
         const next = data[i + 1];
-        if (p.value === null || !next || next.value === null) return null;
+        if (isAbsent(p.value) || !next || isAbsent(next.value)) return null;
         const x0 = frame.x(i);
         const x1 = frame.x(i + 1);
-        const y0 = frame.y(p.value);
-        const y1 = frame.y(next.value);
+        const y0 = frame.y(p.value as number);
+        const y1 = frame.y(next.value as number);
         return (
           <Polyline
             key={i}
@@ -189,7 +189,7 @@ function EventBlock({ event, points }: { event: string; points: PrPoint[] }) {
           // object — never a mono figure in a grey, which would still read as
           // a value. The day rides along as the eyebrow, exactly as the races
           // screen does for a prediction it cannot stand behind.
-          p.value === null ? (
+          isAbsent(p.value) ? (
             <View key={i} style={styles.prRow}>
               <Absent eyebrow={p.label} label="Time not recorded." />
             </View>
@@ -199,7 +199,7 @@ function EventBlock({ event, points }: { event: string; points: PrPoint[] }) {
                   component never derives one. Non-negotiable #2. */}
               <Text style={styles.day}>{p.label}</Text>
               {/* Seconds are never rendered bare; `fmtDuration` makes m:ss. */}
-              <Text style={styles.time}>{fmtDuration(p.value)}</Text>
+              <Text style={styles.time}>{fmtDuration(p.value as number)}</Text>
             </View>
           ),
         )}
@@ -210,7 +210,7 @@ function EventBlock({ event, points }: { event: string; points: PrPoint[] }) {
   /** The value at `i` as words, for the assistive-tech sentence. */
   const say = (i: number) => {
     const v = s.points[i]?.value;
-    return v === null || v === undefined ? "a time that was not recorded" : fmtDuration(v);
+    return isAbsent(v) ? "a time that was not recorded" : fmtDuration(v as number);
   };
 
   return (

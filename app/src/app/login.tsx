@@ -45,6 +45,7 @@ import { useRouter } from "expo-router";
 import { Card } from "../components/Card";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
+import { useSession } from "../lib/session";
 import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
@@ -66,9 +67,15 @@ const EMBER_END = { x: 1, y: 1 } as const;
 /**
  * Static dot path — Expo inlines `EXPO_PUBLIC_*` by textual substitution at
  * build time, so a computed lookup comes back undefined. Same read as
- * `lib/auth.ts`.
+ * `lib/auth.ts`, `__DEV__` guard included.
+ *
+ * That guard is the whole point: `__DEV__` is a compile-time constant, so in a
+ * release bundle this expression folds to `null` and neither the token nor the
+ * button that spends it reaches the shipped JavaScript. Without it, a release
+ * build produced on a machine with the variable set would bake a live,
+ * non-expiring device token for a real athlete into a bundle anyone can read.
  */
-const DEV_TOKEN = process.env.EXPO_PUBLIC_DEV_TOKEN || null;
+const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
 
 type Mode = "password" | "pairing";
 
@@ -223,6 +230,7 @@ async function verify(token: string): Promise<Problem | null> {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { refresh } = useSession();
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -262,6 +270,14 @@ export default function LoginScreen() {
     setPassword("");
     setDraft("");
     setBusy(false);
+    // Writing the keychain is not signing in. The gate in `app/_layout` reads
+    // `useSession().status`, which is resolved ONCE at launch — without this the
+    // status stays "out", the authed group stays unmounted, and `replace("/")`
+    // below targets a screen that does not exist in the navigator, so a correct
+    // password appeared to do nothing until the app was killed and relaunched.
+    // `refresh()` re-reads the keychain and flips the guard, which unmounts this
+    // screen and mounts the tabs.
+    await refresh();
     router.replace("/");
   }
 

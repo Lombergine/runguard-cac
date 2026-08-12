@@ -34,7 +34,12 @@
  * from the module that defines it beats restating it here and letting the two
  * drift.
  */
-import { ChartPoint, paddedDomain, zeroBasedDomain } from "../components/chart/scales";
+import {
+  ChartPoint,
+  isAbsent,
+  paddedDomain,
+  zeroBasedDomain,
+} from "../components/chart/scales";
 import { dayLabel, localDayOffset } from "./dates";
 import { DailyPoint, Fitness, MentalDay, PrPoint, SleepDay } from "./types";
 import { fmtDuration, KM_PER_MI, miNum } from "./units";
@@ -79,6 +84,14 @@ const NOT_ENOUGH_ACWR =
  * At least `min` entries are real. Mirrors `hasEnoughData`
  * (`website/src/components/EmptyState.tsx:19`) exactly, including its
  * tolerance of undefined input — these arrays are all optional on `Profile`.
+ *
+ * Every caller's `isPresent` goes through `isAbsent`, the same predicate the
+ * marks draw with. The website writes its guards as `d.hours !== null` and
+ * friends; a strict `!== null` counts a field the wire simply did not send as
+ * PRESENT, so the gate would pass and then every mark would draw the dashed
+ * unknown — a chart that claims enough history and shows none. For any value
+ * that is actually a number the two tests agree, so the thresholds still match
+ * the website's exactly; they differ only where the website is counting a hole.
  */
 export function enough<T>(
   data: T[] | undefined | null,
@@ -149,6 +162,23 @@ function weekLabel(week: string): string {
   return week ? `Week of ${week}` : "Week not recorded";
 }
 
+/**
+ * Does this weekly bucket cover any days at all?
+ *
+ * The server builds its 12 weekly buckets by slicing a fixed window
+ * (`profile.ts:274`, `athleteView.ts:43`) and labels a bucket that came out
+ * EMPTY with `week: ""` — so an empty `week` string means "this bucket spans no
+ * days", and its aggregate is the sum of nothing rather than a measurement.
+ * `paceTrend` already reports `pace: null` for those, but the mileage buckets
+ * report `km: 0`, and a 0 renders as the solid measured-zero stub. That would
+ * put "0 mi" against a bar the axis itself labels "Week not recorded" — the
+ * picture and its own label contradicting each other, and an absence rendering
+ * as a zero, which is non-negotiable #4.
+ */
+function weekRecorded(week: string): boolean {
+  return week !== "";
+}
+
 const intTick = (v: number) => String(Math.round(v));
 
 /* ══════════════════════════════════════════════════════════════════════ *
@@ -162,18 +192,26 @@ export function weeklyKmSeries(
   const points: ChartPoint[] = rows.map((w) => ({
     label: weekLabel(w.week),
     // KILOMETRES in, miles out. Nothing downstream ever sees a kilometre.
-    value: Number.isFinite(w.km) ? miNum(w.km, 1) : null,
+    // A bucket covering no days is unknown, not a measured zero — see
+    // `weekRecorded`. A week the athlete really did not run IS present, with a
+    // real 0, and still draws the solid stub.
+    value: weekRecorded(w.week) && !isAbsent(w.km) ? miNum(w.km, 1) : null,
   }));
   return {
     points,
-    domain: zeroBasedDomain(points.map((p) => p.value ?? 0)),
+    // Filtered, not `p.value ?? 0`: coalescing an unknown to zero is the one
+    // thing scales.ts forbids, and it would be a live bug the day
+    // `zeroBasedDomain` stopped discarding non-positives itself.
+    domain: zeroBasedDomain(
+      points.map((p) => p.value).filter((v): v is number => !isAbsent(v)),
+    ),
     tickFormat: intTick,
     unitLabel: "MI",
     readout: (i) => {
       const v = points[i]?.value;
-      return v === null || v === undefined ? "Not recorded" : `${v} mi`;
+      return isAbsent(v) ? "Not recorded" : `${v} mi`;
     },
-    enough: enough(rows, MIN_KM_WEEKS, (w) => w.km > 0),
+    enough: enough(rows, MIN_KM_WEEKS, (w) => weekRecorded(w.week) && w.km > 0),
     absentLabel: NOT_ENOUGH,
   };
 }
@@ -190,14 +228,16 @@ export function paceSeries(
   // all one unit and nothing downstream can mix them.
   const points: ChartPoint[] = rows.map((w) => ({
     label: weekLabel(w.week),
+    // A pace of 0 s/km is not a measurement, it is a hole — so unlike a bar
+    // chart's zero, it is unknown here rather than a measured value.
     value:
-      w.pace !== null && Number.isFinite(w.pace) && w.pace > 0
-        ? w.pace * KM_PER_MI
+      !isAbsent(w.pace) && (w.pace as number) > 0
+        ? (w.pace as number) * KM_PER_MI
         : null,
   }));
   const vals = points
     .map((p) => p.value)
-    .filter((v): v is number => v !== null);
+    .filter((v): v is number => !isAbsent(v));
   const [lo, hi] = paddedDomain(vals, 0.25, 8);
   return {
     points,
@@ -208,11 +248,9 @@ export function paceSeries(
     unitLabel: "MIN /MI",
     readout: (i) => {
       const v = points[i]?.value;
-      return v === null || v === undefined
-        ? "Not recorded"
-        : `${fmtDuration(v)} /mi`;
+      return isAbsent(v) ? "Not recorded" : `${fmtDuration(v as number)} /mi`;
     },
-    enough: enough(rows, MIN_PACE_WEEKS, (w) => w.pace !== null),
+    enough: enough(rows, MIN_PACE_WEEKS, (w) => !isAbsent(w.pace)),
     absentLabel: NOT_ENOUGH,
   };
 }
@@ -238,7 +276,7 @@ export function sleepSeries(
      * draws as the dashed unknown mark. Do not "restore" the website's
      * behaviour when comparing the two.
      */
-    value: d.row && d.row.hours !== null ? d.row.hours : null,
+    value: d.row && !isAbsent(d.row.hours) ? d.row.hours : null,
   }));
   return {
     points,
@@ -250,11 +288,9 @@ export function sleepSeries(
     unitLabel: "HOURS",
     readout: (i) => {
       const v = points[i]?.value;
-      return v === null || v === undefined
-        ? "Not recorded"
-        : `${v.toFixed(1)} h`;
+      return isAbsent(v) ? "Not recorded" : `${(v as number).toFixed(1)} h`;
     },
-    enough: enough(sleep30, MIN_SLEEP_NIGHTS, (d) => d.hours !== null),
+    enough: enough(sleep30, MIN_SLEEP_NIGHTS, (d) => !isAbsent(d.hours)),
     absentLabel: NOT_ENOUGH,
   };
 }
@@ -277,7 +313,7 @@ export function acwrSeries(
     // the day, and a row whose ratio the engine could not compute yet
     // (`lib/types.ts:148`). Both mean "we don't know", and the athlete is owed
     // the same dashed mark for each.
-    value: d.row && d.row.acwr !== null ? d.row.acwr : null,
+    value: d.row && !isAbsent(d.row.acwr) ? d.row.acwr : null,
   }));
   return {
     points,
@@ -289,12 +325,15 @@ export function acwrSeries(
     unitLabel: "RATIO",
     readout: (i) => {
       const v = points[i]?.value;
-      return v === null || v === undefined
+      return isAbsent(v)
         ? "Not recorded"
-        : `${v.toFixed(2)} workload ratio`;
+        : `${(v as number).toFixed(2)} workload ratio`;
     },
-    // Counted over the window actually drawn, not the website's 60.
-    enough: enough(points, MIN_ACWR_POINTS, (p) => p.value !== null),
+    // Counted over the window actually drawn, not the website's 60, and with
+    // the same predicate the marks use: a trimmed payload that omits `acwr`
+    // entirely would otherwise pass `!== null` on all 30 days and then draw 30
+    // dashed unknowns under a chart claiming enough workload history.
+    enough: enough(points, MIN_ACWR_POINTS, (p) => !isAbsent(p.value)),
     absentLabel: NOT_ENOUGH_ACWR,
   };
 }
@@ -353,7 +392,7 @@ export function loadSeries(
 
   const all = [...points, ...acute, ...chronic]
     .map((p) => p.value)
-    .filter((v): v is number => v !== null);
+    .filter((v): v is number => !isAbsent(v));
 
   return {
     points,
@@ -366,10 +405,10 @@ export function loadSeries(
       const l = points[i]?.value;
       const a = acute[i]?.value;
       const c = chronic[i]?.value;
-      if (l === null || l === undefined) return "Not recorded";
-      const parts = [`${Math.round(l)} load`];
-      if (a !== null && a !== undefined) parts.push(`${Math.round(a)} acute`);
-      if (c !== null && c !== undefined) parts.push(`${Math.round(c)} chronic`);
+      if (isAbsent(l)) return "Not recorded";
+      const parts = [`${Math.round(l as number)} load`];
+      if (!isAbsent(a)) parts.push(`${Math.round(a as number)} acute`);
+      if (!isAbsent(c)) parts.push(`${Math.round(c as number)} chronic`);
       return parts.join(" · ");
     },
     enough: enough(series, MIN_LOAD_DAYS, (d) => d.load > 0),
@@ -419,18 +458,22 @@ export function mentalSeries(
     readout: (i) => {
       const e = energy[i]?.value;
       const m = motivation[i]?.value;
-      if ((e === null || e === undefined) && (m === null || m === undefined)) {
-        return "Not recorded";
-      }
+      if (isAbsent(e) && isAbsent(m)) return "Not recorded";
       // "—" is this app's unknown glyph, so one missing half reads the same
       // way here as it does in every slot on every other screen. The scale is
       // welded on: a bare "7" out of context could be anything.
-      return `energy ${e ?? "—"}/10 · motivation ${m ?? "—"}/10`;
+      return `energy ${isAbsent(e) ? "—" : e}/10 · motivation ${
+        isAbsent(m) ? "—" : m
+      }/10`;
     },
+    // The website writes this `d.energy != null || d.motivation != null`
+    // (`charts.tsx:398`) — loose on purpose, so a field the payload omits does
+    // not count as an answered question. `isAbsent` is that same intent, plus
+    // NaN.
     enough: enough(
       mental30,
       MIN_MENTAL_DAYS,
-      (d) => d.energy !== null || d.motivation !== null,
+      (d) => !isAbsent(d.energy) || !isAbsent(d.motivation),
     ),
     absentLabel: NOT_ENOUGH,
   };
@@ -446,7 +489,7 @@ export function fitnessSeries(
   const rows = weekly ?? [];
   const points: ChartPoint[] = rows.map((w) => ({
     label: weekLabel(w.week),
-    value: Number.isFinite(w.score) ? w.score : null,
+    value: !isAbsent(w.score) ? w.score : null,
   }));
   return {
     points,
@@ -459,11 +502,11 @@ export function fitnessSeries(
     unitLabel: "SCORE",
     readout: (i) => {
       const v = points[i]?.value;
-      return v === null || v === undefined
+      return isAbsent(v)
         ? "Not recorded"
-        : `${Math.round(v)} fitness score`;
+        : `${Math.round(v as number)} fitness score`;
     },
-    enough: enough(rows, MIN_FITNESS_WEEKS),
+    enough: enough(rows, MIN_FITNESS_WEEKS, (w) => !isAbsent(w.score)),
     absentLabel: NOT_ENOUGH,
   };
 }
@@ -483,9 +526,9 @@ export function prSeries(points: PrPoint[] | undefined, event: string): ChartSer
   const rows = points ?? [];
   const pts: ChartPoint[] = rows.map((p) => ({
     label: dayLabel(p.date),
-    value: Number.isFinite(p.timeS) ? p.timeS : null,
+    value: !isAbsent(p.timeS) ? p.timeS : null,
   }));
-  const vals = pts.map((p) => p.value).filter((v): v is number => v !== null);
+  const vals = pts.map((p) => p.value).filter((v): v is number => !isAbsent(v));
   // The website's PR padding: `Math.max(5, span * 0.3)` (`charts.tsx:375`).
   const [lo, hi] = paddedDomain(vals, 0.3, 5);
   return {
@@ -496,11 +539,11 @@ export function prSeries(points: PrPoint[] | undefined, event: string): ChartSer
     unitLabel: "MIN:SEC",
     readout: (i) => {
       const v = pts[i]?.value;
-      return v === null || v === undefined
+      return isAbsent(v)
         ? "Not recorded"
-        : `${fmtDuration(v)} · ${event} PR`;
+        : `${fmtDuration(v as number)} · ${event} PR`;
     },
-    enough: enough(rows, MIN_PR_POINTS),
+    enough: enough(rows, MIN_PR_POINTS, (p) => !isAbsent(p.timeS)),
     absentLabel: "No PRs logged yet for this event.",
   };
 }

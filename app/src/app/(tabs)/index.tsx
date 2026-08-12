@@ -161,11 +161,22 @@ export default function CheckInScreen() {
    * rendered from this and from nothing else, so there is no draft state that a
    * receipt could describe as though it had been written.
    *
-   * It starts empty rather than seeded from `profile.todaySoreness`, and that
-   * is sound rather than lazy: a soreness row creates a `checkins` row
-   * (`upsertCheckinSoreness` → `upsertCheckin`), so any soreness already stored
-   * for today implies `todayCheckin`, which collapses this screen to the
-   * receipt and never renders the card at all.
+   * IT IS SEEDED FROM `profile.todaySoreness` ON LOAD, and it has to be. It
+   * used to start empty, on the reasoning that a soreness row creates a
+   * `checkins` row (`upsertCheckinSoreness` → `upsertCheckin`) and so any
+   * soreness stored for today implied `todayCheckin`, which collapsed this
+   * screen to the receipt. That stopped being true the moment the gate became
+   * `checkedInToday` (lib/readiness.ts): a soreness-only write leaves `rpe`,
+   * `energy` and `motivation` all NULL, so the row no longer opens the gate and
+   * this card renders WITH soreness already on the server — after the athlete
+   * scored a knee in the browser, or scored one here and relaunched the app.
+   *
+   * An empty mirror in that state was not a cosmetic gap. It drew the figure
+   * with no lit region, told the athlete "Not scored yet." over a row that was
+   * scored, took the tap-to-clear gesture away from those rows, hid a
+   * failed supersede (`held` below is computed from this map), and finished by
+   * printing "No soreness reported." on a receipt for a day that had soreness
+   * reported. Seeding from the server is what this map always claimed to be.
    */
   const [logged, setLogged] = useState<LoggedSoreness>({});
   /**
@@ -188,6 +199,16 @@ export default function CheckInScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitFailed, setSubmitFailed] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  /**
+   * Bumped by "Try again", and the ONLY thing that re-runs the load.
+   *
+   * Without it the button cleared `loadError` and nothing else: the effect's
+   * deps held one stable ref, so it never ran a second time, `profile` stayed
+   * null, and the screen fell to the skeleton branch and stayed there. A
+   * retry that renders a permanent loading state is worse than no retry —
+   * it reads as "still working" for a request that was never made.
+   */
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Starts opaque: nothing on this screen has an entrance animation. It is only
   // driven for the 180ms reveal after a check-in.
@@ -197,7 +218,16 @@ export default function CheckInScreen() {
     let alive = true;
     getHome()
       .then((p) => {
-        if (alive) setProfile(p);
+        if (!alive) return;
+        setProfile(p);
+        // Only the FIRST load seeds. `finish()` refetches into `setProfile`
+        // directly, by which point `stored` has already been captured and the
+        // card is gone — re-seeding there would rewrite a mirror nothing reads.
+        // `todaySoreness` is the server's own list of today's rows, keyed in
+        // the same "left knee" form `sorenessLabel` produces.
+        setLogged(
+          Object.fromEntries((p.todaySoreness ?? []).map((s) => [s.part, s.severity]))
+        );
       })
       .catch((err: unknown) => {
         if (alive) setLoadError(isUnauthorized(err) ? "unpaired" : "failed");
@@ -210,7 +240,7 @@ export default function CheckInScreen() {
     return () => {
       alive = false;
     };
-  }, [reveal]);
+  }, [reveal, reloadKey]);
 
   /**
    * ONE ROW PER REQUEST, plus its supersedes. The route stores a single
@@ -302,9 +332,10 @@ export default function CheckInScreen() {
       setSubmitting(false);
       return;
     }
-    // The receipt is built from the mirror, which holds only rows whose write
-    // returned — so it cannot name soreness the server does not have, and the
-    // uncleared list stops it claiming a replacement that did not happen.
+    // The receipt is built from the mirror, which holds only rows the server
+    // reported holding plus rows whose own write returned — so it cannot name
+    // soreness the server does not have, and the uncleared list stops it
+    // claiming a replacement that did not happen.
     setStored({ entries: Object.entries(logged), uncleared });
     setSubmittedAt(new Date());
     setSubmitting(false);
@@ -350,7 +381,10 @@ export default function CheckInScreen() {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => setLoadError("none")}
+              onPress={() => {
+                setLoadError("none");
+                setReloadKey((n) => n + 1);
+              }}
               accessibilityRole="button"
               style={styles.loadErrorAction}
             >
@@ -686,15 +720,17 @@ function RecoveryGrid({ recovery }: { recovery: RecoverySnapshot }) {
 }
 
 /**
- * Exactly what the soreness half of the check-in put on the server, and nothing
- * beyond it. It renders only for a check-in this session submitted, because
- * that is the only one whose soreness this screen witnessed.
+ * Exactly what the server holds for today, and nothing beyond it. It renders
+ * only for a check-in this session submitted, because that is the only one this
+ * screen has a mirror for.
  *
  * It names every stored row in full — "left knee 6/10 · shin 0/10" — through
  * the same component the card's own readout used, so the two cannot word the
- * same rows differently. An empty list means the athlete answered "No", which
- * is a reported fact and says so; it is never printed for a check-in that
- * simply failed to record something.
+ * same rows differently. An empty list means the server holds no soreness for
+ * today, which is a reported fact and says so; it is never printed for a
+ * check-in that simply failed to record something, and — since the mirror is
+ * seeded from `todaySoreness` — never for a day whose soreness was logged
+ * somewhere other than this session.
  *
  * AND IT CLAIMS NO MORE THAN THAT. A supersede clear that did not land leaves a
  * row on the server the athlete believes they replaced, so the second line

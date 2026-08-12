@@ -77,6 +77,7 @@ import { Absent } from "./Nothing";
 import { Card } from "./Card";
 import { Stat } from "./Stat";
 import { useProfile } from "../lib/profileStore";
+import { fitnessKnown } from "../lib/readiness";
 import type { PRRecord, Predictions } from "../lib/types";
 import { layout, ruleWidth, space } from "../theme/space";
 import { color } from "../theme/tokens";
@@ -150,7 +151,9 @@ function PrRow({
 export function PrTable({ prs, predictions }: PrTableProps) {
   // See the header: the gate, not decoration. `?? false` fails closed.
   const { profile } = useProfile();
-  const predictionKnown = profile?.risk.hasActivityHistory ?? false;
+  // See lib/readiness.ts: `hasActivityHistory` never goes false, so it cannot
+  // distinguish a real prediction from one built on the model's 50 fallback.
+  const predictionKnown = profile ? fitnessKnown(profile) : false;
 
   return (
     <View style={styles.block}>

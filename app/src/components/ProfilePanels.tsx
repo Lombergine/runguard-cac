@@ -40,11 +40,23 @@ import { text } from "../theme/type";
 /** The five the website checks for, in its order (`tabs.tsx:819-832`). */
 const APPS = ["Apple Health", "Strava", "Garmin", "COROS", "WHOOP"] as const;
 
+/**
+ * What the server actually puts in `connectedSources`
+ * (website/src/lib/profile.ts:124): `"Strava"`, `"Apple Watch"`, or the sentinel
+ * `"No data yet"` when the set is empty. It never emits `"Apple Health"`, and
+ * `"healthkit"` / `"apple_export"` are the ACTIVITY `source` column values it
+ * reads to decide — not strings it ever sends. Matching only on those meant the
+ * Apple Health pill could not light for anyone, so an athlete whose watch was
+ * syncing read the footnote below as "nothing has arrived from it". Both forms
+ * are matched; the sentinel matches nothing, which is the correct outcome.
+ */
+const APPLE_ALIASES = ["apple watch", "apple health", "healthkit", "apple_export"];
+
 export function ConnectedApps({ sources }: { sources: string[] | undefined }) {
   const on = new Set((sources ?? []).map((s) => s.toLowerCase()));
   const isOn = (name: string) =>
     on.has(name.toLowerCase()) ||
-    (name === "Apple Health" && (on.has("healthkit") || on.has("apple_export")));
+    (name === "Apple Health" && APPLE_ALIASES.some((a) => on.has(a)));
 
   return (
     <Card>

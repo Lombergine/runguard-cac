@@ -185,6 +185,18 @@ export default function ChatScreen() {
    * Losing older history until the next visit is the cheaper failure.
    */
   const sendStarted = useRef(false);
+  /**
+   * True once a history fetch has resolved with messages that were then
+   * DISCARDED by the rule above. The list is empty but the THREAD IS NOT, so
+   * the empty state's "Nothing sent yet" would be a statement about this
+   * athlete that is false — an absence of loaded data reading as a known zero.
+   *
+   * It is reachable: send before the mount fetch lands, the history is
+   * discarded, then the send fails and its optimistic row is dropped, leaving
+   * `[]`. `loadFailed` already suppresses the empty state for the same reason;
+   * this is the case it does not cover, because here the fetch SUCCEEDED.
+   */
+  const [historyDiscarded, setHistoryDiscarded] = useState(false);
 
   /**
    * The single response to a 401, from either request. `signOut()` is the only
@@ -200,7 +212,12 @@ export default function ChatScreen() {
     let alive = true;
     getChat()
       .then((history) => {
-        if (alive && !sendStarted.current) setMessages(history);
+        if (!alive) return;
+        if (sendStarted.current) {
+          if (history.length > 0) setHistoryDiscarded(true);
+          return;
+        }
+        setMessages(history);
       })
       .catch((err: unknown) => {
         if (!alive) return;
@@ -322,7 +339,10 @@ export default function ChatScreen() {
           ListEmptyComponent={
             // Nothing to say while the first load is still in flight, and
             // nothing to say when it failed — the notice above covers that.
-            messages === null ? null : (
+            // Nothing to say either when the thread is known to be non-empty
+            // and we simply are not holding it: an empty list is not a fact
+            // about the athlete, and "Nothing sent yet" would assert one.
+            messages === null || historyDiscarded ? null : (
               <View style={styles.opener}>
                 <Panel title="Ask your coach" note="Nothing sent yet">
                   <Text style={styles.plain}>

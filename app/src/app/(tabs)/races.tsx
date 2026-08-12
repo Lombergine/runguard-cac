@@ -43,10 +43,11 @@ import { PrChart } from "../../components/charts/PrChart";
 import { dayLabel } from "../../lib/dates";
 import { fmtDuration } from "../../lib/units";
 import { useProfile } from "../../lib/profileStore";
+import { fitnessKnown } from "../../lib/readiness";
 import type { Profile, RaceHistoryEntry, UpcomingRace } from "../../lib/types";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
-import { font, text } from "../../theme/type";
+import { font, tabular, text } from "../../theme/type";
 
 /**
  * Inside this many days the card wears the ember strip. Ported from the
@@ -386,7 +387,9 @@ export default function RacesScreen() {
     );
   }
 
-  const predictionKnown = profile.risk.hasActivityHistory;
+  // Predictions come from `predictRaces`, which takes `fitness.score` — and
+  // that is a fabricated 50 whenever the model had nothing. See fitnessKnown.
+  const predictionKnown = fitnessKnown(profile);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -468,6 +471,10 @@ const styles = StyleSheet.create({
   splits: {
     ...text.meta,
     fontFamily: font.mono,
+    // Mandatory on any mono numeral (theme/type.ts) — `text.meta` is a body
+    // role and does not carry it, so overriding the family has to bring it
+    // along. Without it a wrapped run of splits mis-aligns line to line.
+    ...tabular,
     color: color.ink2,
     marginTop: space.xs,
   },

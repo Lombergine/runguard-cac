@@ -1,4 +1,4 @@
-import { localDay } from "./day";
+import { localDay, localDayOffset } from "./day";
 import { HR_MAX_DEFAULT } from "./hrmax";
 import { miNum } from "./units";
 /**
@@ -165,8 +165,34 @@ export function detectPatterns(
   const undertraining =
     risk.acwr !== null && risk.acwr < 0.7 && risk.weekKm < avg4wk * 0.7 && avg4wk > 10;
 
+  /*
+   * THE LAST SEVEN NIGHTS, BY THE CALENDAR — not the last seven rows that
+   * happen to have data.
+   *
+   * This was `.filter(sleep_hours != null).slice(-7)`, which has no window at
+   * all: it reaches as far back as it needs to to find seven readings. When a
+   * watch stops syncing, both figures below carry on reporting, and the copy
+   * around them says "this week".
+   *
+   * Observed on the dev database: an athlete whose sleep data ends 2026-07-28,
+   * read on 2026-08-11, showed `sleepAvg: null` — "Not recorded", correctly,
+   * because THAT figure uses a real 7-day window — sitting directly beside
+   * `sleepConsistency: 82` and `sleepDebtH: 3.6` scored from nights a fortnight
+   * old. Two tiles about the same seven nights, one admitting the gap and one
+   * presenting stale data as current. The tile's own explainer says "the swing
+   * across the last 7 nights", which was not true of it.
+   *
+   * A stale number presented as a current one is the same failure as a blank
+   * presented as a healthy value: the reader cannot tell that what they are
+   * looking at is not an answer to the question they asked.
+   *
+   * `detectEnergyDecline` below already works this way. So does
+   * `RecoverySnapshot.sleepAvg`. This brings the two sleep figures into line
+   * with both.
+   */
+  const sleepWindowStart = localDayOffset(6);
   const last7Sleep = metrics
-    .filter((m) => m.sleep_hours != null)
+    .filter((m) => m.sleep_hours != null && m.date >= sleepWindowStart)
     .slice(-7)
     .map((m) => m.sleep_hours as number);
   const sleepDebtH = last7Sleep.length

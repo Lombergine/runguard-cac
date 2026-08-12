@@ -129,7 +129,7 @@ function explainFailure(err: unknown): string {
 }
 
 export default function ConnectScreen() {
-  const { status } = useSession();
+  const { status, signOut } = useSession();
   const signedIn = status === "in";
 
   /*
@@ -174,6 +174,31 @@ export default function ConnectScreen() {
     })();
   }, [signedIn]);
 
+  /**
+   * A failed sync, with its 401 acted on HERE.
+   *
+   * `isUnauthorized` FIRST and `signOut()` UNGUARDED — the rule lib/profileStore
+   * states and calendar.tsx once got wrong. `postIngest` throws this kind on a
+   * 401 from /api/mobile/ingest and on a missing token, and both mean this
+   * device no longer has a session.
+   *
+   * This used to be left entirely to the `refresh()` below to discover, on the
+   * theory that a token /api/mobile/ingest rejects will be rejected by /me too.
+   * That is a guarantee resting on convention rather than structure, and it has
+   * a hole: `refresh()` JOINS an already in-flight `/me` rather than issuing a
+   * new one, so a request sent moments before the token was revoked can resolve
+   * 200 and sign nobody out — leaving a revoked device signed in, with every
+   * other tab still rendering the previous athlete's cached numbers. A screen
+   * holding direct proof of a dead credential must not delegate that proof.
+   */
+  const onFailure = useCallback(
+    (err: unknown) => {
+      if (err instanceof HealthError && err.kind === "unauthorized") void signOut();
+      setFailure(explainFailure(err));
+    },
+    [signOut]
+  );
+
   /** Connect = ask, then immediately read. The read is the only real evidence. */
   const connect = useCallback(async () => {
     if (busy || !signedIn) return;
@@ -183,14 +208,14 @@ export default function ConnectScreen() {
       await requestPermissions();
       await sync();
     } catch (err) {
-      setFailure(explainFailure(err));
+      onFailure(err);
     }
     setHealth(await getState());
     // `refresh()`, not `invalidate()`: a sync can add the very first source, so
     // this has to fetch even when `/me` has never landed on this device.
     await refresh();
     setBusy(false);
-  }, [busy, signedIn, refresh]);
+  }, [busy, signedIn, refresh, onFailure]);
 
   const syncNow = useCallback(async () => {
     if (busy || !signedIn) return;
@@ -199,12 +224,12 @@ export default function ConnectScreen() {
     try {
       await sync();
     } catch (err) {
-      setFailure(explainFailure(err));
+      onFailure(err);
     }
     setHealth(await getState());
     await refresh();
     setBusy(false);
-  }, [busy, signedIn, refresh]);
+  }, [busy, signedIn, refresh, onFailure]);
 
   // The gate, applied where it cannot be raced: a stale `health` — one read
   // before the session ended, or resolved after it — cannot reach the screen,
@@ -212,6 +237,13 @@ export default function ConnectScreen() {
   const last = signedIn ? (health?.lastSync ?? null) : null;
   const lastAt = last ? syncLabel(last.at) : null;
   const readNothing = last !== null && last.read.workouts === 0 && last.read.metrics === 0;
+  /**
+   * Entries the server REFUSED, when it said. Undefined means a record written
+   * before the count existed — unknown, not zero — so this stays false and the
+   * line below simply does not appear rather than asserting nothing was lost.
+   */
+  const refused = last?.rejected ?? null;
+  const refusedAny = refused !== null && (refused.workouts > 0 || refused.metrics > 0);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -315,10 +347,31 @@ export default function ConnectScreen() {
                       </View>
                       <View style={styles.cell} />
                     </View>
-                    {/* The caveat that stops a zero reading as a failure. */}
+                    {/* Refusals, when there were any. Without this the figures
+                        above cannot be told apart from a healthy repeat sync:
+                        both read N and import 0, and the caption below used to
+                        say a zero could only mean "nothing had changed". */}
+                    {refusedAny && refused ? (
+                      <Text style={styles.problem} accessibilityLiveRegion="polite">
+                        Your server refused{" "}
+                        {refused.workouts > 0
+                          ? `${refused.workouts} workout${refused.workouts === 1 ? "" : "s"}`
+                          : ""}
+                        {refused.workouts > 0 && refused.metrics > 0 ? " and " : ""}
+                        {refused.metrics > 0
+                          ? `${refused.metrics} day${refused.metrics === 1 ? "" : "s"} of readings`
+                          : ""}{" "}
+                        as unreadable. They were not stored, and they are not counted as
+                        new.
+                      </Text>
+                    ) : null}
+                    {/* The caveat that stops a zero reading as a failure. Its
+                        second sentence is only true when nothing was refused. */}
                     <Text style={styles.caption}>
                       New counts only the workouts your server had not already stored.
-                      Zero means nothing had changed since the last sync.
+                      {refusedAny
+                        ? ""
+                        : " Zero means nothing had changed since the last sync."}
                     </Text>
                   </View>
                 ) : null}

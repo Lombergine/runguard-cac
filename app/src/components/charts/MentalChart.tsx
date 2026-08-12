@@ -64,7 +64,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Dots, LinePath } from "../chart/marks";
-import type { ChartPoint } from "../chart/scales";
+import { type ChartPoint, isAbsent } from "../chart/scales";
 import { DAILY_DAYS, mentalSeries } from "../../lib/chartData";
 import type { MentalDay } from "../../lib/types";
 import { layout, radius, ruleWidth, space } from "../../theme/space";
@@ -156,11 +156,11 @@ export function MentalChart({ mental30 }: { mental30?: MentalDay[] }) {
    */
   const gaps: ChartPoint[] = energy.map((p, i) => ({
     label: p.label,
-    value: p.value === null || motivation[i].value === null ? null : p.value,
+    value: isAbsent(p.value) || isAbsent(motivation[i].value) ? null : p.value,
   }));
 
   const recorded = energy.filter(
-    (p, i) => p.value !== null || motivation[i].value !== null,
+    (p, i) => !isAbsent(p.value) || !isAbsent(motivation[i].value),
   ).length;
 
   return (

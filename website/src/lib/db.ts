@@ -355,6 +355,8 @@ export async function createRace(r: {
   return row!;
 }
 
+const RACE_PATCH_COLUMNS: string[] = ["name", "date", "event", "distance_m", "location"];
+
 export async function updateRace(
   id: number,
   athleteId: number,
@@ -364,6 +366,15 @@ export async function updateRace(
   if (!race || race.created_by_athlete_id !== athleteId) return false;
   const fields = Object.keys(patch);
   if (!fields.length) return true;
+  // Column names cannot be bound, so they are interpolated — which means the only
+  // thing standing between a request body and the SQL text is whatever the caller
+  // built `patch` from. Today that is a fixed list of literals in the PATCH route,
+  // but that is a convention, and a second caller that assigned straight from
+  // parsed JSON would be writing SQL from the network. Throwing on an unknown key
+  // (rather than dropping it, which would report success for an edit that never
+  // happened) makes it structural instead.
+  const bad = fields.filter((f) => !RACE_PATCH_COLUMNS.includes(f));
+  if (bad.length) throw new Error(`updateRace: not an editable race column: ${bad.join(", ")}`);
   const sets = fields.map((f) => `${f} = @${f}`).join(", ");
   await run(`UPDATE races SET ${sets} WHERE id = @id`, { ...patch, id });
   return true;
