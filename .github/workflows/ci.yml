@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        # The Next app moved under website/ when the mobile client landed
+        # beside it. There is no root package.json and no workspace tooling,
+        # so every step has to run from the package directory.
+        working-directory: website
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      # `npm ci`, not `npm install`: it installs exactly the lockfile and fails
+      # loudly if package.json and package-lock.json have drifted.
+      - name: Install
+        run: npm ci
+
+      # Runs before the build on purpose. tsconfig.json includes
+      # `.next/types/**` and `.next/dev/types/**`, so on a machine with a stale
+      # .next this picks up generated files instead of source. A fresh checkout
+      # has no .next, so this only ever sees src/ and scripts/.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # Every data page is force-dynamic, so the build never queries the
+          # database. This is only here so session.ts's fail-closed check has
+          # something to read under NODE_ENV=production.
+          DB_DRIVER: sqlite
+          SESSION_SECRET: ci-only-not-a-real-secret-000000000000
+
+  # The Expo app is deliberately not built here yet. Its lockfile was resolved
+  # with --legacy-peer-deps (expo-router pulls a react-dom whose peer range the
+  # SDK's pinned react does not satisfy), so `npm ci` is not reproducible
+  # against it until that is settled. Add a typecheck job here once it is.

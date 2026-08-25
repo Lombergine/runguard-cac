@@ -14,6 +14,11 @@ export const dynamic = "force-dynamic";
 export default async function Dashboard() {
   const teamId = await currentTeamId();
   const team = teamId ? await getTeam(teamId) : null;
+  // Reading the clock IS the intent here. This is an async Server Component
+  // marked force-dynamic, so it re-runs per request and Date.now() is the
+  // request time; there is no purer source for it. The rule targets client
+  // renders that must be replayable, which this is not.
+  // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const since = new Date(nowMs - 130 * 86400000).toISOString();
   const soreSince = localDayOffset(13, new Date(nowMs));

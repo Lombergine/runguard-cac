@@ -31,39 +31,62 @@ export default function Gauge({
   const arcLen = C * arcFrac;
   const frac = Math.max(0, Math.min(1, value / max));
 
-  const [shown, setShown] = useState(animate ? 0 : frac);
-  const [displayNum, setDisplayNum] = useState(animate ? 0 : Math.round(value));
+  const [animShown, setAnimShown] = useState(0);
+  const [animNum, setAnimNum] = useState(0);
   const raf = useRef<number | null>(null);
 
+  /**
+   * Derived, not stored, when there is nothing to animate.
+   *
+   * The previous version kept `frac` in state and re-synced it from an effect,
+   * which did two bad things: it wrote state synchronously inside the effect
+   * body (a second render before paint, every mount), and it went stale if
+   * `value` changed while `animate` was false, because the render path was
+   * reading a copy instead of the prop. Reading the prop directly cannot drift.
+   */
+  const shown = animate ? animShown : frac;
+  const displayNum = animate ? animNum : Math.round(value);
+
   useEffect(() => {
-    if (!animate) {
-      setShown(frac);
-      setDisplayNum(Math.round(value));
-      return;
-    }
+    if (!animate) return;
+
     const reduced =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
     if (reduced) {
-      setShown(frac);
-      setDisplayNum(Math.round(value));
-      return;
+      // Deferred by a frame rather than set synchronously here: a setState in
+      // the effect body forces a re-render before the browser paints, which is
+      // the cascade the lint rule is warning about. One frame is invisible and
+      // the value still lands immediately.
+      const id = requestAnimationFrame(() => {
+        setAnimShown(frac);
+        setAnimNum(Math.round(value));
+      });
+      return () => cancelAnimationFrame(id);
     }
-    const t0 = performance.now();
+
     const dur = 1000;
     const delay = 180;
-    setShown(frac); // CSS transition handles the arc sweep
+    let t0: number | null = null;
+
     const tick = (t: number) => {
+      if (t0 === null) {
+        t0 = t;
+        // Kick the arc on the first frame — the CSS transition on .gauge-arc
+        // sweeps it from 0 to frac while the number counts alongside.
+        setAnimShown(frac);
+      }
       const x = Math.min(1, Math.max(0, (t - t0 - delay) / dur));
       const eased = 1 - Math.pow(1 - x, 4); // quart-out, lands with the arc
-      setDisplayNum(Math.round(value * eased));
+      setAnimNum(Math.round(value * eased));
       if (x < 1) raf.current = requestAnimationFrame(tick);
     };
+
     raf.current = requestAnimationFrame(tick);
     return () => {
       if (raf.current) cancelAnimationFrame(raf.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, frac, animate]);
 
   // rotate so the 270° arc opens at the bottom

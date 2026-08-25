@@ -236,3 +236,122 @@ body::after {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------- contour field ----------
+ * Atmosphere behind the hero instead of flat cream. Contour lines rather than
+ * the usual gradient blob or dot grid: this is a product about running routes,
+ * so the texture is a topographic map, which reads as context rather than
+ * decoration. Sits under content, fades out downward so it never fights the
+ * headline.
+ */
+
+.topo {
+  position: relative;
+  isolation: isolate;
+}
+
+.topo::before {
+  content: "";
+  position: absolute;
+  inset: -10% -20% 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='300' viewBox='0 0 420 300'%3E%3Cg fill='none' stroke='%23c9b99a' stroke-width='1'%3E%3Cpath d='M-20 60c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 96c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 132c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 168c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 204c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 240c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 276c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 620px auto;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 25%, #000 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 25%, #000 20%, transparent 75%);
+}
+
+/* ---------- interaction states ----------
+ *
+ * This system had no focus styles at all — every button, link and input fell
+ * back to whatever the browser draws, which differs per browser and vanishes
+ * against some of these backgrounds. A designed focus ring is the cheapest
+ * thing that separates a shipped product from a prototype, and it is a WCAG
+ * 2.4.7 requirement besides.
+ *
+ * :focus-visible, not :focus — it appears for keyboard and assistive-tech
+ * users and stays out of the way on mouse clicks, which is the reason people
+ * used to strip focus styles entirely.
+ *
+ * The ring is ink rather than amber: every surface here is a light cream or
+ * white, so a near-black ring has contrast everywhere, including around the
+ * amber-filled buttons where an amber ring would disappear into the fill.
+ */
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+/* Kill the default ring only where ours has replaced it, never globally. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Text inputs also get a filled state, because an outline alone on a field
+   that already has a border reads as a rendering glitch rather than focus. */
+:where(input, select, textarea):focus-visible {
+  border-color: var(--brand-strong);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+}
+
+/* ---------- disabled ----------
+ * Previously simulated by hardcoding a paler background on one button, which
+ * left the element still hoverable, still clickable, and still lifting.
+ */
+
+:where(button, input, select, textarea):disabled,
+[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: saturate(0.55);
+}
+
+:where(button, a):disabled:hover,
+[aria-disabled="true"]:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--hairline);
+}
+
+/* ---------- loading ----------
+ * Every data page is force-dynamic, so the roster is computed per request.
+ * On school wifi that is a blank white pause with nothing on screen. A
+ * skeleton in the shape of what is coming reads as fast; an empty viewport
+ * reads as broken.
+ */
+
+@keyframes shimmer {
+  from { background-position: -180% 0; }
+  to   { background-position: 180% 0; }
+}
+
+.skeleton {
+  border-radius: 8px;
+  background-color: var(--surface-2);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.75) 50%,
+    transparent 100%
+  );
+  background-size: 180% 100%;
+  animation: shimmer 1.5s var(--ease-out-quart) infinite;
+  color: transparent !important;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Height helpers so a skeleton can mirror the line it stands in for. */
+.skeleton-text { height: 0.85em; margin: 0.25em 0; }
+.skeleton-line { height: 1px; }
+
+[aria-busy="true"] {
+  cursor: progress;
+}
+
+/* The shimmer is decorative; the reduced-motion block above already freezes
+   it, which leaves a static grey placeholder — still the right thing to show. */
