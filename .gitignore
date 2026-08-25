@@ -1,7 +1,14 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+#
+# Patterns here must match at ANY depth, not just the repo root, because the
+# tree is two sibling projects (website/ and app/) rather than one at the root.
+# A leading slash anchors to this file's directory — and so does a slash in the
+# MIDDLE of a pattern, which is the non-obvious half: `data/*.db` is just as
+# anchored as `/data/*.db` and would NOT have matched website/data/. Directory
+# patterns like `node_modules/` have only a trailing slash, so they float.
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -11,14 +18,15 @@
 !.yarn/versions
 
 # testing
-/coverage
+coverage/
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
+dist/
 
 # misc
 .DS_Store
@@ -47,7 +55,23 @@ _to_delete/
 # claude code
 .claude/
 
-# local SQLite database — runtime data, never committed
-/data/*.db
-/data/*.db-shm
-/data/*.db-wal
+# local SQLite database — runtime data, never committed.
+# Three separate lines rather than `**/data/*.db*`, which would also swallow
+# things like .dbconfig.
+**/data/*.db
+**/data/*.db-shm
+**/data/*.db-wal
+.gstack/
+
+# mobile app (app/) — Expo build output and signing material. None of these
+# were matched by the rules above, and the credential files must never land in
+# a commit.
+.expo/
+expo-env.d.ts
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist

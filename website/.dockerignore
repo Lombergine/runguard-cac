@@ -1,0 +1,10 @@
+node_modules
+.next
+data
+*.zip
+.git
+.env*
+.DS_Store
+*.tsbuildinfo
+npm-debug.log
+milemarker-ios

@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "RunGuard",
+    "slug": "runguard",
+    "scheme": "runguard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "run.runguard.app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "RunGuard connects to your team's RunGuard server on this network during development.",
+        "NSHealthShareUsageDescription": "RunGuard reads your running workouts (start time, duration, distance, heart rate, cadence, and a workout's GPS route) and your daily recovery figures (resting heart rate, heart-rate variability, sleep, VO2max, respiratory rate, blood oxygen, wrist temperature). It uses them to work out how much training load you are carrying, to show you a readiness and injury-risk reading, and to show that same reading to the coach of your team. This data is never sold, never used for advertising, and never given to data brokers. You can change or revoke this in Settings > Privacy & Security > Health > RunGuard.",
+        "NSHealthUpdateUsageDescription": "RunGuard does not write anything to Health today. If you ask RunGuard to save a run you logged in the app, only that one workout - its date, duration and distance - is written back. Nothing already in Health is edited or deleted."
+      }
+    },
+    "android": {
+      "package": "run.runguard.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#F3F5F4",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "root": "./src/app"
+        }
+      ],
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F3F5F4",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "background": false
+        }
+      ]
+    ]
+  }
+}
