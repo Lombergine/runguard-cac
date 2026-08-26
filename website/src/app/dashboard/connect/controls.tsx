@@ -3,108 +3,64 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function ConnectControls({
-  athleteId,
-  linked,
-  configured,
-  deviceToken,
-}: {
-  athleteId: number;
-  linked: boolean;
-  configured: boolean;
-  deviceToken: string | null;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [showToken, setShowToken] = useState(false);
-  const [showRange, setShowRange] = useState(false);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const router = useRouter();
+/**
+ * The athlete's app token, revealed on demand.
+ *
+ * This is a Bearer credential, so it stays behind a click rather than sitting
+ * in the page for anyone reading over a coach's shoulder at a meet. The button
+ * used to share this row with Strava connect/sync controls; those are gone
+ * along with the OAuth flow, and what remains is the one thing a coach needs
+ * from this table.
+ */
+export function TokenButton({ deviceToken }: { deviceToken: string | null }) {
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  async function syncNow() {
-    setBusy(true);
-    setMsg("");
-    const res = await fetch("/api/strava/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ athleteId, startDate: startDate || undefined, endDate: endDate || undefined }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setMsg(res.ok ? `+${data.imported} runs` : data.error || "Sync failed");
-    setBusy(false);
-    router.refresh();
+  if (!deviceToken) {
+    return (
+      <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
+        No token yet
+      </span>
+    );
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(deviceToken!);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard is permission-gated and throws on http:// origins. The token
+      // is already on screen at this point, so failing here costs nothing.
+      setShown(true);
+    }
   }
 
   return (
-    <span className="inline-flex items-center gap-2 flex-wrap justify-end">
-      {msg && (
-        <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
-          {msg}
-        </span>
-      )}
-      {deviceToken && (
-        <button
-          onClick={() => setShowToken((s) => !s)}
-          className="text-xs rounded-full border px-3 py-1.5 cursor-pointer"
-          style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
-          title="Token the iPhone app uses to authenticate"
+    <span className="inline-flex items-center gap-2 justify-end">
+      {shown && (
+        <code
+          className="text-[11px] px-2 py-1 rounded-lg border select-all"
+          style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
         >
-          {showToken ? deviceToken : "App token"}
-        </button>
+          {deviceToken}
+        </code>
       )}
-      {linked ? (
-        <>
-          {showRange && (
-            <span className="inline-flex items-center gap-1.5">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                title="Backfill from"
-                className="text-xs rounded-lg border px-2 py-1"
-                style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
-              />
-              <span className="text-xs" style={{ color: "var(--ink-muted)" }}>to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                title="Backfill to"
-                className="text-xs rounded-lg border px-2 py-1"
-                style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
-              />
-            </span>
-          )}
-          <button
-            onClick={() => setShowRange((s) => !s)}
-            className="text-xs rounded-full border px-3 py-1.5 cursor-pointer"
-            style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
-            title="Bound the historical backfill to a date range — new activity keeps syncing automatically afterward regardless"
-          >
-            {showRange ? "Hide range" : "Set range"}
-          </button>
-          <button
-            onClick={syncNow}
-            disabled={busy}
-            className="text-xs rounded-full border px-3 py-1.5 font-medium cursor-pointer disabled:opacity-50"
-            style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
-          >
-            {busy ? "Syncing…" : "Sync now"}
-          </button>
-        </>
-      ) : (
-        <a
-          href={configured ? `/api/strava/connect?athlete=${athleteId}` : undefined}
-          aria-disabled={!configured}
-          className={`text-xs rounded-full px-3 py-1.5 font-semibold ${
-            configured ? "text-black" : "opacity-40 cursor-not-allowed"
-          }`}
-          style={{ background: "#FC4C02" /* Strava orange */, color: "#fff" }}
-        >
-          Connect Strava
-        </a>
-      )}
+      <button
+        onClick={() => setShown((v) => !v)}
+        className="text-xs rounded-full border px-3 py-1.5 cursor-pointer"
+        style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
+        title="The token this athlete signs into the iPhone app with"
+      >
+        {shown ? "Hide" : "App token"}
+      </button>
+      <button
+        onClick={copy}
+        className="text-xs rounded-full border px-3 py-1.5 cursor-pointer"
+        style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
     </span>
   );
 }

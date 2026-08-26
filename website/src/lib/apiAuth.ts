@@ -22,7 +22,7 @@ export async function resolveAthleteWithPath(
   // it and return the token's own athlete no matter which id the caller asked
   // for, so `resolveAthlete(request, victimId)` answered truthily for any device
   // token — an IDOR wherever the route then trusted the client's id (it did, in
-  // strava/connect and strava/sync). Applying it by construction here means a
+  // the old strava/connect and strava/sync). Applying it by construction here means a
   // fourth auth path cannot reintroduce the hole by forgetting the comparison.
   const scoped = (a: AthleteRow | null | undefined, via: AuthPath) =>
     a && (athleteId == null || athleteId === a.id) ? { athlete: a, via } : null;
@@ -57,4 +57,69 @@ export async function resolveAthlete(
 ): Promise<AthleteRow | null> {
   const r = await resolveAthleteWithPath(request, athleteId);
   return r ? r.athlete : null;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Self-only routes
+ * ------------------------------------------------------------------ */
+
+/**
+ * Some things only the athlete may write.
+ *
+ * `resolveAthlete` answers "may this request act for athlete N", and a coach
+ * session plus an athleteId on their own team is a legitimate yes — that is how
+ * the coach dashboard reads. But a subset of routes record what the ATHLETE
+ * said or did, and for those a coach acting as them is not an authorisation
+ * question, it is a data-integrity one:
+ *
+ *  - /api/checkin writes soreness, RPE, energy and academic stress. Those feed
+ *    readiness and the roster's soreness flags — the same flags the coach then
+ *    reads. A coach filing a check-in makes the system report the athlete's
+ *    condition back to the coach who invented it. Self-report is the most
+ *    sensitive signal RunGuard has and the only one it cannot verify.
+ *  - /api/workout-status is the athlete's record of what they actually ran.
+ *  - /api/goal is the athlete's own PR target.
+ *  - /api/race-result carries `feel`, and race_results has no UPDATE or DELETE
+ *    path anywhere in the repo, so anything written there is permanent.
+ *
+ * The web UI never offered a coach these forms, so nothing regresses. The point
+ * is that it was only the UI stopping them: a coach cookie and a curl would
+ * have been accepted. This makes it structural.
+ *
+ * Objective, team-level facts stay coach-writable on purpose — an upcoming race,
+ * a recorded injury, a tested max heart rate are all things a coach legitimately
+ * knows and enters.
+ */
+export function isSelf(via: AuthPath): boolean {
+  return via === "bearer" || via === "athlete";
+}
+
+/** The 403 for a coach reaching a self-only route. */
+export function selfOnlyResponse(what: string): Response {
+  return Response.json(
+    {
+      error: `Only the athlete can ${what}. Coaches can see it once it is recorded, but entering it for them would put words in their mouth — and readiness is built out of exactly this.`,
+    },
+    { status: 403 }
+  );
+}
+
+/**
+ * The mirror image: things only the coach may write.
+ *
+ * `/api/injury` is the one. Both the athlete app and the athlete portal already
+ * document it as coach-only — `app/src/components/ProfilePanels.tsx` says so in
+ * as many words, and renders the injury list read-only on that basis — but the
+ * route accepted any resolved athlete, so the contract the app was written
+ * against was a comment rather than a rule. An injury is a clinical judgement
+ * recorded ABOUT an athlete; soreness is what the athlete reports, and that is
+ * `/api/checkin`, which is self-only for the opposite reason.
+ */
+export function coachOnlyResponse(what: string): Response {
+  return Response.json(
+    {
+      error: `Only a coach can ${what}. If something hurts, log it as soreness on your check-in — that reaches your coach and it is yours to describe.`,
+    },
+    { status: 403 }
+  );
 }

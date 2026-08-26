@@ -63,10 +63,6 @@ export default function PrivacyPage() {
           severity, energy, motivation, and whether you&rsquo;re under academic stress.
         </P>
         <P>
-          <strong>Strava data</strong>, only if you connect Strava: recent activities, including distance,
-          duration, heart rate, and the GPS route. You authorize this through Strava and can disconnect anytime.
-        </P>
-        <P>
           <strong>AI chat messages</strong>, only if the optional AI coaching chat is enabled: the messages you
           type and the training context needed to answer them may be sent to our AI provider (Anthropic) to
           generate a response.
@@ -102,8 +98,7 @@ export default function PrivacyPage() {
         <H2>Service providers we use</H2>
         <P>
           <strong>Supabase</strong> (database storage, authentication, backend hosting); <strong>Vercel</strong>{" "}
-          (web app and API hosting); <strong>Strava</strong> (only if you connect it); and{" "}
-          <strong>Anthropic</strong> (only if the AI chat is enabled, to generate chat replies). These providers
+          (web app and API hosting); and <strong>Anthropic</strong> (only if the AI chat is enabled, to generate chat replies). These providers
           process data only to provide their service to us.
         </P>
 
@@ -113,7 +108,7 @@ export default function PrivacyPage() {
           deletion of your account and data, or a copy of your data, email{" "}
           <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: "var(--brand-strong)" }}>{CONTACT_EMAIL}</a> from
           your account email (or, for a minor, a parent/guardian). You can stop RunGuard from reading Apple
-          Health data anytime in iOS Settings, and disconnect Strava anytime.
+          Health data anytime in iOS Settings, which stops all further collection.
         </P>
 
         <H2>Minors (athletes under 18)</H2>
@@ -143,8 +138,8 @@ export default function PrivacyPage() {
 
         <H2>Your choices and rights</H2>
         <P>
-          You can grant or revoke Apple Health access per data type in iOS Settings, choose whether to connect
-          Strava, choose whether to submit check-ins, and request access to, correction of, or deletion of your
+          You can grant or revoke Apple Health access per data type in iOS Settings, choose whether to submit
+          check-ins, and request access to, correction of, or deletion of your
           data by emailing us. Depending on where you live, you may have additional rights under laws such as the
           GDPR or CCPA/CPRA; contact us to exercise them.
         </P>

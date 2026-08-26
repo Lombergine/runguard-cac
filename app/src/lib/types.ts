@@ -113,7 +113,7 @@ export type RoutePoint = { lat: number; lng: number };
 export type ActivityDetail = {
   id: number;
   /**
-   * The raw sync source key — "healthkit" | "apple_export" | "strava" | "seed",
+   * The raw sync source key — "healthkit" | "apple_export" | "seed",
    * or whatever a future importer writes. NEVER PRINT IT — print `sourceLabel`.
    */
   source: string;
@@ -173,6 +173,26 @@ export type PlanDay = {
   /** True when this day falls inside the taper window before a race. */
   isTaper: boolean;
   status: WorkoutStatus | null;
+  /**
+   * Where the day came from. "coach" means a human on the coaching staff wrote
+   * it on the team calendar and it applies to the whole squad; "auto" means
+   * RunGuard generated it from the template for this athlete alone.
+   *
+   * Optional on the wire: a phone running this build can talk to a server that
+   * predates the team calendar, and there the field is simply absent. Treat
+   * anything that is not "coach" as "auto" rather than rendering a badge from a
+   * value that was never sent.
+   */
+  source?: "coach" | "auto";
+  /**
+   * KILOMETRES the coach actually wrote, before this athlete's own easing.
+   * Null on auto days, and on coach days with no distance.
+   *
+   * When it differs from `distanceKm`, BOTH must be shown. Showing only the
+   * eased number tells the athlete something different from what is on the
+   * board at practice, and they will run the board.
+   */
+  coachDistanceKm?: number | null;
 };
 
 /**

@@ -1,10 +1,13 @@
-import { resolveAthlete } from "@/lib/apiAuth";
+import { resolveAthleteWithPath, isSelf, selfOnlyResponse } from "@/lib/apiAuth";
 import { run } from "@/lib/db/driver";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const athlete = await resolveAthlete(request, body.athleteId ?? null);
-  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const auth = await resolveAthleteWithPath(request, body.athleteId ?? null);
+  if (!auth) return Response.json({ error: "Not authorized" }, { status: 401 });
+  // Self-only: see the note on isSelf() in lib/apiAuth.ts.
+  if (!isSelf(auth.via)) return selfOnlyResponse("mark their own workouts done, modified or skipped");
+  const athlete = auth.athlete;
 
   const date = typeof body.date === "string" ? body.date.slice(0, 10) : "";
   const validStatuses = ["done", "modified", "skipped"];

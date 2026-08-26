@@ -37,12 +37,12 @@ import { text } from "../theme/type";
  * Connected apps
  * ------------------------------------------------------------------ */
 
-/** The five the website checks for, in its order (`tabs.tsx:819-832`). */
-const APPS = ["Apple Health", "Strava", "Garmin", "COROS", "WHOOP"] as const;
+/** The five the website checks for, in its order (`tabs.tsx`, "Connected apps"). */
+const APPS = ["Apple Health", "Apple Watch", "Garmin", "COROS", "WHOOP"] as const;
 
 /**
  * What the server actually puts in `connectedSources`
- * (website/src/lib/profile.ts:124): `"Strava"`, `"Apple Watch"`, or the sentinel
+ * (website/src/lib/profile.ts): `"Apple Watch"`, `"Apple Health"`, or the sentinel
  * `"No data yet"` when the set is empty. It never emits `"Apple Health"`, and
  * `"healthkit"` / `"apple_export"` are the ACTIVITY `source` column values it
  * reads to decide — not strings it ever sends. Matching only on those meant the

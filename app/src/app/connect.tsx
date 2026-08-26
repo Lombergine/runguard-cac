@@ -15,11 +15,8 @@
  *  - `imported.workouts === 0` means nothing was NEW (the server inserts with
  *    ON CONFLICT DO NOTHING). On the second sync of an unchanged week that is
  *    the correct answer, and it must not be styled as a failure.
- *  - Strava's connection is a redirect the SERVER performs, and this app has no
- *    way to check whether the server is configured for it. So the panel reports
- *    the one fact it actually has — whether the server currently counts Strava
- *    among the athlete's sources — and says plainly that the rest happens on
- *    the web app.
+ *  - Apple Health is the only source. Strava was removed from the product, so
+ *    this screen no longer reports a link state it could not verify anyway.
  *  - Anything unknown renders through <Absent/>. A source list that failed to
  *    load must never look like an empty one.
  *
@@ -394,37 +391,6 @@ export default function ConnectScreen() {
                 {failure}
               </Text>
             ) : null}
-          </Card>
-        </View>
-
-        {/* ── Strava ───────────────────────────────────────────────────── */}
-        <View style={styles.section}>
-          <Card>
-            <View style={styles.head}>
-              <Text style={styles.title}>Strava</Text>
-              <Text style={styles.note}>Set up on the web app</Text>
-            </View>
-            <Text style={styles.body}>
-              {!signedIn
-                ? "RunGuard cannot check a Strava link with no athlete signed in on this phone."
-                : sources === null
-                  ? "RunGuard could not check whether your Strava is linked."
-                  : sources.includes("Strava")
-                    ? "Linked. Your Strava runs arrive through the RunGuard server, not through this app."
-                    : "Not linked."}
-            </Text>
-            {/*
-              The web flow is a server redirect to /api/strava/connect, which
-              needs STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET set on the server.
-              The app has no endpoint that reports whether they are, so this
-              copy must not claim either way — and it must not deep-link to
-              /dashboard/connect, which renders device tokens.
-            */}
-            <Text style={styles.body}>
-              Linking Strava happens on the RunGuard web app, and it only works once
-              your team&apos;s server has been set up for it. This app cannot start that,
-              or check it.
-            </Text>
           </Card>
         </View>
 

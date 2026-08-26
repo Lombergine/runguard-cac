@@ -106,7 +106,7 @@ trusting this paragraph if the two disagree.
 the same device token without any new server work: `/api/checkin`, `/api/chat`,
 `/api/goal`, `/api/hrmax`, `/api/injury`, `/api/race`, `/api/race/[id]`,
 `/api/race-result`, `/api/workout-status`, `/api/athlete/join-team`,
-`/api/strava/sync`.
+`/api/mobile/ingest`.
 
 ## Things to know before building
 

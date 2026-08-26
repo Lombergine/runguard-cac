@@ -1,5 +1,5 @@
 import { localDay } from "@/lib/day";
-import { resolveAthlete } from "@/lib/apiAuth";
+import { resolveAthleteWithPath, isSelf, selfOnlyResponse } from "@/lib/apiAuth";
 import { run } from "@/lib/db/driver";
 
 /**
@@ -23,8 +23,11 @@ const FEELS = ["great", "ok", "rough"];
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const athlete = await resolveAthlete(request, body.athleteId ?? null);
-  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const auth = await resolveAthleteWithPath(request, body.athleteId ?? null);
+  if (!auth) return Response.json({ error: "Not authorized" }, { status: 401 });
+  // Self-only: see the note on isSelf() in lib/apiAuth.ts.
+  if (!isSelf(auth.via)) return selfOnlyResponse("log their own race result");
+  const athlete = auth.athlete;
 
   const event = typeof body.event === "string" ? body.event.trim().slice(0, 20) : "";
   const timeS = typeof body.timeS === "number" && body.timeS > 30 && body.timeS < 7200 ? body.timeS : null;
@@ -76,10 +79,64 @@ export async function POST(request: Request) {
     conditions = body.conditions.trim().slice(0, 120) || null;
   }
 
+  /*
+   * Splits.
+   *
+   * `race_results.splits` has existed since first release and the race-history
+   * table renders it, but nothing except the seeder ever wrote it — so splits
+   * were a column that only demo athletes had. Accepted here as an array of
+   * numbers (seconds), stored as the JSON text the read path already parses.
+   *
+   * Validated rather than coerced, for the reason the header comment gives: a
+   * mistyped split that silently vanishes is worse than a rejected one, because
+   * race_results has no UPDATE path to fix it afterwards.
+   */
+  let splits: string | null = null;
+  if (body.splits !== undefined && body.splits !== null) {
+    if (!Array.isArray(body.splits)) {
+      return Response.json({ error: "Splits must be a list of lap times." }, { status: 400 });
+    }
+    if (body.splits.length > 60) {
+      return Response.json({ error: "That is more than 60 splits — check the entry." }, { status: 400 });
+    }
+    const bad = body.splits.some(
+      (x: unknown) => typeof x !== "number" || !Number.isFinite(x) || x <= 0 || x > 3600
+    );
+    if (bad) {
+      return Response.json(
+        { error: "Each split must be a time between 0 and 60 minutes." },
+        { status: 400 }
+      );
+    }
+    // A sum wildly off the finishing time means the splits are for a different
+    // race, or are cumulative when they should be per-lap. 10% either way is
+    // generous enough for hand timing and tight enough to catch a real mistake.
+    const total = (body.splits as number[]).reduce((a, b) => a + b, 0);
+    if (body.splits.length > 0 && Math.abs(total - timeS) > timeS * 0.1) {
+      return Response.json(
+        {
+          error: `Those splits add up to ${Math.round(total)}s but the finishing time is ${Math.round(
+            timeS
+          )}s. Enter each lap on its own, not a running total.`,
+        },
+        { status: 400 }
+      );
+    }
+    splits = body.splits.length ? JSON.stringify(body.splits) : null;
+  }
+
+  let notes: string | null = null;
+  if (body.notes !== undefined && body.notes !== null) {
+    if (typeof body.notes !== "string") {
+      return Response.json({ error: "Notes must be text." }, { status: 400 });
+    }
+    notes = body.notes.trim().slice(0, 1000) || null;
+  }
+
   await run(
-    `INSERT INTO race_results (athlete_id, event, date, time_s, place, feel, conditions)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [athlete.id, event, date, timeS, place, feel, conditions]
+    `INSERT INTO race_results (athlete_id, event, date, time_s, place, feel, conditions, splits, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [athlete.id, event, date, timeS, place, feel, conditions, splits, notes]
   );
   return Response.json({ ok: true });
 }

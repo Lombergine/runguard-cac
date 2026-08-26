@@ -361,6 +361,15 @@ function PlanRow({ day, dateLabel, expanded, onToggle }: PlanRowProps) {
           {/* Non-negotiable #2: the day is always spelled out. Today reads
               "Today · Mon 10 Aug", never "Today" on its own. */}
           <Text style={[styles.date, day.isToday && styles.dateToday]}>{dateLabel}</Text>
+          {/* `source` is optional on the wire — a phone on this build can talk
+              to a server that predates the team calendar. Match "coach"
+              explicitly rather than testing for absence, so a missing field
+              renders no badge instead of the wrong one. */}
+          {day.source === "coach" ? (
+            <View style={styles.coachPill}>
+              <Text style={styles.coachPillLabel}>from your coach</Text>
+            </View>
+          ) : null}
           {day.isTaper ? (
             <View style={styles.pill}>
               <Text style={styles.pillLabel}>taper</Text>
@@ -456,6 +465,24 @@ function PlanRow({ day, dateLabel, expanded, onToggle }: PlanRowProps) {
           ) : (
             <Text style={styles.detailBody}>{day.details}</Text>
           )}
+          {/*
+            When this athlete's readiness eased a distance their coach wrote,
+            BOTH numbers appear. Showing only the eased one tells the athlete
+            something different from what is on the board at practice — and they
+            will run the board, which buys nothing but distrust of the app.
+          */}
+          {day.source === "coach" &&
+          day.coachDistanceKm != null &&
+          day.distanceKm !== null &&
+          Math.abs(day.coachDistanceKm - day.distanceKm) > 0.15 ? (
+            <DetailRow
+              label="Coach wrote"
+              body={`${formatDistance(day.coachDistanceKm)}. RunGuard suggests ${formatDistance(
+                day.distanceKm
+              )} for you today. Run your coach's number unless they say otherwise — this is something to show them, not an instruction.`}
+              accent
+            />
+          ) : null}
           <DetailRow label="Why" body={day.why} />
           {day.supplemental ? <DetailRow label="Supplemental" body={day.supplemental} /> : null}
         </View>
@@ -636,6 +663,24 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
   },
   pillLabel: { ...text.meta, color: color.brandText },
+
+  /*
+   * Outlined like the taper pill, but in ember rather than the neutral rule, so
+   * "a person decided this" reads louder than a computed property of the week
+   * without inventing a filled variant.
+   *
+   * Deliberately NOT a brand-filled chip: `color.brand` is 2.01:1 and the
+   * palette says in as many words never to put a glyph on it. brandText on the
+   * card is the pairing `dateToday` and `countdown` already ship.
+   */
+  coachPill: {
+    borderWidth: ruleWidth,
+    borderColor: color.brandStrong,
+    borderRadius: radius.control,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+  },
+  coachPillLabel: { ...text.meta, color: color.brandText },
 
   type: { ...text.base, color: color.ink, marginTop: space.xs },
   prescription: { marginTop: space.xs },

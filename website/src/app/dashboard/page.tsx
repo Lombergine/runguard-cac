@@ -1,17 +1,25 @@
+import { Suspense } from "react";
 import { localDayOffset } from "@/lib/day";
 import { miNum } from "@/lib/units";
 import Link from "next/link";
-import { athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory } from "@/lib/db";
+import { athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory, teamPlanDays } from "@/lib/db";
 import { computeRisk, sessionSpike, type RiskSnapshot, type SessionSpike } from "@/lib/risk";
 import { computeFitness } from "@/lib/engine";
 import { currentTeamId } from "@/lib/session";
+import { parseRange, fetchDays } from "@/lib/range";
 import Avatar from "@/components/Avatar";
 import { LoadSpark } from "@/components/charts";
 import InviteCard from "./InviteCard";
+import RangePicker from "./RangePicker";
 
 export const dynamic = "force-dynamic";
 
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
+  const range = parseRange((await searchParams).range);
   const teamId = await currentTeamId();
   const team = teamId ? await getTeam(teamId) : null;
   // Reading the clock IS the intent here. This is an async Server Component
@@ -20,8 +28,19 @@ export default async function Dashboard() {
   // renders that must be replayable, which this is not.
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
-  const since = new Date(nowMs - 130 * 86400000).toISOString();
+  // Read wide enough for the chosen window AND the equal window before it, plus
+  // the 28-day chronic baseline the risk engine builds off the same array. See
+  // fetchDays(): a short window must not starve ACWR.
+  const since = new Date(nowMs - fetchDays(range) * 86400000).toISOString();
+  const rangeStart = new Date(nowMs - range.days * 86400000).toISOString();
+  const prevRangeStart = new Date(nowMs - range.days * 2 * 86400000).toISOString();
   const soreSince = localDayOffset(13, new Date(nowMs));
+  // Today and tomorrow off the team calendar, for the strip below the header.
+  // Two days, not seven: this is the "what are we doing" glance before practice,
+  // and the full picture is one click away on /dashboard/plan.
+  const todayIso = localDayOffset(0, new Date(nowMs));
+  const tomorrowIso = localDayOffset(-1, new Date(nowMs));
+  const planAhead = teamId ? await teamPlanDays(teamId, todayIso, tomorrowIso) : new Map();
   // Fail closed rather than falling back to every athlete in the database.
   const roster = teamId ? await athletesForTeam(teamId) : [];
   const athletes = await Promise.all(roster.map(async (a) => {
@@ -36,13 +55,23 @@ export default async function Dashboard() {
     }));
     const risk = computeRisk(acts, metrics, new Date(nowMs), sore, a);
     const fitness = computeFitness(risk, metrics, acts);
+    // Distance over the window the coach picked, and over the equally long
+    // window immediately before it. Computed here rather than taken from
+    // risk.weekKm, which is fixed at 7 days by definition and must stay that
+    // way — ACWR is only meaningful on its own windows.
+    const km = (from: string, to?: string) =>
+      acts
+        .filter((x) => x.start_time >= from && (to === undefined || x.start_time < to))
+        .reduce((sum, x) => sum + x.distance_m / 1000, 0);
+    const rangeKm = km(rangeStart);
+    const prevRangeKm = km(prevRangeStart, rangeStart);
     // most recent run that was markedly longer than anything before it
     const spikeRun = [...acts]
       .sort((x, y) => y.start_time.localeCompare(x.start_time))
       .slice(0, 7)
       .map((x) => ({ at: x.start_time, spike: sessionSpike(x, acts) }))
       .find((x) => x.spike !== null);
-    return { a, risk, fitness, spike: spikeRun?.spike ?? null };
+    return { a, risk, fitness, spike: spikeRun?.spike ?? null, rangeKm, prevRangeKm };
   }));
   // Alphabetical, deliberately. Ranking minors by an injury-risk number teaches
   // them to inflate their check-ins to avoid being at the top of it — which
@@ -56,9 +85,13 @@ export default async function Dashboard() {
   const quiet = athletes.filter(
     (x) => !x.risk.selfReport.hasData || (x.risk.selfReport.daysSinceReport ?? 0) >= 5
   ).length;
-  const teamKm = athletes.reduce((s, x) => s + x.risk.weekKm, 0);
-  const teamPrevKm = athletes.reduce((s, x) => s + x.risk.prevWeekKm, 0);
-  const teamDelta = teamPrevKm > 0 ? Math.round(((teamKm - teamPrevKm) / teamPrevKm) * 100) : 0;
+  const teamKm = athletes.reduce((s, x) => s + x.rangeKm, 0);
+  const teamPrevKm = athletes.reduce((s, x) => s + x.prevRangeKm, 0);
+  // Null, not 0. With no distance in the previous window there is no percentage
+  // to state, and printing "+0%" there claims the team held steady when the
+  // truth is that nothing was recorded to compare against.
+  const teamDelta =
+    teamPrevKm > 0 ? Math.round(((teamKm - teamPrevKm) / teamPrevKm) * 100) : null;
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -75,8 +108,33 @@ export default async function Dashboard() {
             {team ? `${team.name} · ` : ""}{today} · {athletes.length} athlete{athletes.length === 1 ? "" : "s"} tracked
           </p>
         </div>
-        {team && <InviteCard joinCode={team.join_code} />}
+        <div className="flex flex-wrap items-center gap-3">
+          {/*
+            Suspense around RangePicker because it reads useSearchParams. This
+            page is force-dynamic so it is never prerendered, but Next still
+            prerenders the error and not-found shells that wrap it, and an
+            unsuspended useSearchParams there fails the build rather than the
+            request — a failure that would only appear at deploy time, which is
+            the worst moment to find it. The fallback is a same-size blank so
+            the header does not jump.
+          */}
+          <Suspense fallback={<div style={{ width: 190, height: 38 }} />}>
+            <RangePicker />
+          </Suspense>
+          {team && <InviteCard joinCode={team.join_code} />}
+        </div>
       </div>
+
+      {/*
+        Today's session, straight off the team calendar. The coach's own note
+        asked for the calendar to reach "the home screen dashboard" — this is
+        that, and it doubles as the empty-state prompt for a coach who has not
+        written anything yet.
+      */}
+      <TodaysSession
+        today={planAhead.get(todayIso) ?? null}
+        tomorrow={planAhead.get(tomorrowIso) ?? null}
+      />
 
       {athletes.length === 0 && (
         <div
@@ -113,10 +171,13 @@ export default async function Dashboard() {
             sub: sore > 0 ? "Same spot, several days" : "Nothing recurring",
           },
           {
-            label: "Team distance (7d)",
+            label: `Team distance (${range.short})`,
             value: `${miNum(teamKm, 0)} mi`,
             accent: undefined as string | undefined,
-            sub: `${teamDelta >= 0 ? "+" : ""}${teamDelta}% vs last week`,
+            sub:
+              teamDelta === null
+                ? `Nothing recorded the ${range.short} before`
+                : `${teamDelta >= 0 ? "+" : ""}${teamDelta}% vs the previous ${range.short}`,
           },
           {
             label: "Not checking in",
@@ -144,13 +205,13 @@ export default async function Dashboard() {
             >
               <th className="px-4 py-3 font-medium">Athlete</th>
               <th className="px-3 py-3 font-medium">Needs a look</th>
-              <th className="px-3 py-3 font-medium text-right">7-day mi</th>
+              <th className="px-3 py-3 font-medium text-right">{range.short} mi</th>
               <th className="px-3 py-3 font-medium hidden md:table-cell w-36">Last 4 weeks</th>
               <th className="px-3 py-3" />
             </tr>
           </thead>
           <tbody>
-            {athletes.map(({ a, risk, fitness, spike }) => (
+            {athletes.map(({ a, risk, fitness, spike, rangeKm }) => (
 
               <tr
                 key={a.id}
@@ -179,7 +240,7 @@ export default async function Dashboard() {
                   <RosterFlags self={risk.selfReport} spike={spike} />
                 </td>
                 <td className="px-3 py-3 text-right tabular-nums" style={{ color: "var(--ink-2)" }}>
-                  {miNum(risk.weekKm)}
+                  {miNum(rangeKm)}
                 </td>
                 <td className="px-3 py-1 hidden md:table-cell">
                   <LoadSpark data={risk.series} />
@@ -200,8 +261,9 @@ export default async function Dashboard() {
       </div>
 
       <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
-        Ratio = acute:chronic workload (7-day vs 28-day training load). Sweet spot 0.8–1.3.
-        Scores update automatically as athletes&apos; watches sync.
+        The window above moves the distance figures. Soreness patterns stay on their own
+        7-day lookback and acute:chronic workload stays 7-day vs 28-day — both are defined
+        on fixed windows and would mean nothing rescaled. Numbers update as watches sync.
       </p>
     </div>
   );
@@ -267,6 +329,83 @@ function RosterFlags({
           {r.text}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * What the team is doing today, per the coach's own calendar.
+ *
+ * Shows nothing invented. With no session written it says so and links to the
+ * calendar, rather than displaying RunGuard's generated suggestion here — that
+ * suggestion is per-athlete by design, so there is no single team answer to
+ * print, and printing one athlete's would be misleading on a team screen.
+ */
+function TodaysSession({
+  today,
+  tomorrow,
+}: {
+  today: { type: string; distance_m: number | null; target_pace: string | null; details: string | null } | null;
+  tomorrow: { type: string; distance_m: number | null } | null;
+}) {
+  const line = (d: { type: string; distance_m: number | null; target_pace?: string | null }) =>
+    [d.type, d.distance_m != null ? `${miNum(d.distance_m / 1000)} mi` : null, d.target_pace]
+      .filter(Boolean)
+      .join(" · ");
+
+  if (!today && !tomorrow) {
+    return (
+      <div
+        className="rounded-2xl border p-5 flex flex-wrap items-center gap-x-4 gap-y-2"
+        style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
+      >
+        <div className="flex-1 min-w-60">
+          <div className="text-sm font-semibold">No session on the calendar today</div>
+          <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>
+            Athletes are seeing RunGuard&apos;s own suggestion, adapted to each of them.
+            Write your own and it replaces it for the whole team.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/plan"
+          className="rounded-full px-5 py-2.5 text-sm font-semibold text-black"
+          style={{ background: "var(--brand)" }}
+        >
+          Open the training calendar →
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-2xl border p-5"
+      style={{
+        borderColor: "var(--brand)",
+        background: "color-mix(in oklab, var(--brand) 6%, var(--surface))",
+      }}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="micro-label" style={{ color: "var(--brand-strong)" }}>
+          Today&apos;s session
+        </div>
+        <Link href="/dashboard/plan" className="text-xs hover:underline" style={{ color: "var(--brand-strong)" }}>
+          Edit the calendar →
+        </Link>
+      </div>
+      <div className="text-xl font-bold mt-1">
+        {today ? line(today) : "Nothing written for today"}
+      </div>
+      {today?.details && (
+        <p className="text-sm mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+          {today.details}
+        </p>
+      )}
+      {tomorrow && (
+        <p className="text-xs mt-2.5" style={{ color: "var(--ink-muted)" }}>
+          Tomorrow: {line(tomorrow)}
+        </p>
+      )}
     </div>
   );
 }

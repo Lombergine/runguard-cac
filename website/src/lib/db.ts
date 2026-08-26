@@ -77,6 +77,8 @@ export type AthleteRow = {
   event_group: string | null;
   avatar_hue: number;
   device_token: string | null;
+  // DEPRECATED — Strava is gone from the product. Kept so `SELECT *` keeps
+  // type-checking against databases that still have the columns.
   strava_athlete_id: string | null;
   strava_access_token: string | null;
   strava_refresh_token: string | null;
@@ -137,6 +139,29 @@ export async function getTeamByCoachEmail(email: string): Promise<TeamRow | unde
 
 export async function athletesForTeam(teamId: number): Promise<AthleteRow[]> {
   return all<AthleteRow>("SELECT * FROM athletes WHERE team_id = ? ORDER BY name", [teamId]);
+}
+
+/**
+ * Most recent activity per athlete on a team, as `athlete_id -> start_time`.
+ *
+ * The Data sources page needs one fact per athlete — "is anything actually
+ * arriving?" — and used to answer it with `strava_athlete_id IS NOT NULL`,
+ * which was a link state, not a sync state: an athlete could be linked and
+ * sending nothing. Reading the real last activity is one grouped query for the
+ * whole roster rather than N per-athlete lookups.
+ */
+export async function lastSyncForTeam(teamId: number): Promise<Map<number, string>> {
+  const rows = await all<{ athlete_id: number; last_at: string | null }>(
+    `SELECT a.athlete_id AS athlete_id, MAX(a.start_time) AS last_at
+       FROM activities a
+       JOIN athletes t ON t.id = a.athlete_id
+      WHERE t.team_id = ?
+      GROUP BY a.athlete_id`,
+    [teamId]
+  );
+  const out = new Map<number, string>();
+  for (const r of rows) if (r.last_at) out.set(r.athlete_id, r.last_at);
+  return out;
 }
 
 export async function getAthleteByEmail(email: string): Promise<AthleteRow | undefined> {
@@ -276,6 +301,13 @@ export type RaceRow = {
   location: string | null;
   created_by_athlete_id: number | null; // null = coach/seed-created
   team_id: number | null;
+  /** 'HH:MM' local gun time. Null = not recorded, never "midnight". */
+  start_time: string | null;
+  /** 'Track' | 'Cross country' | 'Road' | 'Trail' */
+  course_type: string | null;
+  /** 'A' | 'B' | 'C' — how much this one matters, which drives taper advice. */
+  priority: string | null;
+  notes: string | null;
 };
 
 export type RaceResultRow = {
@@ -287,8 +319,10 @@ export type RaceResultRow = {
   time_s: number;
   place: number | null;
   feel: string | null;
+  /** JSON array of split seconds, e.g. "[74,76,79]". Null = none reported. */
   splits: string | null;
   conditions: string | null;
+  notes: string | null;
 };
 
 export type CheckinRow = {
@@ -343,27 +377,83 @@ export async function createRace(r: {
   event: string;
   distance_m: number;
   location?: string | null;
-  created_by_athlete_id: number;
+  start_time?: string | null;
+  course_type?: string | null;
+  priority?: string | null;
+  notes?: string | null;
+  /** null = a team race (coach- or seed-created), which everyone on the team sees. */
+  created_by_athlete_id: number | null;
   team_id: number | null;
 }): Promise<RaceRow> {
   const row = await one<RaceRow>(
-    `INSERT INTO races (name, date, event, distance_m, location, created_by_athlete_id, team_id)
-     VALUES (@name, @date, @event, @distance_m, @location, @created_by_athlete_id, @team_id)
+    `INSERT INTO races
+       (name, date, event, distance_m, location, start_time, course_type, priority, notes,
+        created_by_athlete_id, team_id)
+     VALUES
+       (@name, @date, @event, @distance_m, @location, @start_time, @course_type, @priority, @notes,
+        @created_by_athlete_id, @team_id)
      RETURNING *`,
-    { location: null, ...r }
+    // Defaults first so a caller that omits an optional field writes NULL rather
+    // than `undefined`, which the SQLite driver rejects as a bound parameter.
+    { location: null, start_time: null, course_type: null, priority: null, notes: null, ...r }
   );
   return row!;
 }
 
-const RACE_PATCH_COLUMNS: string[] = ["name", "date", "event", "distance_m", "location"];
+const RACE_PATCH_COLUMNS: string[] = [
+  "name",
+  "date",
+  "event",
+  "distance_m",
+  "location",
+  "start_time",
+  "course_type",
+  "priority",
+  "notes",
+];
+
+/**
+ * Who is allowed to change a race.
+ *
+ * A race is either personal — one athlete added it, `created_by_athlete_id` is
+ * their id — or a team race the coach or the seeder added, where the creator is
+ * NULL and `team_id` is set. Both edit paths used to compare
+ * `created_by_athlete_id !== athleteId` and nothing else, which meant a team
+ * race had no owner at all: the coach who created it could not edit or remove
+ * it, and neither could anyone else. The only way to correct a mistyped team
+ * race was a database write.
+ *
+ * A coach may act on their own team's races. They may NOT touch a race an
+ * athlete added for themselves — that is the athlete's own calendar, and
+ * deleting it is not a coaching decision.
+ */
+export type RaceActor = { athleteId: number; teamId: number | null; isCoach: boolean };
+
+function mayEditRace(race: RaceRow, actor: RaceActor): boolean {
+  if (race.created_by_athlete_id !== null) return race.created_by_athlete_id === actor.athleteId;
+  return actor.isCoach && actor.teamId !== null && race.team_id === actor.teamId;
+}
 
 export async function updateRace(
   id: number,
-  athleteId: number,
-  patch: Partial<Pick<RaceRow, "name" | "date" | "event" | "distance_m" | "location">>
+  actor: RaceActor,
+  patch: Partial<
+    Pick<
+      RaceRow,
+      | "name"
+      | "date"
+      | "event"
+      | "distance_m"
+      | "location"
+      | "start_time"
+      | "course_type"
+      | "priority"
+      | "notes"
+    >
+  >
 ): Promise<boolean> {
   const race = await one<RaceRow>("SELECT * FROM races WHERE id = ?", [id]);
-  if (!race || race.created_by_athlete_id !== athleteId) return false;
+  if (!race || !mayEditRace(race, actor)) return false;
   const fields = Object.keys(patch);
   if (!fields.length) return true;
   // Column names cannot be bound, so they are interpolated — which means the only
@@ -380,11 +470,93 @@ export async function updateRace(
   return true;
 }
 
-export async function deleteRace(id: number, athleteId: number): Promise<boolean> {
+export async function deleteRace(id: number, actor: RaceActor): Promise<boolean> {
   const race = await one<RaceRow>("SELECT * FROM races WHERE id = ?", [id]);
-  if (!race || race.created_by_athlete_id !== athleteId) return false;
+  if (!race || !mayEditRace(race, actor)) return false;
   await run("DELETE FROM races WHERE id = ?", [id]);
   return true;
+}
+
+/* ---------------- the coach's training calendar ---------------- */
+
+export type TeamPlanDayRow = {
+  id: number;
+  team_id: number;
+  date: string;
+  type: string;
+  distance_m: number | null;
+  target_pace: string | null;
+  details: string | null;
+  why: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+};
+
+/**
+ * The coach-written days in a date window, inclusive both ends.
+ *
+ * Returned as a Map keyed by date because every caller wants "is there a coach
+ * day for THIS date" rather than a list — the plan builder walks seven dates and
+ * the calendar editor walks twenty-eight, and both would otherwise do a linear
+ * scan per day.
+ */
+export async function teamPlanDays(
+  teamId: number,
+  fromIso: string,
+  toIso: string
+): Promise<Map<string, TeamPlanDayRow>> {
+  const rows = await all<TeamPlanDayRow>(
+    "SELECT * FROM team_plan_days WHERE team_id = ? AND date >= ? AND date <= ? ORDER BY date",
+    [teamId, fromIso, toIso]
+  );
+  return new Map(rows.map((r) => [r.date, r]));
+}
+
+/**
+ * Write one day of the calendar.
+ *
+ * ON CONFLICT rather than a read-then-branch: two coaches editing the same day
+ * from two devices is a realistic thing at a meet, and the UNIQUE constraint
+ * makes last-write-wins the outcome instead of a duplicate-key 500. The clause
+ * behaves identically on SQLite 3.53 and Postgres, which is why there is one
+ * statement here rather than two.
+ */
+export async function upsertTeamPlanDay(d: {
+  team_id: number;
+  date: string;
+  type: string;
+  distance_m: number | null;
+  target_pace: string | null;
+  details: string | null;
+  why: string | null;
+  updated_by: string | null;
+}): Promise<void> {
+  await run(
+    `INSERT INTO team_plan_days
+       (team_id, date, type, distance_m, target_pace, details, why, updated_at, updated_by)
+     VALUES
+       (@team_id, @date, @type, @distance_m, @target_pace, @details, @why, @updated_at, @updated_by)
+     ON CONFLICT (team_id, date) DO UPDATE SET
+       type        = excluded.type,
+       distance_m  = excluded.distance_m,
+       target_pace = excluded.target_pace,
+       details     = excluded.details,
+       why         = excluded.why,
+       updated_at  = excluded.updated_at,
+       updated_by  = excluded.updated_by`,
+    { ...d, updated_at: nowStamp() }
+  );
+}
+
+/**
+ * Clear a day, returning it to the generated template.
+ *
+ * Team-scoped in the statement itself, not by the caller checking first: a
+ * `DELETE ... WHERE id = ?` here would let one team's coach delete another
+ * team's day by guessing a date.
+ */
+export async function deleteTeamPlanDay(teamId: number, date: string): Promise<void> {
+  await run("DELETE FROM team_plan_days WHERE team_id = ? AND date = ?", [teamId, date]);
 }
 
 export async function raceResultsForAthlete(athleteId: number): Promise<RaceResultRow[]> {

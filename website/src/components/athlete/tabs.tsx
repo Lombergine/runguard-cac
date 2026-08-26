@@ -132,6 +132,7 @@ function BentoTile({
   accent,
   i,
   big,
+  info,
 }: {
   label: string;
   value: string;
@@ -140,13 +141,17 @@ function BentoTile({
   accent?: string;
   i: number;
   big?: boolean;
+  info?: string;
 }) {
   return (
     <div
       className="enter rounded-2xl border p-4 flex flex-col justify-between"
       style={{ ["--i" as string]: i, borderColor: "var(--hairline)", background: "var(--surface)" }}
     >
-      <div className="micro-label" style={{ color: "var(--ink-muted)" }}>{label}</div>
+      <div className="micro-label" style={{ color: "var(--ink-muted)" }}>
+        {label}
+        {info && <InfoDot text={info} label={label} />}
+      </div>
       <div className={`${big ? "text-4xl" : "text-3xl"} font-extrabold tabular-nums mt-2 leading-none`} style={{ color: accent ?? "var(--ink)" }}>
         {value}
         {unit && <span className="text-sm font-semibold ml-1" style={{ color: "var(--ink-muted)" }}>{unit}</span>}
@@ -209,10 +214,12 @@ export function HomeTab({ p }: { p: CoreProfile }) {
           sub={verdict}
           accent={z}
           big
+          info="0–100, built from your sleep, HRV and resting heart rate against your own baselines, then adjusted down for soreness you reported. It answers one question: how ready are you to absorb hard work today. Under 40 means back off; 65 and up means you're clear to run it as written. It is not a fitness score — you can be very fit and very flat."
         />
         <BentoTile
           i={2}
           label="Sleep · 7d"
+          info="Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h turns amber — short sleep is one of the strongest injury and illness signals there is. A dash means nothing was recorded in that window; it never fills the gap with older nights."
           value={r.sleepAvg !== null ? String(r.sleepAvg) : "—"}
           unit={r.sleepAvg !== null ? "h" : undefined}
           // No reading is not "on target" — with sleepAvg null the value is "—"
@@ -223,6 +230,7 @@ export function HomeTab({ p }: { p: CoreProfile }) {
         <BentoTile
           i={3}
           label="HRV"
+          info="Heart rate variability — the tiny timing differences between your heartbeats. Higher usually means recovered; a drop means your body is still under stress. It is measured against your own baseline, so the % change is the part that means anything. Don't compare the ms number to a teammate's."
           value={r.hrv !== null ? String(r.hrv) : "—"}
           unit={r.hrv !== null ? "ms" : undefined}
           sub={r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : "trend vs baseline"}
@@ -231,6 +239,7 @@ export function HomeTab({ p }: { p: CoreProfile }) {
         <BentoTile
           i={4}
           label="Resting HR"
+          info="Your heart rate at rest, from Apple Health, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery — it is an early warning, often before you feel anything."
           value={r.restingHr !== null ? String(r.restingHr) : "—"}
           unit={r.restingHr !== null ? "bpm" : undefined}
           sub={r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : "morning resting"}
@@ -391,7 +400,11 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
         <div className="px-5 py-4">
           <h2 className="text-sm font-semibold">This week&apos;s plan</h2>
-          <p className="text-xs mt-0.5" style={{ color: "var(--ink-muted)" }}>Monday through Sunday · auto-built from your load, fitness, and race schedule</p>
+          <p className="text-xs mt-0.5" style={{ color: "var(--ink-muted)" }}>
+            {p.plan.days.some((d) => d.source === "coach")
+              ? "Monday through Sunday · sessions from your coach, and RunGuard's own suggestion on the days they left open"
+              : "Monday through Sunday · auto-built from your load, fitness, and race schedule"}
+          </p>
         </div>
         {p.plan.days.map((d) => (
           <details key={d.date} className="border-t group" style={{ borderColor: "var(--hairline)" }} open={d.isToday}>
@@ -405,6 +418,15 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
                   {d.distanceKm ? `${miNum(d.distanceKm)} mi` : ""}{d.targetPace ? ` @ ${d.targetPace}` : ""}
                 </span>
               </span>
+              {d.source === "coach" && (
+                <span
+                  className="text-[10px] font-semibold rounded-full px-2 py-0.5"
+                  title="Your coach wrote this session for the team"
+                  style={{ background: "color-mix(in oklab, var(--brand) 22%, transparent)", color: "var(--brand-strong)" }}
+                >
+                  from your coach
+                </span>
+              )}
               {d.isTaper && <span className="text-[10px] font-medium rounded-full px-2 py-0.5" style={{ background: "rgba(245,158,11,0.15)", color: "var(--brand-strong)" }}>taper</span>}
               <PlanStatusButtons athleteId={p.athlete.id} date={d.date} status={d.status} />
             </summary>
@@ -413,6 +435,25 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
                 const blocks = workoutBlocks(d);
                 return blocks.length ? <WorkoutBlocks blocks={blocks} /> : <p>{d.details}</p>;
               })()}
+              {/*
+                When readiness eased a coach-written distance, BOTH numbers are
+                shown. Displaying only the eased one would mean the app quietly
+                telling an athlete something different from what is on the board
+                at practice — and they will run what the board says, so all that
+                buys is distrust of the app.
+              */}
+              {d.source === "coach" &&
+                d.coachDistanceKm !== null &&
+                d.distanceKm !== null &&
+                Math.abs(d.coachDistanceKm - d.distanceKm) > 0.15 && (
+                  <p className="text-xs" style={{ color: "var(--status-warning)" }}>
+                    Your coach wrote {miNum(d.coachDistanceKm)} mi. RunGuard is suggesting{" "}
+                    {miNum(d.distanceKm)} mi for you today
+                    {p.plan.adjustment.reason ? ` — ${p.plan.adjustment.reason.toLowerCase()}` : "."}{" "}
+                    Run the coach&apos;s number unless they say otherwise; this is a flag to
+                    show them, not an instruction.
+                  </p>
+                )}
               <p className="text-xs" style={{ color: "var(--ink-muted)" }}>Why: {d.why}</p>
               {d.supplemental && (
                 <p className="text-xs" style={{ color: "var(--brand-strong)" }}>+ Supplemental — {d.supplemental}</p>
@@ -686,8 +727,53 @@ export function RaceTab({ p }: { p: CoreProfile }) {
               <div className="text-[10px] uppercase" style={{ color: "var(--ink-muted)" }}>days</div>
             </div>
             <div className="flex-1 min-w-40">
-              <div className="font-semibold">{r.name}</div>
-              <div className="text-xs" style={{ color: "var(--ink-muted)" }}>{r.event} · {r.location} · {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{r.name}</span>
+                {r.priority && (
+                  <span
+                    className="text-[10px] font-bold rounded-full px-2 py-0.5"
+                    title={
+                      r.priority === "A"
+                        ? "Peak race — the one worth tapering for"
+                        : r.priority === "B"
+                          ? "Race it, but don't reshape the week around it"
+                          : "Training effort"
+                    }
+                    style={{
+                      background:
+                        r.priority === "A"
+                          ? "color-mix(in oklab, var(--brand) 22%, transparent)"
+                          : "var(--surface-2)",
+                      color: r.priority === "A" ? "var(--brand-strong)" : "var(--ink-muted)",
+                    }}
+                  >
+                    {r.priority} RACE
+                  </span>
+                )}
+              </div>
+              {/*
+                Every part here is conditional and joined at render, not
+                interpolated with separators. The old line was
+                `{r.event} · {r.location} · {date}`, which printed a bare
+                "5K ·  · Saturday" whenever location was null — a gap that
+                reads as missing data rather than as a field nobody filled in.
+              */}
+              <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
+                {[
+                  r.event,
+                  r.course_type,
+                  r.location,
+                  new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+                  r.start_time ? `gun ${r.start_time}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+              {r.notes && (
+                <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
+                  {r.notes}
+                </p>
+              )}
               {r.canEdit && <RaceEditControls athleteId={p.athlete.id} raceId={r.id} />}
             </div>
             <div className="text-right">
@@ -738,23 +824,143 @@ export function RaceTab({ p }: { p: CoreProfile }) {
 
       {/* history */}
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
-        <div className="px-5 py-4 text-sm font-semibold">Race history</div>
-        <table className="w-full text-sm">
-          <tbody>
-            {p.races.history.map((r) => (
-              <tr key={r.id} className="border-t" style={{ borderColor: "var(--hairline)" }}>
-                <td className="px-5 py-2.5" style={{ color: "var(--ink-2)" }}>{new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</td>
-                <td className="px-3 py-2.5 font-medium">{r.event}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{r.time}{r.isPr && <span className="ml-1.5 text-[10px] font-bold rounded-full px-1.5 py-0.5" style={{ background: "rgba(245,158,11,0.2)", color: "var(--brand-strong)" }}>PR</span>}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums hidden sm:table-cell" style={{ color: "var(--ink-2)" }}>{r.place ? `#${r.place}` : ""}</td>
-                <td className="px-3 py-2.5 text-xs hidden md:table-cell" style={{ color: "var(--ink-muted)" }}>{r.splits ? "splits: " + r.splits.map((s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`).join(" / ") : ""}</td>
-                <td className="px-5 py-2.5 text-xs text-right hidden lg:table-cell" style={{ color: "var(--ink-muted)" }}>{r.conditions}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="px-5 py-4 flex items-baseline justify-between gap-3">
+          <span className="text-sm font-semibold">Race history</span>
+          <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
+            tap a race for splits and notes
+          </span>
+        </div>
+        {p.races.history.length === 0 ? (
+          <p className="px-5 pb-5 text-sm" style={{ color: "var(--ink-muted)" }}>
+            No races logged yet. Log one above and it lands here with your splits.
+          </p>
+        ) : (
+          p.races.history.map((r) => <RaceHistoryRow key={r.id} r={r} />)
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * One race in the history list.
+ *
+ * This was a table row with four columns hidden below `lg`, which meant that on
+ * the phone the athlete actually uses, a race showed a date, an event and a
+ * time — and the splits, place and conditions they had just typed in were
+ * invisible. Everything recorded is here, and the detail is one tap away rather
+ * than one breakpoint away.
+ *
+ * <details> rather than React state so this stays a server component and works
+ * with JS still loading.
+ */
+function RaceHistoryRow({
+  r,
+}: {
+  r: CoreProfile["races"]["history"][number];
+}) {
+  const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+  // A split slower than the average by more than 3% is where the race got hard;
+  // worth seeing at a glance rather than reading a row of numbers.
+  const avg = r.splits && r.splits.length ? r.splits.reduce((a, b) => a + b, 0) / r.splits.length : null;
+  const hasDetail = Boolean(
+    (r.splits && r.splits.length) || r.conditions || r.notes || r.feel || r.place !== null
+  );
+
+  const head = (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 w-full">
+      <span className="text-xs tabular-nums w-24 shrink-0" style={{ color: "var(--ink-muted)" }}>
+        {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+      </span>
+      <span className="font-medium">{r.event}</span>
+      <span className="tabular-nums font-semibold">{r.time}</span>
+      {r.isPr && (
+        <span
+          className="text-[10px] font-bold rounded-full px-1.5 py-0.5"
+          style={{ background: "rgba(245,158,11,0.2)", color: "var(--brand-strong)" }}
+        >
+          PR
+        </span>
+      )}
+      {r.place !== null && (
+        <span className="text-xs tabular-nums" style={{ color: "var(--ink-muted)" }}>
+          #{r.place}
+        </span>
+      )}
+      {r.conditions && (
+        <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
+          {r.conditions}
+        </span>
+      )}
+    </div>
+  );
+
+  if (!hasDetail) {
+    return (
+      <div className="border-t px-5 py-3" style={{ borderColor: "var(--hairline)" }}>
+        {head}
+      </div>
+    );
+  }
+
+  return (
+    <details className="border-t group" style={{ borderColor: "var(--hairline)" }}>
+      <summary className="px-5 py-3 cursor-pointer list-none flex items-center gap-2">
+        <span
+          className="text-[10px] shrink-0 transition-transform group-open:rotate-90"
+          style={{ color: "var(--ink-muted)" }}
+          aria-hidden
+        >
+          ▶
+        </span>
+        {head}
+      </summary>
+      <div className="px-5 pb-4 pt-1 pl-11 space-y-3">
+        {r.splits && r.splits.length > 0 && (
+          <div>
+            <div className="micro-label mb-1.5" style={{ color: "var(--ink-muted)" }}>
+              Splits
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {r.splits.map((sec, i) => {
+                const slow = avg !== null && sec > avg * 1.03;
+                const fast = avg !== null && sec < avg * 0.97;
+                return (
+                  <span
+                    key={i}
+                    className="text-xs tabular-nums rounded-lg border px-2 py-1"
+                    title={`Lap ${i + 1}${avg !== null ? ` · ${sec > avg ? "+" : ""}${(sec - avg).toFixed(1)}s vs your average lap` : ""}`}
+                    style={{
+                      borderColor: "var(--hairline)",
+                      color: slow ? "var(--status-warning)" : fast ? "var(--status-good)" : "var(--ink-2)",
+                      background: "var(--surface-2)",
+                    }}
+                  >
+                    {fmt(sec)}
+                  </span>
+                );
+              })}
+            </div>
+            {avg !== null && r.splits.length > 1 && (
+              <p className="text-xs mt-1.5" style={{ color: "var(--ink-muted)" }}>
+                Average lap {fmt(avg)} · fastest {fmt(Math.min(...r.splits))} · slowest {fmt(Math.max(...r.splits))}
+              </p>
+            )}
+          </div>
+        )}
+        {r.feel && (
+          <p className="text-sm" style={{ color: "var(--ink-2)" }}>
+            <span className="micro-label" style={{ color: "var(--ink-muted)" }}>Felt </span>
+            {r.feel}
+          </p>
+        )}
+        {r.notes && (
+          <p className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
+            {r.notes}
+          </p>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -833,7 +1039,7 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
 
       <Panel title="Connected apps">
         <div className="flex flex-wrap gap-2">
-          {["Apple Health", "Apple Watch", "Garmin", "Strava", "WHOOP"].map((s) => {
+          {["Apple Health", "Apple Watch", "Garmin", "COROS", "WHOOP"].map((s) => {
             const on =
               (s === "Apple Health" && p.connectedSources.includes("Apple Watch")) ||
               p.connectedSources.includes(s);

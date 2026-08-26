@@ -3,7 +3,7 @@
 **See the injury coming before it happens.**
 
 RunGuard is an injury-prevention platform for high school running teams. It syncs
-each athlete's training data (Strava, Apple Health, and the RunGuard app), computes
+each athlete's training data (Apple Health, via the RunGuard iPhone app), computes
 their acute:chronic workload ratio, mileage ramps, training monotony, and recovery
 signals (HRV, resting HR, sleep), and flags at-risk runners **before** practice starts.
 
@@ -37,7 +37,7 @@ Then open **http://localhost:3000**.
 > The database file lives at `website/data/` and is git-ignored, so a fresh clone
 > starts empty — run `npm run seed` once from `website/` to generate the demo team.
 > Be aware that `npm run seed` **wipes and rebuilds** the roster; it refuses to run
-> if it finds data it didn't create (real accounts, Strava pairings, chats), and
+> if it finds data it didn't create (real accounts, device tokens, chats), and
 > `--force` overrides that. It only ever seeds the local SQLite file, never a
 > deployed database.
 >
