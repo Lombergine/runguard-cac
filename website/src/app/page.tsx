@@ -208,48 +208,34 @@ export default function Landing() {
             className="mt-4 text-4xl sm:text-5xl font-extrabold text-center"
             style={{ letterSpacing: "-0.03em" }}
           >
-            Priced for a coach&apos;s own budget
+            Free for every team
           </h2>
           <p className="mt-5 text-center text-base max-w-xl mx-auto" style={{ color: "var(--ink-2)" }}>
-            No district procurement, no per-seat negotiation, no annual contract.
+            No district procurement, no per-seat negotiation, no annual contract, no card.
           </p>
-          {/* The team plan is the business. It was sitting at the same visual
-              weight as the personal plan; now it leads and the other supports. */}
-          <div className="mt-14 grid md:grid-cols-5 gap-4 max-w-4xl mx-auto items-start">
+          {/* One offer, one number. A pricing table with a single free tier reads
+              as more confident than a grid of options, and there is nothing to
+              compare against — so the card is centered and the number leads. */}
+          <div className="mt-14 max-w-md mx-auto">
             <div
-              className="lift card-ember md:col-span-3 rounded-2xl p-8"
+              className="lift card-ember rounded-2xl p-8 text-center"
               style={{ background: "var(--surface)" }}
             >
               <p className="micro-label" style={{ color: "var(--brand-strong)" }}>For teams</p>
-              <div className="mt-4 flex items-baseline gap-1.5">
-                <span className="text-6xl font-extrabold num" style={{ letterSpacing: "-0.04em" }}>$100</span>
-                <span className="text-base font-medium" style={{ color: "var(--ink-muted)" }}>/mo</span>
+              <div className="mt-4 flex items-baseline justify-center gap-1.5">
+                <span className="text-7xl font-extrabold num" style={{ letterSpacing: "-0.04em" }}>$0</span>
               </div>
               <p className="mt-4 text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
                 The full coach dashboard for your whole roster. Unlimited athletes, every
-                athlete&apos;s app included.
+                athlete&apos;s app included. Free while we onboard our first teams.
               </p>
               <Link
                 href="/signup"
                 className="lift inline-block mt-7 rounded-full px-6 py-3 text-sm font-semibold text-black"
                 style={{ background: "var(--ember)", boxShadow: "0 4px 20px rgba(245,158,11,0.28)" }}
               >
-                Start free →
+                Create your account →
               </Link>
-            </div>
-            <div
-              className="lift md:col-span-2 rounded-2xl border p-8"
-              style={{ borderColor: "var(--hairline)", background: "var(--surface-2)" }}
-            >
-              <p className="micro-label">Individual</p>
-              <div className="mt-4 flex items-baseline gap-1.5">
-                <span className="text-4xl font-extrabold num" style={{ letterSpacing: "-0.03em" }}>$10</span>
-                <span className="text-sm font-medium" style={{ color: "var(--ink-muted)" }}>/mo</span>
-              </div>
-              <p className="mt-4 text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
-                For a runner without a team on RunGuard. Personal trends, recovery
-                tracking, and training insights.
-              </p>
             </div>
           </div>
         </div>
