@@ -65,7 +65,15 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Card } from "./Card";
-import { ApiError, createRace, deleteRace } from "../lib/api";
+import {
+  ApiError,
+  createRace,
+  deleteRace,
+  RACE_COURSE_TYPES,
+  RACE_PRIORITIES,
+  type RaceCourseType,
+  type RacePriority,
+} from "../lib/api";
 import { dayLabel, localDay, localDayOffset, parseLocalDay } from "../lib/dates";
 import type { UpcomingRace } from "../lib/types";
 import { M_PER_MI } from "../lib/units";
@@ -77,6 +85,27 @@ import { radius, ruleWidth, space, target } from "../theme/space";
 const MAX_NAME = 120;
 const MAX_EVENT = 20;
 const MAX_LOCATION = 120;
+
+const MAX_NOTES = 1000;
+
+/**
+ * Course and priority are CLOSED SETS the route rejects anything outside of, so
+ * they are chosen, never typed. Typing them would make "XC" and "cross-country"
+ * both reachable and both a 400 — the same reasoning that made `feel` a set of
+ * buttons in LogResultForm rather than a text field.
+ *
+ * The priority labels say what the letter MEANS. "A" alone is jargon an athlete
+ * has to already know; "A — the one you peak for" teaches it in place.
+ */
+const COURSES: readonly { id: RaceCourseType; label: string }[] = RACE_COURSE_TYPES.map(
+  (id) => ({ id, label: id })
+);
+
+const PRIORITIES: readonly { id: RacePriority; label: string }[] = [
+  { id: "A", label: "A — the one you peak for" },
+  { id: "B", label: "B — race it, no taper" },
+  { id: "C", label: "C — a training effort" },
+];
 
 /**
  * What the date control moves by. Whole days, so every step lands on a real
@@ -201,6 +230,53 @@ function EmberButton({
   );
 }
 
+/**
+ * Ruled rows rather than a picker wheel, the same construction LogResultForm
+ * uses for `feel`: every choice stays readable at arm's length and the selected
+ * one is visible without opening anything. The dot is the ember as a SHAPE —
+ * `brand` is 2.01:1 and no glyph ever sits on it.
+ *
+ * Selecting the row that is already selected CLEARS it. Both fields here are
+ * optional, and without this an athlete who taps "Track" by mistake has no way
+ * back to "not specified" short of leaving the form.
+ */
+function Choices<T extends string>({
+  options,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  options: readonly { id: T; label: string }[];
+  selected: T | null;
+  onSelect: (id: T | null) => void;
+  disabled: boolean;
+}) {
+  return (
+    <View style={styles.choices} accessibilityRole="radiogroup">
+      {options.map((option, index) => {
+        const on = option.id === selected;
+        return (
+          <Pressable
+            key={option.id}
+            style={[styles.choice, index > 0 && styles.choiceRuled]}
+            onPress={() => onSelect(on ? null : option.id)}
+            disabled={disabled}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on, disabled }}
+            accessibilityLabel={option.label}
+            accessibilityHint={on ? "Clears this choice." : undefined}
+          >
+            <View style={[styles.dot, on && styles.dotOn]} />
+            <Text style={on ? styles.choiceLabelOn : styles.choiceLabel}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * The date
  * ------------------------------------------------------------------ */
@@ -313,6 +389,10 @@ export function AddRaceForm({ onChanged }: { onChanged: () => void }) {
   const [event, setEvent] = useState("");
   const [distanceMi, setDistanceMi] = useState("");
   const [location, setLocation] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [courseType, setCourseType] = useState<RaceCourseType | null>(null);
+  const [priority, setPriority] = useState<RacePriority | null>(null);
+  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   /**
    * One line, for the refusal and for the confirmation alike. Both are plain
@@ -349,11 +429,26 @@ export function AddRaceForm({ onChanged }: { onChanged: () => void }) {
           // Omitted rather than sent empty: the route stores "" as "" but null
           // as absent, and an unnamed venue is absent.
           location: location.trim() || undefined,
+          // Same rule for all four. The gun time is NOT pre-checked here: the
+          // route's own sentence ("Start time must look like 09:30 or 16:05.")
+          // names the format better than a second copy of the regex could, and
+          // the file header's rule is that a message clear enough to act on
+          // belongs to the server.
+          startTime: startTime.trim() || undefined,
+          // Already narrowed to the route's closed sets by `Choices` — null is
+          // "not specified" and is omitted, never sent as an empty string.
+          courseType: courseType ?? undefined,
+          priority: priority ?? undefined,
+          notes: notes.trim() || undefined,
         });
         setName("");
         setEvent("");
         setDistanceMi("");
         setLocation("");
+        setStartTime("");
+        setCourseType(null);
+        setPriority(null);
+        setNotes("");
         setDate(localDay());
         setMessage("Added. It is in your upcoming races.");
         onChanged();
@@ -423,7 +518,55 @@ export function AddRaceForm({ onChanged }: { onChanged: () => void }) {
         placeholder="Where it is being run"
         autoCapitalize="words"
         maxLength={MAX_LOCATION}
+        returnKeyType="next"
+      />
+
+      <Field
+        label="Gun time"
+        note="optional · 24-hour"
+        value={startTime}
+        onChangeText={setStartTime}
+        editable={!busy}
+        placeholder="09:30"
+        keyboardType="numbers-and-punctuation"
+        autoCorrect={false}
+        maxLength={5}
+        returnKeyType="next"
+        style={styles.shortInput}
+      />
+
+      <View style={styles.field}>
+        <Head title="Course" note="optional · tap again to clear" />
+        <Choices
+          options={COURSES}
+          selected={courseType}
+          onSelect={setCourseType}
+          disabled={busy}
+        />
+      </View>
+
+      <View style={styles.field}>
+        <Head title="How much it matters" note="optional" />
+        <Choices
+          options={PRIORITIES}
+          selected={priority}
+          onSelect={setPriority}
+          disabled={busy}
+        />
+      </View>
+
+      <Field
+        label="Notes"
+        note="optional"
+        value={notes}
+        onChangeText={setNotes}
+        editable={!busy}
+        placeholder="Course, travel, anything worth remembering"
+        multiline
+        numberOfLines={3}
+        maxLength={MAX_NOTES}
         returnKeyType="done"
+        style={styles.notesInput}
       />
 
       <View style={styles.action}>
@@ -556,6 +699,47 @@ const styles = StyleSheet.create({
     minHeight: target.min,
   },
   /** An event name and a distance never need the full width, and say so. */
+  /**
+   * Multiline. `textAlignVertical` is Android-only and required there: without
+   * it the caret sits vertically centred in the taller box, so an empty notes
+   * field looks like a text field that has been misdrawn rather than one
+   * waiting for a paragraph.
+   */
+  notesInput: {
+    minHeight: target.min * 2,
+    textAlignVertical: "top",
+  },
+
+  /* The choice control, matching LogResultForm's `feel` rows exactly so the two
+     forms cannot describe the same interaction two ways. */
+  choices: {
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+    overflow: "hidden",
+  },
+  choice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: target.min,
+    paddingHorizontal: space.md,
+  },
+  /** The rule between rows, not around them — one control, several choices. */
+  choiceRuled: { borderTopWidth: ruleWidth, borderTopColor: color.ruleSoft },
+  dot: {
+    width: space.lg,
+    height: space.lg,
+    borderRadius: space.sm,
+    borderWidth: ruleWidth,
+    borderColor: color.ruleStrong,
+    backgroundColor: color.card,
+  },
+  /** FILL, not text: the ember is 2.01:1 and nothing legible sits on it. */
+  dotOn: { backgroundColor: color.brand, borderColor: color.brandStrong },
+  choiceLabel: { ...text.base, color: color.ink2 },
+  choiceLabelOn: { ...text.baseSemi, color: color.ink },
+
   shortInput: {
     fontFamily: font.mono,
     // Mandatory on any mono numeral (theme/type.ts) — `text.base` does not

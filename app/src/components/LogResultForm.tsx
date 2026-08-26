@@ -71,7 +71,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Card } from "./Card";
 import { ApiError, logRaceResult } from "../lib/api";
-import { dayLabel, localDay } from "../lib/dates";
+import { dayLabel, localDay, localDayOffset, parseLocalDay } from "../lib/dates";
 import { useProfile } from "../lib/profileStore";
 import type { RaceFeel } from "../lib/types";
 import { color } from "../theme/tokens";
@@ -140,6 +140,62 @@ type TimeParse = { ok: true; timeS: number } | { ok: false; why: string };
  * not silent: the preview spells out the whole-second value that will be
  * stored, so the athlete sees 5:04 before committing to it.
  */
+/** A parsed split list, or the sentence explaining why it is not one. */
+type SplitParse = { ok: true; splits: number[] } | { ok: false; why: string };
+
+/**
+ * Splits, entered the way a runner says them.
+ *
+ * "74, 76, 79" and "1:14 1:16 1:19" are the same three laps; commas and spaces
+ * both separate, and the two notations mix freely inside one entry because an
+ * athlete reading off a watch will write 400s in seconds and miles in M:SS.
+ *
+ * PER-LAP, NOT CUMULATIVE. That is the mistake worth catching: a running total
+ * is a plausible-looking list of numbers that describes a different race, and
+ * `race_results` has no UPDATE path anywhere in the product, so a wrong set of
+ * splits is permanent. The sum is checked against the finishing time here as
+ * well as on the route, because this is the copy that can say what to do about
+ * it while the athlete is still looking at the field.
+ */
+function parseSplits(raw: string, timeS: number): SplitParse {
+  const entry = raw.trim();
+  if (!entry) return { ok: true, splits: [] };
+
+  const parts = entry.split(/[,\s]+/).filter(Boolean);
+  if (parts.length > 60) {
+    return { ok: false, why: `That is ${parts.length} splits — more than a race has laps. Check the entry.` };
+  }
+
+  const splits: number[] = [];
+  for (const part of parts) {
+    const mmss = /^(\d{1,2}):([0-5]\d)(?:\.\d+)?$/.exec(part);
+    if (mmss) {
+      splits.push(Number(mmss[1]) * 60 + Number(mmss[2]));
+      continue;
+    }
+    const plain = Number(part);
+    if (!Number.isFinite(plain) || plain <= 0 || plain > 3600) {
+      return {
+        ok: false,
+        why: `Could not read the split "${part}". Write each lap in seconds (76) or as M:SS (1:16).`,
+      };
+    }
+    splits.push(plain);
+  }
+
+  const total = splits.reduce((a, b) => a + b, 0);
+  if (Math.abs(total - timeS) > timeS * 0.1) {
+    return {
+      ok: false,
+      why: `Those add up to ${clockTime(Math.round(total))} but you finished in ${clockTime(
+        Math.round(timeS)
+      )}. Enter each lap on its own, not a running total.`,
+    };
+  }
+
+  return { ok: true, splits };
+}
+
 function parseFinishTime(raw: string): TimeParse {
   const entry = raw.trim();
   if (!entry) {
@@ -325,14 +381,27 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
    * cannot be reached by a typo — see the header.
    */
   const [feel, setFeel] = useState<RaceFeel | null>(null);
+  const [splitsEntry, setSplitsEntry] = useState("");
+  const [conditions, setConditions] = useState("");
+  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<string | null>(null);
 
-  /** The day this will be filed under, sent rather than inferred. */
+  /**
+   * The day this will be filed under, sent rather than inferred.
+   *
+   * It used to be pinned to `localDay()`, which meant a Saturday race logged on
+   * Monday was filed under Monday — wrong in PR progression and in every chart
+   * keyed by date, permanently, since there is no edit path. It now steps
+   * backward from today; today is the ceiling, because a result cannot be
+   * logged for a race that has not been run.
+   */
   const today = localDay();
+  const [raceDate, setRaceDate] = useState(today);
   const parsed = parseFinishTime(entry);
   const placeN = place ? Number(place) : null;
+  const splits = parsed.ok ? parseSplits(splitsEntry, parsed.timeS) : null;
 
   function attempt() {
     if (busy) return;
@@ -342,6 +411,10 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
     if (placeN !== null && placeN < 1) {
       return setProblem("Finishing places start at 1st. Leave it blank if you would rather not say.");
     }
+    // Checked before the request rather than after: the route rejects the same
+    // things, but this copy can name the entry the athlete is still looking at.
+    const splitParse = parseSplits(splitsEntry, parsed.timeS);
+    if (!splitParse.ok) return setProblem(splitParse.why);
 
     setProblem(null);
     setReceipt(null);
@@ -351,16 +424,23 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
         await logRaceResult({
           event,
           timeS: parsed.timeS,
-          date: today,
+          date: raceDate,
           // Omitted rather than zeroed when unanswered: the column holds NULL,
           // which is the record of not having said.
           ...(placeN === null ? {} : { place: placeN }),
           ...(feel === null ? {} : { feel }),
+          ...(splitParse.splits.length ? { splits: splitParse.splits } : {}),
+          ...(conditions.trim() ? { conditions: conditions.trim() } : {}),
+          ...(notes.trim() ? { notes: notes.trim() } : {}),
         });
-        setReceipt(`Logged ${event} · ${clockTime(parsed.timeS)} · ${dayLabel(today)}`);
+        setReceipt(`Logged ${event} · ${clockTime(parsed.timeS)} · ${dayLabel(raceDate)}`);
         setEntry("");
         setPlace("");
         setFeel(null);
+        setSplitsEntry("");
+        setConditions("");
+        setNotes("");
+        setRaceDate(localDay());
         onChanged();
       } catch (err) {
         /*
@@ -446,6 +526,85 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
       </Row>
 
       {/*
+        The day it was run. Stepped, never typed — the same reasoning
+        AddRaceForm's date control is built on: "10/09" is a different day
+        either side of the Atlantic and "31/02" is a date a keyboard can produce
+        and a database cannot store. Today is the ceiling; a race in the future
+        has no result yet.
+      */}
+      <Row label="Ran on" note="today unless you say otherwise">
+        <View style={styles.dateRow}>
+          <Pressable
+            style={styles.dateStep}
+            onPress={() => setRaceDate((d) => localDayOffset(1, parseLocalDay(d)))}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="One day earlier"
+          >
+            <Text style={styles.dateStepGlyph}>−</Text>
+          </Pressable>
+          <Text style={styles.dateValue}>{dayLabel(raceDate)}</Text>
+          <Pressable
+            style={[styles.dateStep, raceDate >= today && styles.dateStepOff]}
+            onPress={() => setRaceDate((d) => localDayOffset(-1, parseLocalDay(d)))}
+            disabled={busy || raceDate >= today}
+            accessibilityRole="button"
+            accessibilityLabel="One day later"
+            accessibilityState={{ disabled: busy || raceDate >= today }}
+          >
+            <Text style={raceDate >= today ? styles.dateStepGlyphOff : styles.dateStepGlyph}>
+              +
+            </Text>
+          </Pressable>
+        </View>
+      </Row>
+
+      <Row label="Splits" note="optional · per lap">
+        <TextInput
+          style={styles.textInput}
+          value={splitsEntry}
+          onChangeText={setSplitsEntry}
+          editable={!busy}
+          placeholder="74, 76, 79  or  1:14 1:16 1:19"
+          placeholderTextColor={color.muted}
+          keyboardType="numbers-and-punctuation"
+          autoCorrect={false}
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={400}
+          accessibilityLabel="Splits, one per lap"
+        />
+      </Row>
+
+      <Row label="Conditions" note="optional">
+        <TextInput
+          style={styles.textInput}
+          value={conditions}
+          onChangeText={setConditions}
+          editable={!busy}
+          placeholder="Hot, windy, muddy course"
+          placeholderTextColor={color.muted}
+          maxLength={120}
+          accessibilityLabel="Race conditions"
+        />
+      </Row>
+
+      <Row label="Notes" note="optional">
+        <TextInput
+          style={[styles.textInput, styles.notesInput]}
+          value={notes}
+          onChangeText={setNotes}
+          editable={!busy}
+          placeholder="How it went, tactics, anything worth remembering"
+          placeholderTextColor={color.muted}
+          multiline
+          numberOfLines={3}
+          maxLength={1000}
+          accessibilityLabel="Notes about the race"
+        />
+      </Row>
+
+      {/*
         What is about to become permanent, in words, before the athlete commits
         to it. Only appears once there is a real row to describe — a half-filled
         preview would be a claim about a result that does not exist yet.
@@ -455,7 +614,7 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
           <Text style={styles.eyebrow}>Will be stored as</Text>
           <Text style={styles.previewTime}>{clockTime(parsed.timeS)}</Text>
           <Text style={styles.previewProse}>
-            {`A ${event} in ${spellTime(parsed.timeS)}, on ${dayLabel(today)}.`}
+            {`A ${event} in ${spellTime(parsed.timeS)}, on ${dayLabel(raceDate)}.`}
           </Text>
           <Text style={styles.previewProse}>
             {placeN !== null && placeN >= 1
@@ -466,6 +625,20 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
             {feel === null
               ? "How it felt: not recorded."
               : `You said it felt ${feel}.`}
+          </Text>
+          {/* Splits are the one optional field that can be WRONG rather than
+              merely absent, so the preview reports the problem where the other
+              lines report the value. */}
+          <Text style={styles.previewProse}>
+            {splits === null
+              ? "Splits: not recorded."
+              : splits.ok
+                ? splits.splits.length
+                  ? `${splits.splits.length} splits, ${splits.splits
+                      .map((x) => clockTime(Math.round(x)))
+                      .join(" · ")}.`
+                  : "Splits: not recorded."
+                : splits.why}
           </Text>
         </View>
       ) : null}
@@ -561,6 +734,44 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     minWidth: target.min * 2,
   },
+
+  /** A plain text field, the same sunken ground the time and place fields use. */
+  textInput: {
+    ...text.base,
+    color: color.ink,
+    backgroundColor: color.well,
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    minHeight: target.min,
+  },
+  /** `textAlignVertical` is Android-only and required: without it the caret
+      sits centred in the taller box and an empty field looks misdrawn. */
+  notesInput: { minHeight: target.min * 2, textAlignVertical: "top" },
+
+  /** The stepped date: value in the middle, one step either side. */
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  dateStep: {
+    width: target.min,
+    height: target.min,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+    backgroundColor: color.well,
+  },
+  /** Inert, not absent: the control keeps its place so the row does not jump. */
+  dateStepOff: { backgroundColor: color.card, borderColor: color.ruleSoft },
+  dateStepGlyph: { ...text.base, color: color.ink },
+  dateStepGlyphOff: { ...text.base, color: color.muted },
+  dateValue: { ...text.baseSemi, color: color.ink, flex: 1 },
 
   choices: {
     borderWidth: ruleWidth,

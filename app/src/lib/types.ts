@@ -245,6 +245,21 @@ export type UpcomingRace = {
   event: string;
   distance_m: number;
   location: string | null;
+  /**
+   * Gun time as "HH:MM", or null when it was not recorded. Print it verbatim —
+   * it is already local and already formatted; never re-derive it.
+   *
+   * All four of these are optional on the wire so this build still works
+   * against a server that predates them. Absent and null both mean "not
+   * recorded"; neither may render as a blank beside a label.
+   */
+  start_time?: string | null;
+  /** "Track" | "Cross country" | "Road" | "Trail", or null. */
+  course_type?: string | null;
+  /** "A" | "B" | "C" — how much this race matters. Null when unset. */
+  priority?: string | null;
+  /** Free text from whoever added the race. */
+  notes?: string | null;
   /** null = coach- or seed-created. */
   created_by_athlete_id: number | null;
   team_id: number | null;
@@ -490,6 +505,14 @@ export type RaceHistoryEntry = {
   /** Per-split seconds, or null when none were recorded. */
   splits: number[] | null;
   conditions: string | null;
+  /**
+   * Whatever the athlete wrote about the race. Null when nothing was said.
+   *
+   * Optional on the wire: this build can talk to a server that predates the
+   * column, where the field is simply absent. Absent and null both mean "not
+   * recorded" and must render as nothing, never as an empty line.
+   */
+  notes?: string | null;
   isPr: boolean;
 };
 
