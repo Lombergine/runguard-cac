@@ -40,7 +40,7 @@ export function applySqliteSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS activities (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      source TEXT NOT NULL,           -- 'seed' | 'strava' | 'healthkit' | 'apple_export'
+      source TEXT NOT NULL,           -- 'seed' | 'healthkit' | 'apple_export'
       external_id TEXT,
       name TEXT,
       type TEXT DEFAULT 'Run',
@@ -204,8 +204,15 @@ export function applySqliteSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
       ON risk_snapshots(athlete_id, date);
 
-    -- One row per outstanding Strava OAuth handshake. The row IS the permission
-    -- to write tokens onto an athlete: /api/strava/connect creates it after
+    -- DEPRECATED. Strava was removed from the product; nothing reads or writes
+    -- this table or the four strava_* columns on the athletes table any more.
+    -- They are
+    -- left in place because dropping columns is a migration that has to run
+    -- against the live Supabase database, and empty columns cost nothing.
+    --
+    -- Historical note, for whoever does eventually drop them:
+    -- One row per outstanding Strava OAuth handshake. The row WAS the permission
+    -- to write tokens onto an athlete: /api/strava/connect created it after
     -- authenticating the caller, and the callback deletes it as it redeems it.
     -- A replayed callback URL therefore finds nothing and is refused. See the
     -- state notes in src/lib/strava.ts.
@@ -214,6 +221,41 @@ export function applySqliteSchema(db: Database.Database): void {
       athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
       expires_at INTEGER NOT NULL     -- unix seconds
     );
+  `);
+
+  db.exec(`
+    /*
+     * The coach's training calendar.
+     *
+     * One row per team per calendar day. A row means "the coach wrote this
+     * session"; no row means the generated template stands for that day, which
+     * is what every team had before this table existed. That is deliberately
+     * sparse: a coach who fills in Tuesday and Thursday has written two rows,
+     * not seven, and the other five days keep adapting to each athlete.
+     *
+     * UNIQUE(team_id, date) is what makes the editor an upsert rather than an
+     * append — clicking the same day twice edits it instead of stacking a second
+     * session nobody can see behind the first.
+     *
+     * distance_m is nullable because a rest day has no distance, and because a
+     * coach who writes "hills, 40 minutes" has not given one. Null is "not
+     * specified" everywhere it is read; it is never rendered as 0.
+     */
+    CREATE TABLE IF NOT EXISTS team_plan_days (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,             -- YYYY-MM-DD, local calendar day
+      type TEXT NOT NULL,             -- 'Easy run' | 'Rest' | free text the coach typed
+      distance_m REAL,                -- null = not specified
+      target_pace TEXT,               -- free text, e.g. '7:30/mi'
+      details TEXT,                   -- what to actually do
+      why TEXT,                       -- the point of it, shown to the athlete
+      updated_at TEXT DEFAULT (datetime('now')),
+      updated_by TEXT,                -- coach name at write time, for the audit line
+      UNIQUE(team_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_team_plan_days_team_date
+      ON team_plan_days(team_id, date);
   `);
 
   // Additive migrations for columns introduced after first release.
@@ -251,6 +293,17 @@ export function applySqliteSchema(db: Database.Database): void {
   // their workout history or their age at read time — see src/lib/hrmax.ts.
   addColumn("athletes", "hr_max REAL");
   addColumn("athletes", "hr_max_source TEXT"); // 'manual' | 'calibrated'
+  // Race detail. A race row used to carry name/date/event/distance/location and
+  // nothing else, which is why the upcoming-race card had nothing to show past a
+  // countdown. All four are optional: a race with only the original fields is
+  // still a valid race, and every read path treats null as "not recorded".
+  addColumn("races", "start_time TEXT");    // 'HH:MM' local, gun time
+  addColumn("races", "course_type TEXT");   // 'Track' | 'Cross country' | 'Road' | 'Trail'
+  addColumn("races", "priority TEXT");      // 'A' | 'B' | 'C' — how much this one matters
+  addColumn("races", "notes TEXT");         // course description, travel, anything else
+  // Post-race notes, alongside the splits and conditions columns that have
+  // existed since first release but which nothing wrote until now.
+  addColumn("race_results", "notes TEXT");
   // Which path produced a chat row: 'rules' | 'safety:<id>'. Written on BOTH the
   // user and assistant rows of a safety-intercepted exchange, which is what lets
   // chatSummary keep those disclosures off the coach's screen.

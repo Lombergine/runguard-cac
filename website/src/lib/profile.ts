@@ -13,6 +13,7 @@ import {
   injuriesForAthlete,
   goalsForAthlete,
   upcomingRaces,
+  teamPlanDays,
   AthleteRow,
   ActivityRow,
   CheckinRow,
@@ -110,6 +111,7 @@ export type CoreProfile = {
       feel: string | null;
       splits: number[] | null;
       conditions: string | null;
+      notes: string | null;
       isPr: boolean;
     }[];
     prProgression: Record<string, { date: string; timeS: number }[]>;
@@ -121,12 +123,22 @@ export type CoreProfile = {
   chatSummary: string[];
 };
 
-function connectedSources(a: AthleteRow, acts: ActivityRow[]): string[] {
+/**
+ * What is actually feeding this athlete's data.
+ *
+ * Strava used to be listed here, both from the link column and from any
+ * activity carrying `source === "strava"`. Both are gone with the integration:
+ * everything now arrives through Apple Health, either live from the iPhone app
+ * (`healthkit`) or from a one-off export backfill (`apple_export`).
+ *
+ * `a` is still taken so callers do not have to change and so the athlete row is
+ * at hand if a future source is stored as a column again.
+ */
+function connectedSources(_a: AthleteRow, acts: ActivityRow[]): string[] {
   const out = new Set<string>();
-  if (a.strava_athlete_id) out.add("Strava");
   for (const x of acts) {
-    if (x.source === "healthkit" || x.source === "apple_export") out.add("Apple Watch");
-    if (x.source === "strava") out.add("Strava");
+    if (x.source === "healthkit") out.add("Apple Watch");
+    if (x.source === "apple_export") out.add("Apple Health");
   }
   if (out.size === 0) out.add("No data yet");
   return [...out];
@@ -254,7 +266,27 @@ export async function buildProfile(
   const recentSpike =
     recentRuns.find((r) => r.spike && r.date >= localDayOffset(7, now))?.spike ?? null;
   const adjustment = planAdjustment(risk, recentSpike, energyTrend);
-  const plan = weeklyPlan(risk, predictions, nextRace, statuses, now, adjustment);
+
+  /*
+   * The coach's calendar, for the Monday–Sunday week weeklyPlan is about to
+   * build. Read for exactly that window rather than "recent days": the plan is
+   * always this week, and pulling a wider range would put days on the wire that
+   * nothing renders.
+   *
+   * An athlete with no team has no coach calendar, and the empty map is the
+   * pre-calendar behaviour — every day generated. That is the same fallback an
+   * athlete on a team whose coach has not written anything gets, which is why
+   * there is no "has a plan" flag anywhere: a missing row IS the answer.
+   */
+  const weekMonday = new Date(now);
+  weekMonday.setDate(weekMonday.getDate() - ((weekMonday.getDay() + 6) % 7));
+  const weekSunday = new Date(weekMonday);
+  weekSunday.setDate(weekMonday.getDate() + 6);
+  const coachDays = athlete.team_id
+    ? await teamPlanDays(athlete.team_id, localDay(weekMonday), localDay(weekSunday))
+    : new Map();
+
+  const plan = weeklyPlan(risk, predictions, nextRace, statuses, now, adjustment, coachDays);
 
   const lastActivityDaysAgo = risk.lastActivity
     ? Math.floor((now.getTime() - new Date(risk.lastActivity).getTime()) / DAY_MS)
@@ -322,6 +354,7 @@ export async function buildProfile(
       feel: r.feel,
       splits,
       conditions: r.conditions,
+      notes: r.notes,
       isPr,
     };
   });

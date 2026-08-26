@@ -37,8 +37,6 @@ function sourceLabel(source: string): string {
       return "Apple Watch";
     case "apple_export":
       return "Apple Health";
-    case "strava":
-      return "Strava";
     case "seed":
       return "Sample data";
     default:

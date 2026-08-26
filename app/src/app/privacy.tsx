@@ -146,11 +146,6 @@ export default function PrivacyScreen() {
             whether school is stressful right now. Check-ins are optional.
           </Text>
           <Text style={styles.p}>
-            <Text style={styles.lead}>Strava, only if you connect it. </Text>
-            Recent activities, including distance, duration, heart rate and the GPS route.
-            You authorise this through Strava and can disconnect whenever you like.
-          </Text>
-          <Text style={styles.p}>
             <Text style={styles.lead}>Coach chat, only if it is switched on. </Text>
             The messages you type, and the training context needed to answer them, are
             sent to our AI provider, Anthropic, to write the reply.
@@ -210,10 +205,6 @@ export default function PrivacyScreen() {
             hosts the web app and the API.
           </Text>
           <Text style={styles.p}>
-            <Text style={styles.lead}>Strava </Text>
-            is involved only if you connect it.
-          </Text>
-          <Text style={styles.p}>
             <Text style={styles.lead}>Anthropic </Text>
             is involved only if the coach chat is switched on, to generate replies.
           </Text>
@@ -234,7 +225,7 @@ export default function PrivacyScreen() {
             </Text>{" "}
             from your account email address. For an athlete under 18, a parent or guardian
             can write instead. You can stop RunGuard reading Apple Health at any time in
-            Settings, and disconnect Strava at any time.
+            Settings, which stops all further collection.
           </Text>
         </Panel>
 
@@ -275,8 +266,7 @@ export default function PrivacyScreen() {
         <Panel title="Your choices" note="GDPR AND CCPA">
           <Text style={styles.p}>
             You choose which Apple Health data types RunGuard may read, and can change any
-            of them in Settings. You choose whether to connect Strava. You choose whether
-            to submit a check-in. You can ask to see, correct or delete your data by
+            of them in Settings. You choose whether to submit a check-in. You can ask to see, correct or delete your data by
             emailing us.
           </Text>
           <Text style={styles.p}>

@@ -560,6 +560,31 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
   // would stand forever. /api/race-result treats an omitted `feel` as "not
   // reported" — absent is a first-class value there, and now here too.
   const [feel, setFeel] = useState("");
+  /*
+   * Defaults to today, but editable — a race run on Saturday and logged on
+   * Monday used to be filed under Monday, because the route falls back to
+   * localDay() when no date is sent and the form never sent one. That put the
+   * result on the wrong day in PR progression and in every chart keyed by date.
+   *
+   * Filled on mount rather than in the initialiser. This is a client component,
+   * but Next still renders it on the server first, and localDay() reads the
+   * machine's own calendar — a server in UTC and an athlete in California
+   * disagree about what "today" is for seven hours of every day, which is a
+   * hydration mismatch on exactly the field where being off by one matters.
+   * Empty is also the correct value to send: the route reads absent as today.
+   */
+  const [date, setDate] = useState("");
+  useEffect(() => {
+    // Deferred by a frame rather than set in the effect body: a setState there
+    // forces a second render before the browser paints, which is the cascade
+    // react-hooks/purity flags. One frame is invisible, and an empty date is a
+    // correct value to submit anyway — the route reads absent as today.
+    const id = requestAnimationFrame(() => setDate(localDay()));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  const [splits, setSplits] = useState("");
+  const [conditions, setConditions] = useState("");
+  const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState("");
   const router = useRouter();
 
@@ -583,6 +608,33 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
       setMsg("Place must be a whole number, 1 or higher.");
       return;
     }
+    /*
+     * Splits, entered the way anyone actually says them: "74, 76, 79" or
+     * "1:14 1:16 1:19", comma or space separated, either notation mixed freely.
+     * Parsed here rather than posted as a raw string so the route keeps taking
+     * a list of numbers and one bad entry is caught before it is sent.
+     */
+    let splitsS: number[] | undefined;
+    const rawSplits = splits.trim();
+    if (rawSplits) {
+      const parts = rawSplits.split(/[,\s]+/).filter(Boolean);
+      const parsed: number[] = [];
+      for (const part of parts) {
+        const mm = part.match(/^(\d{1,2}):([0-5]\d)(?:\.\d+)?$/);
+        if (mm) {
+          parsed.push(parseInt(mm[1]) * 60 + parseInt(mm[2]));
+          continue;
+        }
+        const plain = Number(part);
+        if (!Number.isFinite(plain) || plain <= 0) {
+          setMsg(`Couldn't read the split "${part}". Use seconds (76) or M:SS (1:16).`);
+          return;
+        }
+        parsed.push(plain);
+      }
+      splitsS = parsed;
+    }
+
     const res = await fetch("/api/race-result", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -590,8 +642,12 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
         athleteId,
         event,
         timeS,
+        date: date || undefined,
         place: placeNum ?? undefined,
         feel: feel || undefined,
+        splits: splitsS,
+        conditions: conditions.trim() || undefined,
+        notes: notes.trim() || undefined,
       }),
     });
     if (res.ok) {
@@ -599,6 +655,10 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
       setTime("");
       setPlace("");
       setFeel("");
+      setSplits("");
+      setConditions("");
+      setNotes("");
+      setDate(localDay());
       router.refresh();
     } else {
       // The route explains exactly which field it rejected; swallowing that and
@@ -623,6 +683,10 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
         <option value="ok">Felt ok</option>
         <option value="rough">Felt rough</option>
       </select>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} title="Race date — defaults to today" className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input value={splits} onChange={(e) => setSplits(e.target.value)} placeholder="Splits — 74, 76, 79 or 1:14 1:16" className="w-56 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input value={conditions} onChange={(e) => setConditions(e.target.value)} placeholder="Conditions (hot, windy, muddy…)" className="w-52 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How it went, tactics, anything worth remembering" className="w-full sm:w-80 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <button className="rounded-xl px-4 py-2 text-sm font-semibold text-black cursor-pointer" style={{ background: "var(--brand)" }}>
         Log race
       </button>
@@ -643,6 +707,10 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
   const [event, setEvent] = useState(events[0]);
   const [distanceMi, setDistanceMi] = useState("");
   const [location, setLocation] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [courseType, setCourseType] = useState("");
+  const [priority, setPriority] = useState("");
+  const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState("");
   const router = useRouter();
 
@@ -664,7 +732,22 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
     const res = await fetch("/api/race", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ athleteId, name, date, event, distanceM, location: location || undefined }),
+      body: JSON.stringify({
+        athleteId,
+        name,
+        date,
+        event,
+        distanceM,
+        // `|| undefined` throughout: an untouched field is genuinely absent, and
+        // the route treats absent as "not reported" while treating an empty
+        // string that was SENT as something to check. Sending "" for every
+        // optional field would turn every blank into a validated nothing.
+        location: location || undefined,
+        startTime: startTime || undefined,
+        courseType: courseType || undefined,
+        priority: priority || undefined,
+        notes: notes.trim() || undefined,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -673,6 +756,10 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
       setDate("");
       setDistanceMi("");
       setLocation("");
+      setStartTime("");
+      setCourseType("");
+      setPriority("");
+      setNotes("");
       router.refresh();
     } else {
       setMsg(data.error || "Couldn't save.");
@@ -690,6 +777,21 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
       </select>
       <input value={distanceMi} onChange={(e) => setDistanceMi(e.target.value)} placeholder="Distance (mi)" className="w-28 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location (optional)" className="w-40 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} title="Gun time (optional)" className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <select value={courseType} onChange={(e) => setCourseType(e.target.value)} title="Course type (optional)" className="rounded-xl border px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)", background: "var(--page)" }}>
+        <option value="">Course…</option>
+        <option value="Track">Track</option>
+        <option value="Cross country">Cross country</option>
+        <option value="Road">Road</option>
+        <option value="Trail">Trail</option>
+      </select>
+      <select value={priority} onChange={(e) => setPriority(e.target.value)} title="How much this one matters — A races are the ones worth tapering for" className="rounded-xl border px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)", background: "var(--page)" }}>
+        <option value="">Priority…</option>
+        <option value="A">A — peak race</option>
+        <option value="B">B — race it, don&apos;t taper</option>
+        <option value="C">C — training effort</option>
+      </select>
+      <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Course notes, travel, anything else (optional)" className="w-full sm:w-72 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <button className="rounded-xl px-4 py-2 text-sm font-semibold text-black cursor-pointer" style={{ background: "var(--brand)" }}>
         Add race
       </button>

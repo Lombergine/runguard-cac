@@ -254,14 +254,14 @@ function CoachView({
       {/* pattern detection */}
       <Panel title="Pattern detection">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
-          <PatternRow label="Monotony" value={p.patterns.monotony !== null ? `${p.patterns.monotony}` : "—"} warn={p.patterns.monotony !== null && p.patterns.monotony > 2} />
-          <PatternRow label="High-effort streak" value={`${p.patterns.highEffortStreak} days`} warn={p.patterns.highEffortStreak >= 5} />
-          <PatternRow label="Days since hard effort" value={p.patterns.daysSinceHardEffort !== null ? `${p.patterns.daysSinceHardEffort}` : "—"} warn={false} />
-          <PatternRow label="Sleep debt (7d)" value={p.patterns.sleepDebtH !== null ? `${p.patterns.sleepDebtH} h` : "—"} warn={p.patterns.sleepDebtH !== null && p.patterns.sleepDebtH > 4} />
-          <PatternRow label="Sleep consistency" value={p.patterns.sleepConsistency !== null ? `${p.patterns.sleepConsistency}/100` : "—"} warn={p.patterns.sleepConsistency !== null && p.patterns.sleepConsistency < 60} />
-          <PatternRow label="Overreaching" value={p.patterns.overreaching ? "YES" : "no"} warn={p.patterns.overreaching} />
-          <PatternRow label="Undertraining" value={p.patterns.undertraining ? "YES" : "no"} warn={p.patterns.undertraining} />
-          <PatternRow label="Illness pattern" value={p.illness ? "YES" : "no"} warn={p.illness} />
+          <PatternRow label="Monotony" value={p.patterns.monotony !== null ? `${p.patterns.monotony}` : "—"} warn={p.patterns.monotony !== null && p.patterns.monotony > 2} info={"Foster's training monotony: the average of the last 7 days' training load divided by how much that load varied from day to day. Every day looking the same scores high. Above 2 with real volume behind it starts adding to the risk score — hard days and easy days have to actually differ. Blank when the week's loads barely varied at all."} />
+          <PatternRow label="High-effort streak" value={`${p.patterns.highEffortStreak} days`} warn={p.patterns.highEffortStreak >= 5} info={"Consecutive days, counting back from today, where the day's training load sat more than 15% above this athlete's own median training day. Six or more is one of the three things that trips the Overreaching flag."} />
+          <PatternRow label="Days since hard effort" value={p.patterns.daysSinceHardEffort !== null ? `${p.patterns.daysSinceHardEffort}` : "—"} warn={false} info={'Days since a session whose load was more than 40% above their median training day. A long gap is not automatically bad — it is what a taper or a recovery week looks like — but it is the number to check before assuming an athlete is sharp.'} />
+          <PatternRow label="Sleep debt (7d)" value={p.patterns.sleepDebtH !== null ? `${p.patterns.sleepDebtH} h` : "—"} warn={p.patterns.sleepDebtH !== null && p.patterns.sleepDebtH > 4} info={'Hours short of 8 h, added up across the last 7 nights of Apple Health sleep data. Only shortfalls count: a 9-hour night does not pay back a 6-hour one. Blank rather than stale when nothing was recorded in the window — it never reaches further back to find nights.'} />
+          <PatternRow label="Sleep consistency" value={p.patterns.sleepConsistency !== null ? `${p.patterns.sleepConsistency}/100` : "—"} warn={p.patterns.sleepConsistency !== null && p.patterns.sleepConsistency < 60} info={'0–100, from how much sleep length swung night to night across the last 7 nights. The same hours every night scores near 100; 5 h then 10 h scores low even when the average looks healthy. Needs at least 4 nights recorded in the window.'} />
+          <PatternRow label="Overreaching" value={p.patterns.overreaching ? "YES" : "no"} warn={p.patterns.overreaching} info={'Trips when any one of three things is true: workload ratio above 1.5; ratio above 1.4 together with monotony above 1.7; or six straight high-effort days. It is a flag to ask about, not a diagnosis.'} />
+          <PatternRow label="Undertraining" value={p.patterns.undertraining ? "YES" : "no"} warn={p.patterns.undertraining} info={'Trips only when the workload ratio is under 0.7 AND the last 7 days are under 70% of their 4-week average, and only for athletes averaging real volume. Deliberately hard to trip, so a planned easy week does not set it off.'} />
+          <PatternRow label="Illness pattern" value={p.illness ? "YES" : "no"} warn={p.illness} info={'Resting heart rate at least 5 bpm above their baseline at the same time as HRV at least 15% below it. That combination often appears a day or two before someone feels ill. A pattern, not a diagnosis — ask them how they feel.'} />
         </div>
       </Panel>
 
@@ -340,10 +340,23 @@ function CoachView({
   );
 }
 
-function PatternRow({ label, value, warn }: { label: string; value: string; warn: boolean }) {
+function PatternRow({
+  label,
+  value,
+  warn,
+  info,
+}: {
+  label: string;
+  value: string;
+  warn: boolean;
+  info?: string;
+}) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>{label}</div>
+      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
+        {label}
+        {info && <InfoDot text={info} label={label} />}
+      </div>
       <div className="font-semibold tabular-nums mt-0.5" style={{ color: warn ? "var(--status-warning)" : "var(--ink)" }}>
         {value}
       </div>
@@ -468,13 +481,40 @@ function RecoveryPanel({ recovery: r }: { recovery: RecoverySnapshot }) {
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {([
-          ["Resting HR", r.restingHr !== null ? `${r.restingHr} bpm` : "—", r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : null, rhrColor],
-          ["HRV", r.hrv !== null ? `${r.hrv} ms` : "—", r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : null, hrvColor],
-          ["Sleep (7d avg)", r.sleepAvg !== null ? `${r.sleepAvg} h` : "—", null, sleepColor],
-          ["VO₂max", r.vo2max !== null ? `${r.vo2max}` : "—", null, "var(--ink)"],
-        ] as const).map(([label, value, delta, color]) => (
+          [
+            "Resting HR",
+            r.restingHr !== null ? `${r.restingHr} bpm` : "—",
+            r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : null,
+            rhrColor,
+            "Their resting heart rate from Apple Health, and how far it sits from their own recent baseline. Sitting 5 bpm or more above baseline is one of the earliest signs of under-recovery or illness — often days before the athlete notices anything.",
+          ],
+          [
+            "HRV",
+            r.hrv !== null ? `${r.hrv} ms` : "—",
+            r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : null,
+            hrvColor,
+            "Heart rate variability — the small timing differences between heartbeats, from Apple Health. Compared only against this athlete's own baseline, never anyone else's, which is why the percentage is the number that matters. The raw ms figure is not comparable between two athletes.",
+          ],
+          [
+            "Sleep (7d avg)",
+            r.sleepAvg !== null ? `${r.sleepAvg} h` : "—",
+            null,
+            sleepColor,
+            "Average hours slept across the last 7 nights recorded in Apple Health. Under 7 h turns amber — short sleep is one of the strongest injury and illness signals there is. Shows a dash rather than a stale number when nothing was recorded in the window.",
+          ],
+          [
+            "VO₂max",
+            r.vo2max !== null ? `${r.vo2max}` : "—",
+            null,
+            "var(--ink)",
+            "Apple's Cardio Fitness estimate, read straight from Health — RunGuard does not calculate it. It is one of the two inputs to the fitness score.",
+          ],
+        ] as const).map(([label, value, delta, color, info]) => (
           <div key={label}>
-            <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>{label}</div>
+            <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
+              {label}
+              <InfoDot text={info} label={label} />
+            </div>
             <div className="text-xl font-bold mt-1 tabular-nums" style={{ color }}>{value}</div>
             {delta && <div className="text-xs mt-0.5" style={{ color }}>{delta}</div>}
           </div>

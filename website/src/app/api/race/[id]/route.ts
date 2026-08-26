@@ -1,4 +1,4 @@
-import { resolveAthlete } from "@/lib/apiAuth";
+import { resolveAthleteWithPath } from "@/lib/apiAuth";
 import { updateRace, deleteRace } from "@/lib/db";
 
 /**
@@ -31,8 +31,10 @@ function raceId(id: string): number | null {
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
-  const athlete = await resolveAthlete(request, body.athleteId ?? null);
-  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const auth = await resolveAthleteWithPath(request, body.athleteId ?? null);
+  if (!auth) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const athlete = auth.athlete;
+  const actor = { athleteId: athlete.id, teamId: athlete.team_id, isCoach: auth.via === "coach" };
 
   const rid = raceId(id);
   if (rid === null) return Response.json({ error: "Invalid race id" }, { status: 400 });
@@ -63,6 +65,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (typeof body.location === "string") patch.location = body.location.trim().slice(0, 120);
     else bad.push("a location as text");
   }
+  if (body.startTime !== undefined) {
+    if (typeof body.startTime === "string" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(body.startTime.trim()))
+      patch.start_time = body.startTime.trim();
+    else bad.push("a start time like 09:30");
+  }
+  if (body.courseType !== undefined) {
+    if (typeof body.courseType === "string" && ["Track", "Cross country", "Road", "Trail"].includes(body.courseType))
+      patch.course_type = body.courseType;
+    else bad.push("a course of Track, Cross country, Road or Trail");
+  }
+  if (body.priority !== undefined) {
+    if (typeof body.priority === "string" && ["A", "B", "C"].includes(body.priority))
+      patch.priority = body.priority;
+    else bad.push("a priority of A, B or C");
+  }
+  if (body.notes !== undefined) {
+    if (typeof body.notes === "string") patch.notes = body.notes.trim().slice(0, 1000);
+    else bad.push("notes as text");
+  }
 
   if (bad.length) {
     return Response.json({ error: `Please give ${bad.join(", ")}.` }, { status: 400 });
@@ -71,7 +92,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return Response.json({ error: "Nothing to change." }, { status: 400 });
   }
 
-  const ok = await updateRace(rid, athlete.id, patch);
+  const ok = await updateRace(rid, actor, patch);
   if (!ok) return Response.json({ error: "Not found or not yours to edit" }, { status: 403 });
   return Response.json({ ok: true });
 }
@@ -79,15 +100,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
-  const athlete = await resolveAthlete(request, body.athleteId ?? null);
-  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const auth = await resolveAthleteWithPath(request, body.athleteId ?? null);
+  if (!auth) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const athlete = auth.athlete;
 
   const rid = raceId(id);
   if (rid === null) return Response.json({ error: "Invalid race id" }, { status: 400 });
 
-  // `deleteRace` re-reads the row and compares `created_by_athlete_id` itself,
-  // so the scope check is not something this handler can forget to apply.
-  const ok = await deleteRace(rid, athlete.id);
+  // `deleteRace` re-reads the row and applies mayEditRace() itself, so the scope
+  // check is not something this handler can forget to apply.
+  const ok = await deleteRace(rid, {
+    athleteId: athlete.id,
+    teamId: athlete.team_id,
+    isCoach: auth.via === "coach",
+  });
   if (!ok) return Response.json({ error: "Not found or not yours to delete" }, { status: 403 });
   return Response.json({ ok: true });
 }

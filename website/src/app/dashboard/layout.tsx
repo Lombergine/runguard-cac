@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { isLoggedIn } from "@/lib/session";
+import { isLoggedIn, currentTeamId } from "@/lib/session";
+import { getTeam } from "@/lib/db";
 
 export default async function DashboardLayout({
   children,
@@ -8,6 +9,11 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   if (!(await isLoggedIn())) redirect("/login");
+  // The badge said "Leland XC · Coach view" for every team that has ever signed
+  // up, hardcoded. A coach at any other school opened the dashboard and saw
+  // someone else's team name over their own roster.
+  const teamId = await currentTeamId();
+  const team = teamId != null ? await getTeam(teamId) : null;
   return (
     <div className="flex-1 flex flex-col">
       <header
@@ -21,6 +27,7 @@ export default async function DashboardLayout({
           </Link>
           <nav className="flex items-center gap-4 text-sm" style={{ color: "var(--ink-2)" }}>
             <Link href="/dashboard" className="hover:opacity-70">Roster</Link>
+            <Link href="/dashboard/plan" className="hover:opacity-70">Training calendar</Link>
             <Link href="/dashboard/connect" className="hover:opacity-70">Data sources</Link>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
@@ -28,7 +35,7 @@ export default async function DashboardLayout({
               className="hidden sm:inline text-xs px-2 py-1 rounded-full border"
               style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
             >
-              Leland XC · Coach view
+              {team ? `${team.name} · ` : ""}Coach view
             </span>
             <form action="/api/logout" method="post">
               <button

@@ -3,7 +3,7 @@ import { HR_MAX_DEFAULT } from "./hrmax";
 import { miNum } from "./units";
 /**
  * RunGuard's full athlete engine — everything computed on top of raw Apple Health /
- * Strava data: load metrics (TRIMP, HR zones), pattern detection, fitness &
+ * synced activity data: load metrics (TRIMP, HR zones), pattern detection, fitness &
  * freshness, race predictions, the weekly plan with taper mode, pre-practice
  * flags, notifications, badges, and comparison.
  */
@@ -364,6 +364,39 @@ export type PlanDay = {
   status: "done" | "modified" | "skipped" | null;
   isToday: boolean;
   isTaper: boolean;
+  /**
+   * Where this day came from. "coach" means someone on the coaching staff wrote
+   * it on the team calendar; "auto" means RunGuard generated it from the
+   * template. The athlete sees the difference, because "your coach said do this"
+   * and "a computer suggested this" are not the same instruction.
+   */
+  source: "coach" | "auto";
+  /**
+   * On a coach day, the distance the coach actually wrote — before any
+   * per-athlete easing. Null on auto days and on coach days with no distance.
+   *
+   * Kept separate from `distanceKm` rather than overwriting it: when readiness
+   * eases the volume, the athlete has to be able to see BOTH numbers, or the
+   * app is quietly showing them something other than what their coach wrote and
+   * they will run the coach's number anyway.
+   */
+  coachDistanceKm: number | null;
+};
+
+/**
+ * The shape weeklyPlan needs from a coach-written day.
+ *
+ * Structural rather than importing TeamPlanDayRow: engine.ts is pure computation
+ * over plain data and has no database imports, which is what lets it be tested
+ * and reasoned about without a driver. A row satisfies this by having the
+ * fields.
+ */
+export type CoachPlanDay = {
+  type: string;
+  distance_m: number | null;
+  target_pace: string | null;
+  details: string | null;
+  why: string | null;
 };
 
 const SUPPLEMENTAL = [
@@ -434,7 +467,12 @@ export function weeklyPlan(
   nextRace: RaceRow | null,
   statuses: Map<string, string>,
   now: Date = new Date(),
-  adjustment: PlanAdjustment = { scale: 1, reason: null }
+  adjustment: PlanAdjustment = { scale: 1, reason: null },
+  /**
+   * Days the coach wrote for this team, keyed by YYYY-MM-DD. Absent or empty is
+   * the pre-calendar behaviour: every day generated.
+   */
+  coachDays: Map<string, CoachPlanDay> = new Map()
 ): { days: PlanDay[]; taperMode: boolean; taperCountdown: number | null; adjustment: PlanAdjustment } {
   const pace5k = predictions["5K"].timeS / 5; // s/km
   const easy = fmtPaceMi(pace5k * 1.3);
@@ -470,7 +508,7 @@ export function weeklyPlan(
   const base = risk.weekKm > 10 ? risk.weekKm : 30;
   const scale = adjustment.scale;
 
-  const template: Omit<PlanDay, "date" | "day" | "status" | "isToday" | "isTaper">[] = [
+  const template: Omit<PlanDay, "date" | "day" | "status" | "isToday" | "isTaper" | "source" | "coachDistanceKm">[] = [
     { type: "Easy run", distanceKm: round(base * 0.14 * scale), targetPace: easy, why: "Flush the weekend's long run and start the week aerobic.", details: "Fully conversational. Heart rate under 150. If it feels fast, it is.", supplemental: SUPPLEMENTAL[0] },
     { type: "Workout: 5×4 min tempo", distanceKm: round(base * 0.16 * scale), targetPace: tempo, why: "Threshold work raises the pace you can hold without blowing up.", details: "2 min jog between reps. Comfortably hard — you could say short sentences.", supplemental: SUPPLEMENTAL[1] },
     { type: "Recovery run", distanceKm: round(base * 0.11 * scale), targetPace: easy, why: "Active recovery clears the workout without adding stress.", details: "Slowest run of the week on purpose. Add 4 relaxed strides at the end.", supplemental: SUPPLEMENTAL[2] },
@@ -480,7 +518,7 @@ export function weeklyPlan(
     { type: "Rest", distanceKm: null, targetPace: null, why: "Adaptation happens in recovery, not in training.", details: "Full day off. Sleep in. Legs up.", supplemental: SUPPLEMENTAL[6] },
   ];
 
-  const taperTemplate = (dtr: number): Omit<PlanDay, "date" | "day" | "status" | "isToday" | "isTaper"> => {
+  const taperTemplate = (dtr: number): Omit<PlanDay, "date" | "day" | "status" | "isToday" | "isTaper" | "source" | "coachDistanceKm"> => {
     if (dtr <= 0) return { type: "RACE DAY", distanceKm: null, targetPace: null, why: "Everything this season pointed here.", details: "Long warmup, 4 strides, trust the fitness. Execute the pacing plan.", supplemental: null };
     if (dtr === 1) return { type: "Pre-race shakeout", distanceKm: 3, targetPace: easy, why: "Stay loose without spending anything.", details: "15–20 min jog + 3 gentle strides. Lay out your race kit tonight.", supplemental: null };
     if (dtr === 2) return { type: "Easy 25 min + 4 strides", distanceKm: 5, targetPace: easy, why: "Keep the legs ticking over.", details: "Strides at race pace, full recovery. Hydrate all day.", supplemental: null };
@@ -502,6 +540,44 @@ export function weeklyPlan(
         )
       : null;
     const inTaper = taperMode && dtr !== null && dtr >= 0 && dtr <= 6;
+
+    /*
+     * THE COACH WINS.
+     *
+     * A coach-written day replaces the generated one outright — including
+     * during taper week. A coach who writes a session three days before the
+     * league final has decided something about that race, and quietly
+     * substituting the generic taper template for it would be the app
+     * overruling the person who knows the athlete.
+     *
+     * What the coach does NOT override is the per-athlete easing. `scale` comes
+     * from this athlete's own readiness, spikes and reported soreness, and it
+     * still applies — but the coach's own number is carried alongside on
+     * `coachDistanceKm` so the athlete sees both. Silently showing a smaller
+     * number than the one on the board at practice would just teach them to
+     * ignore the app.
+     */
+    const coach = coachDays.get(iso);
+    if (coach) {
+      const written = coach.distance_m !== null ? round(coach.distance_m / 1000) : null;
+      days.push({
+        type: coach.type,
+        distanceKm: written !== null ? round(written * scale) : null,
+        coachDistanceKm: written,
+        targetPace: coach.target_pace,
+        why: coach.why ?? "Set by your coach for the whole team.",
+        details: coach.details ?? "",
+        supplemental: null,
+        source: "coach",
+        date: iso,
+        day: d.toLocaleDateString("en-US", { weekday: "long" }),
+        status: (statuses.get(iso) as PlanDay["status"]) ?? null,
+        isToday: iso === todayIso,
+        isTaper: inTaper,
+      });
+      continue;
+    }
+
     const t = inTaper ? taperTemplate(dtr as number) : template[i];
     days.push({
       ...t,
@@ -510,6 +586,8 @@ export function weeklyPlan(
       status: (statuses.get(iso) as PlanDay["status"]) ?? null,
       isToday: iso === todayIso,
       isTaper: inTaper,
+      source: "auto",
+      coachDistanceKm: null,
     });
   }
 

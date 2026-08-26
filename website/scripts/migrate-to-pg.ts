@@ -43,6 +43,9 @@ const TABLES = [
   "workout_status",
   "health_metrics",
   "risk_snapshots",
+  // After risk_snapshots so the FK to teams is already satisfied — TABLES is
+  // copied in order and teams is first.
+  "team_plan_days",
   "waitlist",
 ] as const;
 

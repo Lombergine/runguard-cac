@@ -1,13 +1,16 @@
 import { localDay } from "@/lib/day";
-import { resolveAthlete } from "@/lib/apiAuth";
+import { resolveAthleteWithPath, coachOnlyResponse } from "@/lib/apiAuth";
 import { run } from "@/lib/db/driver";
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const athlete = await resolveAthlete(request, body.athleteId ?? null);
-  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const auth = await resolveAthleteWithPath(request, body.athleteId ?? null);
+  if (!auth) return Response.json({ error: "Not authorized" }, { status: 401 });
+  // Coach-only: see coachOnlyResponse() in lib/apiAuth.ts.
+  if (auth.via !== "coach") return coachOnlyResponse("record or resolve an injury");
+  const athlete = auth.athlete;
 
   // `.trim()` before the emptiness test: `{bodyPart: "   "}` used to store an
   // injury against three spaces, which the body scan can never light up and no
@@ -41,8 +44,11 @@ export async function POST(request: Request) {
 /* mark an injury healed (or reopen it) — the body scan only lights unresolved ones */
 export async function PATCH(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const athlete = await resolveAthlete(request, body.athleteId ?? null);
-  if (!athlete) return Response.json({ error: "Not authorized" }, { status: 401 });
+  const auth = await resolveAthleteWithPath(request, body.athleteId ?? null);
+  if (!auth) return Response.json({ error: "Not authorized" }, { status: 401 });
+  // Coach-only: see coachOnlyResponse() in lib/apiAuth.ts.
+  if (auth.via !== "coach") return coachOnlyResponse("record or resolve an injury");
+  const athlete = auth.athlete;
 
   const id = Number(body.id);
   if (!Number.isInteger(id)) return Response.json({ error: "Need id" }, { status: 400 });

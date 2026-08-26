@@ -96,16 +96,14 @@ function weekMultiplier(p: Pattern, weeksAgo: number): number {
 /**
  * Rows this seeder could not have written. The old guard only counted athletes with
  * an email/password_hash, and seed-created athletes never have one — so on a database
- * whose real users had all signed in through some other path (a device token, a Strava
- * pairing, a second team) the count was 0 and the DELETE below ran unguarded. Anything
+ * whose real users had all signed in through some other path (a device token, a
+ * join code, a second team) the count was 0 and the DELETE below ran unguarded. Anything
  * here that is non-zero means the wipe would destroy data no reseed can regenerate.
  */
 function nonSeedData(db: ReturnType<typeof sqliteOnlyHandle>): string[] {
   const probes: [string, string][] = [
     ["athlete account(s) with a login (email/password set)",
       "SELECT COUNT(*) c FROM athletes WHERE email IS NOT NULL OR password_hash IS NOT NULL"],
-    ["athlete(s) paired to Strava",
-      "SELECT COUNT(*) c FROM athletes WHERE strava_athlete_id IS NOT NULL OR strava_access_token IS NOT NULL"],
     ["athlete(s) outside the demo team",
       "SELECT COUNT(*) c FROM athletes WHERE team_id IS NULL OR team_id <> 1"],
     ["team(s) other than the demo team", "SELECT COUNT(*) c FROM teams WHERE id <> 1"],
@@ -152,7 +150,12 @@ async function seed() {
     }
     console.log("Already seeded, clearing first…");
     db.exec(
-      "DELETE FROM activities; DELETE FROM health_metrics; DELETE FROM race_results; DELETE FROM races; DELETE FROM checkins; DELETE FROM injuries; DELETE FROM goals; DELETE FROM chat_messages; DELETE FROM workout_status; DELETE FROM athletes; DELETE FROM teams;"
+      "DELETE FROM activities; DELETE FROM health_metrics; DELETE FROM race_results; DELETE FROM races; DELETE FROM checkins; DELETE FROM injuries; DELETE FROM goals; DELETE FROM chat_messages; DELETE FROM workout_status; " +
+      // Explicit rather than relying on the ON DELETE CASCADE from teams:
+      // SQLite only enforces foreign keys when PRAGMA foreign_keys is on, and
+      // a wipe that silently leaves last season's plan behind would have the
+      // seeder reporting a clean reseed over stale rows.
+      "DELETE FROM team_plan_days; DELETE FROM athletes; DELETE FROM teams;"
     );
     db.exec("DELETE FROM sqlite_sequence WHERE name IN ('teams','athletes')");
   }
@@ -440,6 +443,54 @@ async function seed() {
   insertInjury.run(ethan.id, iso(-38), "shin (left)", "Medial tibial stress — 4 weeks off running, cleared to return");
   const grace = db.prepare("SELECT id FROM athletes WHERE name='Grace Chen'").get() as { id: number };
   insertInjury.run(grace.id, iso(-200), "achilles (right)", "Tendinopathy last season — manages with eccentric calf work");
+
+  /*
+   * A written training calendar for the demo team.
+   *
+   * Without this the coach's Training calendar page opens empty, and "the days
+   * you leave blank keep RunGuard's own suggestion" is a sentence about a
+   * feature nobody can see working. Four weeks — the last two and the next
+   * two — so the page shows both history and something to edit.
+   *
+   * Weekdays only, and Sunday is written as an explicit Rest day rather than
+   * left blank: leaving it blank would also produce a rest day from the
+   * template, and then the demo could not show the difference between "the
+   * coach said rest" and "RunGuard picked rest".
+   */
+  const insertPlanDay = db.prepare(
+    `INSERT INTO team_plan_days (team_id, date, type, distance_m, target_pace, details, why, updated_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (team_id, date) DO NOTHING`
+  );
+  const WEEK: [string, number | null, string | null, string, string][] = [
+    ["Easy run", 5, "8:30/mi", "Conversational the whole way. Meet at the track, out and back on the creek path.", "Aerobic base, and it flushes Sunday's long run out of the legs."],
+    ["Workout: 5×1000m", 6.5, "6:05/mi", "5×1000m at threshold, 2:00 jog recovery. Even splits — the last one should look like the first.", "Threshold work raises the pace you can hold before you blow up."],
+    ["Recovery run", 4, "9:15/mi", "Slowest run of the week, on purpose. Four relaxed strides at the end.", "Active recovery clears yesterday without adding to it."],
+    ["Workout: hills", 6, null, "8×45s uphill hard, jog down. Drive the knees, stay tall.", "Strength without the pounding of track intervals — best injury insurance we have."],
+    ["Easy run + strides", 5, "8:30/mi", "6×20s strides on the grass, walk back between.", "Settle the legs before Saturday and keep turnover sharp."],
+    ["Long run", 9, "8:50/mi", "Steady and relaxed. Eat before, carry water if it's over 70°F.", "The aerobic engine gets built here. Biggest single fitness lever in the week."],
+    ["Rest", null, null, "Full day off. Sleep in, legs up.", "Adaptation happens in recovery, not in training."],
+  ];
+  {
+    // Monday of the week two weeks back, then 28 days forward.
+    const start = new Date(localDay() + "T12:00:00");
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - 14);
+    for (let i = 0; i < 28; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const [type, mi, pace, details, why] = WEEK[i % 7];
+      insertPlanDay.run(
+        1,
+        localDay(d),
+        type,
+        mi === null ? null : Math.round(mi * 1609.344),
+        pace,
+        details,
+        why,
+        "Coach Alvarez"
+      );
+    }
+  }
 
   const counts = db
     .prepare(
