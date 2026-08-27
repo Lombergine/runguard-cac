@@ -40,9 +40,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+<<<<<<< HEAD
 # ...except the template, which contains no values — only the names of the
 # variables a deployment needs and what happens when each is missing. Ignoring
 # it means every new deployment rediscovers SESSION_SECRET the hard way.
+=======
+>>>>>>> origin/main
 !.env.example
 
 # vercel
