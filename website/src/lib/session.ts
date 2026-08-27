@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { DEMO_COOKIE, demoTeamId } from "./demo";
 
 const COOKIE = "mm_session";
 
@@ -108,6 +109,73 @@ export async function logIn(teamId: number): Promise<void> {
 export async function logOut(): Promise<void> {
   const store = await cookies();
   store.delete(COOKIE);
+  // Leaving the demo has to clear the demo marker too, or a coach who logs out,
+  // creates a real team and signs in still has `rg_demo` set — and middleware
+  // would refuse every write on their own roster with a message about a demo
+  // they are no longer in.
+  store.delete(DEMO_COOKIE);
+  store.delete(ATHLETE_COOKIE);
+}
+
+/* ---- the public demo ---- */
+
+/**
+ * Open a demo session for the demo team.
+ *
+ * The session cookie minted here is an ORDINARY coach session — the same value
+ * `logIn` would write — so every page and query that already scopes by team id
+ * works unchanged and there is no second read path to keep in sync. What makes
+ * it a demo is the marker cookie beside it, which middleware refuses writes on.
+ *
+ * The team id comes from the environment, never from the request. There is no
+ * argument for a caller to get wrong and no field in the cookie to tamper with:
+ * a demo session can only ever be a session for the configured demo team.
+ *
+ * Returns the team id it opened, or null when the demo is switched off — the
+ * caller turns that into a 404 rather than a redirect, so a disabled demo is
+ * indistinguishable from a route that does not exist.
+ */
+export async function demoLogIn(): Promise<number | null> {
+  const teamId = demoTeamId();
+  if (teamId === null) return null;
+  const store = await cookies();
+  store.set(COOKIE, signTeam(teamId), {
+    httpOnly: true,
+    secure: deployed(),
+    sameSite: "lax",
+    path: "/",
+    // Deliberately short. A demo is a visit, not an account, and a coach who
+    // comes back in a fortnight should land on the current demo rather than in
+    // a stale session they have forgotten they are inside.
+    maxAge: 60 * 60 * 12,
+  });
+  store.set(DEMO_COOKIE, "1", {
+    // NOT httpOnly: the banner is a client component and reads this to know it
+    // should render. It carries no secret — its whole content is the word "1",
+    // and it can only ever cause more refusal, never less.
+    httpOnly: false,
+    secure: deployed(),
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 12,
+  });
+  return teamId;
+}
+
+/**
+ * Is this request inside the demo?
+ *
+ * Server-side and honest: it checks that the marker is present AND that the
+ * session actually resolves to the configured demo team. A visitor who sets
+ * `rg_demo` by hand without a session gets false here — and still gets every
+ * write refused by middleware, which asks the cheaper question.
+ */
+export async function isDemoSession(): Promise<boolean> {
+  const teamId = demoTeamId();
+  if (teamId === null) return false;
+  const store = await cookies();
+  if (store.get(DEMO_COOKIE)?.value !== "1") return false;
+  return verifyCoachCookie(store.get(COOKIE)?.value) === teamId;
 }
 
 /* ---- athlete web session (their device/app token in an httpOnly cookie) ---- */

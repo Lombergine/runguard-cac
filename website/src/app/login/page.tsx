@@ -30,23 +30,6 @@ export default function Login() {
     }
   }
 
-  async function demo() {
-    setBusy(true);
-    setErr("");
-    const res = await fetch("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: "milemarker" }),
-    });
-    if (res.ok) {
-      router.push("/dashboard");
-      router.refresh();
-    } else {
-      setErr("Couldn't open the demo.");
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="flex-1 flex items-center justify-center px-4">
       <div
@@ -95,14 +78,26 @@ export default function Login() {
             {busy ? "Signing in…" : "Open dashboard"}
           </button>
         </form>
-        <button
-          onClick={demo}
-          disabled={busy}
-          className="w-full mt-3 rounded-xl border py-2.5 text-sm font-medium cursor-pointer disabled:opacity-60"
+        {/*
+          A LINK, not a fetch.
+          
+          This button used to POST `{ password: "milemarker" }` to /api/login — a
+          password hardcoded into a public repository, which stopped working the
+          moment coach accounts became real, and then sat here failing with
+          "Couldn't open the demo." for every visitor who pressed it. It was the
+          first thing a curious coach clicked.
+          
+          /api/demo/coach opens a read-only session for the sample team and
+          redirects. There is no credential in it to go stale.
+        */}
+        <Link
+          href="/api/demo/coach"
+          prefetch={false}
+          className="block w-full mt-3 rounded-xl border py-2.5 text-sm font-medium text-center"
           style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
         >
-          Explore the demo team
-        </button>
+          Look around a sample team instead
+        </Link>
       </div>
     </div>
   );

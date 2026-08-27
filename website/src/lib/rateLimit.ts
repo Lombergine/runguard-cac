@@ -183,6 +183,45 @@ export async function rateLimit(
 }
 
 /**
+ * A per-caller budget for an expensive endpoint, keyed on IP.
+ *
+ * Distinct from `checkAuthRate`, which protects a CREDENTIAL and therefore keys
+ * on the identity being guessed. Nothing is being guessed here — the caller is
+ * already authenticated — so the only thing worth bounding is how much work one
+ * client can ask for.
+ *
+ * Written for `/api/chat`, which was the one authenticated route with no bound
+ * on it and which the public demo made reachable by anyone with the link. Each
+ * call runs `buildProfile` (a dozen queries) and, once an ANTHROPIC_API_KEY is
+ * set, a paid model call. Twelve a minute is far above how fast a person types
+ * a question and far below what a script would want.
+ *
+ * `clientIp` returns "unknown" with no proxy headers, so every local caller
+ * shares one bucket. That errs toward limiting too much, which is the right
+ * direction — and behind Vercel the header is platform-set and unspoofable.
+ */
+export async function checkRequestRate(
+  request: Request,
+  label: string,
+  opts: { max: number; windowMs: number }
+): Promise<LimitDecision> {
+  const r = await rateLimit(`${label}:ip:${clientIp(request)}`, opts);
+  return r.ok ? { allowed: true } : { allowed: false, retryAfter: r.retryAfterS ?? 60 };
+}
+
+/** The 429 for a budget rather than a credential — different words, same shape. */
+export function tooManyRequests(retryAfter: number): Response {
+  return Response.json(
+    {
+      error: `That's a lot of questions at once — give it ${retryAfter} second${
+        retryAfter === 1 ? "" : "s"
+      } and ask again.`,
+    },
+    { status: 429, headers: { "Retry-After": String(retryAfter) } }
+  );
+}
+
+/**
  * Should this login attempt be allowed to reach the password check?
  *
  * `identifier` is whatever the caller is authenticating as — an email, or a

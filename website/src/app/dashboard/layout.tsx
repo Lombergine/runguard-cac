@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { isLoggedIn, currentTeamId } from "@/lib/session";
+import { isLoggedIn, currentTeamId, isDemoSession } from "@/lib/session";
+import DemoBanner from "@/components/DemoBanner";
 import { getTeam } from "@/lib/db";
 
 export default async function DashboardLayout({
@@ -14,8 +15,10 @@ export default async function DashboardLayout({
   // someone else's team name over their own roster.
   const teamId = await currentTeamId();
   const team = teamId != null ? await getTeam(teamId) : null;
+  const demo = await isDemoSession();
   return (
     <div className="flex-1 flex flex-col">
+      {demo && <DemoBanner />}
       <header
         className="sticky top-0 z-20 border-b glass"
         style={{ borderColor: "var(--hairline)" }}
@@ -35,7 +38,7 @@ export default async function DashboardLayout({
               className="hidden sm:inline text-xs px-2 py-1 rounded-full border"
               style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
             >
-              {team ? `${team.name} · ` : ""}Coach view
+              {team ? `${team.name} · ` : ""}{demo ? "Sample team" : "Coach view"}
             </span>
             <form action="/api/logout" method="post">
               <button

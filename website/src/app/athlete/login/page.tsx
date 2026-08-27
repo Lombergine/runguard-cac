@@ -30,23 +30,6 @@ export default function AthleteLogin() {
     }
   }
 
-  async function demo() {
-    setBusy(true);
-    setErr("");
-    const res = await fetch("/api/athlete-login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: "demo_ethanpark" }),
-    });
-    if (res.ok) {
-      router.push("/athlete");
-      router.refresh();
-    } else {
-      setErr("Couldn't open the demo athlete.");
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="flex-1 flex items-center justify-center px-4">
       <div
@@ -96,14 +79,25 @@ export default function AthleteLogin() {
             {busy ? "Signing in…" : "Open my RunGuard app"}
           </button>
         </form>
-        <button
-          onClick={demo}
-          disabled={busy}
-          className="w-full mt-3 rounded-xl border py-2.5 text-sm font-medium cursor-pointer disabled:opacity-60"
+        {/*
+          A LINK, not a fetch — and no athlete named in the label.
+          
+          This used to POST the literal token `demo_ethanpark`, which only exists
+          if the database was seeded with --demo-tokens, so on any other seed the
+          button failed. Naming the athlete made it worse: the label promised a
+          specific runner the route could not guarantee.
+          
+          /api/demo/athlete picks a real athlete off the sample roster server-side
+          and never puts a token in the page.
+        */}
+        <Link
+          href="/api/demo/athlete"
+          prefetch={false}
+          className="block w-full mt-3 rounded-xl border py-2.5 text-sm font-medium text-center"
           style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
         >
-          Try the demo athlete (Ethan Park)
-        </button>
+          See what a runner sees instead
+        </Link>
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAthleteByToken } from "@/lib/db";
-import { athleteTokenFromCookie } from "@/lib/session";
+import { athleteTokenFromCookie, isDemoSession } from "@/lib/session";
+import DemoBanner from "@/components/DemoBanner";
 import { buildProfile } from "@/lib/profile";
 import Avatar from "@/components/Avatar";
 import {
@@ -36,9 +37,11 @@ export default async function AthletePortal({
   if (!p) redirect("/athlete/login");
 
   const unread = p.notifications.length;
+  const demo = await isDemoSession();
 
   return (
     <div className="flex-1 flex flex-col">
+      {demo && <DemoBanner />}
       {/* athlete header */}
       <header
         className="sticky top-0 z-20 border-b glass"

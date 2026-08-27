@@ -1,4 +1,6 @@
 import { resolveAthleteWithPath } from "@/lib/apiAuth";
+import { isDemoSession } from "@/lib/session";
+import { checkRequestRate, tooManyRequests } from "@/lib/rateLimit";
 import { buildProfile } from "@/lib/profile";
 import { logChat, chatHistory, lastUserEngine, isFollowUp } from "@/lib/chat";
 import { safetyIntercept, replyFor } from "@/lib/safety";
@@ -27,14 +29,51 @@ export async function POST(request: Request) {
   const q = typeof body.message === "string" ? body.message.trim().slice(0, 1000) : "";
   if (!q) return Response.json({ error: "Empty message" }, { status: 400 });
 
+  /*
+   * A bound on the most expensive route in the app.
+   *
+   * Charged AFTER authentication so an unauthenticated flood cannot fill an
+   * honest athlete's bucket, and BEFORE buildProfile so a refused request costs
+   * one indexed count rather than a dozen queries. This is the route the public
+   * demo exposes to anyone holding the link.
+   */
+  const budget = await checkRequestRate(request, "chat", { max: 12, windowMs: 60_000 });
+  if (!budget.allowed) return tooManyRequests(budget.retryAfter);
+
+  /*
+   * THE DEMO ANSWERS BUT DOES NOT REMEMBER.
+   *
+   * The AI coach is the feature most worth putting in front of a coach, so
+   * middleware lets this route through for a demo session while refusing every
+   * other write. The cost of that is this: whatever a stranger types would
+   * otherwise be appended to a shared athlete's transcript and read by the next
+   * visitor — and by any coach looking at the chat-summary panel.
+   *
+   * So a demo exchange is computed and returned, and never written. Every
+   * `logChat` below is guarded by this one flag rather than by a check at each
+   * call site, because there are five of them across three branches and the
+   * safety branches are exactly the ones that must not be missed: a crisis
+   * intercept triggered by a curious visitor must not land in a real-looking
+   * athlete's record tagged as their disclosure.
+   */
+  const demo = await isDemoSession();
+  const remember = async (
+    role: "user" | "assistant",
+    textToLog: string,
+    engine?: string
+  ) => {
+    if (demo) return;
+    await logChat(athlete.id, role, textToLog, engine);
+  };
+
   // SAFETY FIRST — before buildProfile, before the intent engine, before any
   // future model. Pure regex with no I/O, so it fires identically whether
   // everything downstream is healthy or dead. Both rows are tagged, including
   // the athlete's own message, which is what keeps it off the coach's screen.
   const safe = safetyIntercept(q);
   if (safe) {
-    await logChat(athlete.id, "user", q, `safety:${safe.id}`);
-    await logChat(athlete.id, "assistant", safe.reply, `safety:${safe.id}`);
+    await remember("user", q, `safety:${safe.id}`);
+    await remember("assistant", safe.reply, `safety:${safe.id}`);
     return Response.json({ reply: safe.reply, safety: true });
   }
 
@@ -46,8 +85,8 @@ export async function POST(request: Request) {
   if (prev?.startsWith("safety:") && isFollowUp(q)) {
     const reply = replyFor(prev.slice("safety:".length));
     if (reply) {
-      await logChat(athlete.id, "user", q, prev);
-      await logChat(athlete.id, "assistant", reply, prev);
+      await remember("user", q, prev);
+      await remember("assistant", reply, prev);
       return Response.json({ reply, safety: true });
     }
   }
@@ -55,12 +94,12 @@ export async function POST(request: Request) {
   const profile = await buildProfile(athlete.id);
   if (!profile) return Response.json({ error: "No athlete" }, { status: 404 });
 
-  await logChat(athlete.id, "user", q);
+  await remember("user", q);
   // The local model, if one is configured. Every failure inside coachAnswer —
   // model down, timeout, busy, unsafe output, a number it wasn't given — returns
   // the rule engine's answer, so this can only ever be as bad as before.
   const r = await coachAnswer(q, profile);
-  await logChat(athlete.id, "assistant", r.text, r.engine);
+  await remember("assistant", r.text, r.engine);
   // The rule engine and the local model both land here, and neither is a safety
   // intercept — those returned above. A client can therefore trust `safety` to
   // mean "this reply came from safety.ts", not "this reply mentions something
