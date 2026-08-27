@@ -1,3 +1,4 @@
+import { chatTabLabel } from "@/lib/ai";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAthleteByToken } from "@/lib/db";
@@ -17,7 +18,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const TABS = ["Home", "Training", "Stats", "Recovery", "Race", "AI Chat", "Profile"] as const;
+/*
+ * The tab IDS are stable and the LABEL for the chat tab is not — see lib/ai.ts.
+ *
+ * Keeping the id fixed matters: it is what `?tab=` carries, so a link someone
+ * saved must not stop working because a model was switched on. Only the word on
+ * screen changes.
+ */
+const TABS = ["Home", "Training", "Stats", "Recovery", "Race", "Chat", "Profile"] as const;
+
+function tabLabel(tab: (typeof TABS)[number]): string {
+  return tab === "Chat" ? chatTabLabel() : tab;
+}
 
 export default async function AthletePortal({
   searchParams,
@@ -92,7 +104,7 @@ export default async function AthletePortal({
                   : { color: "var(--ink-2)" }
               }
             >
-              {t}
+              {tabLabel(t)}
             </Link>
           ))}
         </div>
@@ -102,7 +114,7 @@ export default async function AthletePortal({
         {activeTab === "Stats" && <StatsTab p={p} />}
         {activeTab === "Recovery" && <RecoveryTab p={p} />}
         {activeTab === "Race" && <RaceTab p={p} />}
-        {activeTab === "AI Chat" && <ChatTab p={p} />}
+        {activeTab === "Chat" && <ChatTab p={p} />}
         {activeTab === "Profile" && <ProfileTab p={p} />}
 
         <p className="text-xs text-center pb-4" style={{ color: "var(--ink-muted)" }}>

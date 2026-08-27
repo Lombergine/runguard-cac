@@ -1,4 +1,5 @@
 import { demoEnabled } from "@/lib/demo";
+import { aiEnabled } from "@/lib/ai";
 import Link from "next/link";
 import WaitlistForm from "@/components/WaitlistForm";
 
@@ -230,7 +231,11 @@ export default function Landing() {
           <ul className="mt-6 space-y-3 text-sm" style={{ color: "var(--ink-2)" }}>
             <Li>Sign up on your own — no coach or team required</Li>
             <Li>Your readiness score, weekly plan, and race predictions</Li>
-            <Li>An AI assistant that actually knows your training</Li>
+            <Li>
+              {aiEnabled()
+                ? "An AI assistant that actually knows your training"
+                : "An assistant that answers from their own training data"}
+            </Li>
             <Li>iPhone app with live Apple Health sync · join a team anytime</Li>
             <Li>Android support lands after the iOS launch</Li>
           </ul>

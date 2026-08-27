@@ -1,3 +1,4 @@
+import { chatTabLabel, assistantName } from "@/lib/ai";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buildProfile } from "@/lib/profile";
@@ -26,7 +27,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const TABS = ["Home", "Training", "Stats", "Recovery", "Race", "AI Chat", "Profile"] as const;
+/*
+ * The tab IDS are stable and the LABEL for the chat tab is not — see lib/ai.ts.
+ *
+ * Keeping the id fixed matters: it is what `?tab=` carries, so a link someone
+ * saved must not stop working because a model was switched on. Only the word on
+ * screen changes.
+ */
+const TABS = ["Home", "Training", "Stats", "Recovery", "Race", "Chat", "Profile"] as const;
+
+function tabLabel(tab: (typeof TABS)[number]): string {
+  return tab === "Chat" ? chatTabLabel() : tab;
+}
 
 export default async function AthletePage({
   params,
@@ -105,7 +117,7 @@ export default async function AthletePage({
                     : { color: "var(--ink-2)" }
                 }
               >
-                {t}
+                {tabLabel(t)}
               </Link>
             ))}
           </div>
@@ -115,7 +127,7 @@ export default async function AthletePage({
           {activeTab === "Stats" && <StatsTab p={p} />}
           {activeTab === "Recovery" && <RecoveryTab p={p} />}
           {activeTab === "Race" && <RaceTab p={p} />}
-          {activeTab === "AI Chat" && <ChatTab p={p} />}
+          {activeTab === "Chat" && <ChatTab p={p} />}
           {activeTab === "Profile" && <ProfileTab p={p} />}
         </>
       ) : (
@@ -152,7 +164,7 @@ function CoachView({
           {flagLabel}
         </span>
         <p className="text-sm flex-1 min-w-60 leading-relaxed" style={{ color: "var(--ink-2)" }}>
-          <span className="font-semibold text-ember">RunGuard AI: </span>
+          <span className="font-semibold text-ember">{assistantName()}: </span>
           {coachExplanation}
         </p>
       </div>
@@ -328,7 +340,7 @@ function CoachView({
       </Panel>
 
       {p.chatSummary.length > 0 && (
-        <Panel title="What they've been asking RunGuard AI" note="athlete chat summary">
+        <Panel title={`What they've been asking ${assistantName()}`} note="athlete chat summary">
           <div className="space-y-2">
             {p.chatSummary.map((q, i) => (
               <p key={i} className="text-sm" style={{ color: "var(--ink-2)" }}>&ldquo;{q}&rdquo;</p>

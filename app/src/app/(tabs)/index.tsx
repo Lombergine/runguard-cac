@@ -454,7 +454,7 @@ export default function CheckInScreen() {
             hitSlop={hitSlopFor(styles.headerAction)}
             style={styles.headerAction}
           >
-            <Text style={styles.headerActionLabel}>RunGuard AI</Text>
+            <Text style={styles.headerActionLabel}>Ask RunGuard</Text>
           </Pressable>
           <Pressable
             onPress={() => router.push("/settings")}
@@ -633,7 +633,7 @@ function ReadinessHero({
         */}
         {state.known && insight ? (
           <Text style={styles.insight}>
-            <Text style={styles.insightByline}>RunGuard AI: </Text>
+            <Text style={styles.insightByline}>RunGuard: </Text>
             {insight}
           </Text>
         ) : null}
