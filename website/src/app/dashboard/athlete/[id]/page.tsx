@@ -23,7 +23,11 @@ import {
   ChatTab,
   ProfileTab,
   Panel,
+  RaceHistoryRow,
 } from "@/components/athlete/tabs";
+
+/** How many past races the condensed coach view shows before pointing at the full log. */
+const COACH_RACE_HISTORY_LIMIT = 5;
 
 export const dynamic = "force-dynamic";
 
@@ -217,11 +221,14 @@ function CoachView({
       <RecoveryPanel recovery={p.risk.recovery} />
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Workload ratio (60 days)" note="context only — this ratio showed no link to injury in a 5,205-runner study">
-          <AcwrChart data={p.series.slice(-60)} />
+        {/* Titles no longer name a fixed window — each chart now carries its
+            own range control (1 day/3 days/7 days/1 month/6 months), so a
+            hardcoded "(60 days)" would go stale the moment someone changed it. */}
+        <Panel title="Workload ratio" note="context only — this ratio showed no link to injury in a 5,205-runner study">
+          <AcwrChart data={p.series} />
         </Panel>
-        <Panel title="Training load (60 days)">
-          <LoadChart data={p.series.slice(-60)} />
+        <Panel title="Training load">
+          <LoadChart data={p.series} />
         </Panel>
       </div>
 
@@ -301,9 +308,44 @@ function CoachView({
         <Panel title="Next race" note={p.races.upcoming[0] ? `${p.races.upcoming[0].daysUntil} days out` : undefined}>
           {p.races.upcoming[0] ? (
             <div className="text-sm space-y-2" style={{ color: "var(--ink-2)" }}>
-              <p className="font-semibold" style={{ color: "var(--ink)" }}>
-                {p.races.upcoming[0].name} · {p.races.upcoming[0].event}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold" style={{ color: "var(--ink)" }}>
+                  {p.races.upcoming[0].name}
+                </span>
+                {p.races.upcoming[0].priority && (
+                  <span
+                    className="text-[10px] font-bold rounded-full px-2 py-0.5"
+                    style={{
+                      background:
+                        p.races.upcoming[0].priority === "A"
+                          ? "color-mix(in oklab, var(--brand) 22%, transparent)"
+                          : "var(--surface-2)",
+                      color: p.races.upcoming[0].priority === "A" ? "var(--brand-strong)" : "var(--ink-muted)",
+                    }}
+                  >
+                    {p.races.upcoming[0].priority} RACE
+                  </span>
+                )}
+              </div>
+              {/* Same join-then-filter pattern as the athlete's own RaceTab —
+                  a field left null must drop out cleanly rather than leaving a
+                  bare "·" where it would have been. */}
+              <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
+                {[
+                  p.races.upcoming[0].event,
+                  p.races.upcoming[0].course_type,
+                  p.races.upcoming[0].location,
+                  new Date(p.races.upcoming[0].date + "T12:00:00").toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  }),
+                  p.races.upcoming[0].start_time ? `gun ${p.races.upcoming[0].start_time}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
+              {p.races.upcoming[0].notes && <p className="leading-relaxed">{p.races.upcoming[0].notes}</p>}
               {p.risk.hasActivityHistory ? (
                 <p>Predicted {p.races.upcoming[0].predicted}</p>
               ) : (
@@ -333,6 +375,36 @@ function CoachView({
           </table>
         </Panel>
       </div>
+
+      {/*
+        Recent races — the condensed coach view used to stop at "Next race";
+        everything a race actually recorded (splits, place, feel, conditions,
+        notes) was one tab-switch away in "The RunGuard app" view and nowhere
+        else. Reuses the athlete's own RaceHistoryRow so the two views can never
+        show different facts about the same race. Capped rather than the
+        athlete's unbounded list — this panel sits in the coach's dense summary,
+        not the full log, so it points at the complete history instead of
+        reproducing it.
+      */}
+      {p.races.history.length > 0 && (
+        <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
+          <div className="px-5 py-4 flex items-baseline justify-between gap-3">
+            <span className="text-sm font-semibold">Recent races</span>
+            {p.races.history.length > COACH_RACE_HISTORY_LIMIT && (
+              <Link
+                href={`/dashboard/athlete/${p.athlete.id}?view=athlete&tab=Race`}
+                className="text-xs hover:underline"
+                style={{ color: "var(--ink-muted)" }}
+              >
+                See all {p.races.history.length} in {p.athlete.name.split(" ")[0]}&apos;s view →
+              </Link>
+            )}
+          </div>
+          {p.races.history.slice(0, COACH_RACE_HISTORY_LIMIT).map((r) => (
+            <RaceHistoryRow key={r.id} r={r} />
+          ))}
+        </div>
+      )}
 
       {/* injuries — coach-recorded, never computed */}
       <Panel title="Injuries" note="recorded by the coach · only active ones show on the body scan">

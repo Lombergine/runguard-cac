@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -64,156 +65,228 @@ function TooltipBox({
   );
 }
 
+/**
+ * "1 day / 3 days / 7 days / 1 month / 6 months" — the range control every
+ * daily `SeriesPoint[]` chart below shares. A native `<select>` rather than a
+ * pill row: five options is one too many to keep legible as buttons at the
+ * width these charts render at inside a Stats-tab grid cell.
+ */
+const RANGES = [
+  { key: "1d", label: "1 day", days: 1 },
+  { key: "3d", label: "3 days", days: 3 },
+  { key: "7d", label: "7 days", days: 7 },
+  { key: "1m", label: "1 month", days: 30 },
+  { key: "6m", label: "6 months", days: 183 },
+] as const;
+
+type RangeKey = (typeof RANGES)[number]["key"];
+
+/** Default window: dense enough to read as a trend, not so wide it's a smear. */
+const DEFAULT_RANGE: RangeKey = "1m";
+
+function rangeDays(key: RangeKey): number {
+  return RANGES.find((r) => r.key === key)!.days;
+}
+
+function RangeSelect({ value, onChange }: { value: RangeKey; onChange: (k: RangeKey) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as RangeKey)}
+      className="text-[11px] rounded-full border px-2 py-1 cursor-pointer"
+      style={{ borderColor: GRID, color: INK_MUTED, background: SURFACE }}
+      aria-label="Date range"
+    >
+      {RANGES.map((r) => (
+        <option key={r.key} value={r.key}>
+          {r.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * Trailing `days` of a date-sorted `SeriesPoint[]`. One entry per calendar day
+ * by construction (`dailySeries`), so slicing by count IS slicing by days —
+ * no date arithmetic needed, and it degrades safely for an athlete with less
+ * history than the window asks for (`slice(-n)` on a shorter array is just
+ * the whole array, not an error).
+ */
+function sliceRange(data: SeriesPoint[], days: number): SeriesPoint[] {
+  return data.slice(-days);
+}
+
 /** ACWR over time with the 0.8–1.3 sweet spot shaded and 1.5 danger line. */
 export function AcwrChart({ data }: { data: SeriesPoint[] }) {
-  const pts = data.filter((d) => d.acwr !== null);
-  if (!hasEnoughData(pts, 5)) return <InsufficientData label={NOT_ENOUGH_ACWR_HISTORY} />;
+  const [range, setRange] = useState<RangeKey>(DEFAULT_RANGE);
+  const windowed = sliceRange(data, rangeDays(range));
+  const pts = windowed.filter((d) => d.acwr !== null);
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <ComposedChart data={pts} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
-        <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-        <XAxis
-          dataKey="date"
-          tickFormatter={fmtDay}
-          tick={{ fill: INK_MUTED, fontSize: 11 }}
-          tickLine={false}
-          axisLine={{ stroke: "#d8d0c0" }}
-          minTickGap={40}
-        />
-        <YAxis
-          domain={[0, 2.2]}
-          ticks={[0.5, 0.8, 1.3, 1.5, 2]}
-          tick={{ fill: INK_MUTED, fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-        />
-        <ReferenceArea
-          y1={0.8}
-          y2={1.3}
-          fill={GOOD}
-          fillOpacity={0.08}
-          stroke="none"
-        />
-        <ReferenceLine
-          y={1.5}
-          stroke={CRITICAL}
-          strokeDasharray="5 4"
-          strokeWidth={1.5}
-        />
-        <Tooltip
-          cursor={{ stroke: INK_MUTED, strokeWidth: 1 }}
-          content={({ active, payload }) => {
-            if (!active || !payload?.length) return null;
-            const p = payload[0].payload as SeriesPoint;
-            return (
-              <TooltipBox
-                label={fmtDay(p.date)}
-                rows={[
-                  ["Workload ratio", p.acwr?.toFixed(2) ?? "—"],
-                  ["Day load", Math.round(p.load) + ""],
-                ]}
-              />
-            );
-          }}
-        />
-        <Line
-          type="monotone"
-          dataKey="acwr"
-          stroke={BRAND}
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 4, strokeWidth: 0 }}
-          isAnimationActive={false}
-          style={GLOW(BRAND)}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div>
+      <div className="flex justify-end mb-1.5">
+        <RangeSelect value={range} onChange={setRange} />
+      </div>
+      {!hasEnoughData(pts, 5) ? (
+        <InsufficientData label={NOT_ENOUGH_ACWR_HISTORY} />
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <ComposedChart data={pts} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
+            <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickFormatter={fmtDay}
+              tick={{ fill: INK_MUTED, fontSize: 11 }}
+              tickLine={false}
+              axisLine={{ stroke: "#d8d0c0" }}
+              minTickGap={40}
+            />
+            <YAxis
+              domain={[0, 2.2]}
+              ticks={[0.5, 0.8, 1.3, 1.5, 2]}
+              tick={{ fill: INK_MUTED, fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <ReferenceArea
+              y1={0.8}
+              y2={1.3}
+              fill={GOOD}
+              fillOpacity={0.08}
+              stroke="none"
+            />
+            <ReferenceLine
+              y={1.5}
+              stroke={CRITICAL}
+              strokeDasharray="5 4"
+              strokeWidth={1.5}
+            />
+            <Tooltip
+              cursor={{ stroke: INK_MUTED, strokeWidth: 1 }}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const p = payload[0].payload as SeriesPoint;
+                return (
+                  <TooltipBox
+                    label={fmtDay(p.date)}
+                    rows={[
+                      ["Workload ratio", p.acwr?.toFixed(2) ?? "—"],
+                      ["Day load", Math.round(p.load) + ""],
+                    ]}
+                  />
+                );
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey="acwr"
+              stroke={BRAND}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 0 }}
+              isAnimationActive={false}
+              style={GLOW(BRAND)}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      )}
+    </div>
   );
 }
 
 /** Daily training load bars + acute/chronic EWMA lines. */
 export function LoadChart({ data }: { data: SeriesPoint[] }) {
-  if (!hasEnoughData(data, 5, (d) => d.load > 0)) return <InsufficientData />;
+  const [range, setRange] = useState<RangeKey>(DEFAULT_RANGE);
+  const windowed = sliceRange(data, rangeDays(range));
   return (
     <div>
-      <ResponsiveContainer width="100%" height={220}>
-        <ComposedChart data={data} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
-          <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-          <XAxis
-            dataKey="date"
-            tickFormatter={fmtDay}
-            tick={{ fill: INK_MUTED, fontSize: 11 }}
-            tickLine={false}
-            axisLine={{ stroke: "#d8d0c0" }}
-            minTickGap={40}
-          />
-          <YAxis
-            tick={{ fill: INK_MUTED, fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <Tooltip
-            cursor={{ fill: "rgba(34,29,21,0.045)" }}
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const p = payload[0].payload as SeriesPoint;
-              return (
-                <TooltipBox
-                  label={fmtDay(p.date)}
-                  rows={[
-                    ["Day load", Math.round(p.load) + ""],
-                    ["Distance", miNum(p.km).toFixed(1) + " mi"],
-                    ["Acute (7d avg)", Math.round(p.acute) + ""],
-                    ["Chronic (28d avg)", Math.round(p.chronic) + ""],
-                  ]}
-                />
-              );
-            }}
-          />
-          <Bar
-            dataKey="load"
-            fill="rgba(34,29,21,0.30)"
-            radius={[3, 3, 0, 0]}
-            maxBarSize={6}
-            isAnimationActive={false}
-          />
-          <Line
-            type="monotone"
-            dataKey="acute"
-            stroke={BRAND}
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={false}
-            style={GLOW(BRAND)}
-          />
-          <Line
-            type="monotone"
-            dataKey="chronic"
-            stroke={SERIES_1}
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={false}
-            style={GLOW(SERIES_1)}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-      <div className="flex gap-4 pl-2 pt-1 text-xs" style={{ color: "#55503f" }}>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-0.5 rounded" style={{ background: BRAND }} />
-          Acute load (7d)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-0.5 rounded" style={{ background: SERIES_1 }} />
-          Chronic load (28d)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            className="inline-block w-2 h-2 rounded-sm"
-            style={{ background: "rgba(34,29,21,0.30)" }}
-          />
-          Daily load
-        </span>
+      <div className="flex justify-end mb-1.5">
+        <RangeSelect value={range} onChange={setRange} />
       </div>
+      {!hasEnoughData(windowed, 5, (d) => d.load > 0) ? (
+        <InsufficientData />
+      ) : (
+        <div>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={windowed} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
+              <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickFormatter={fmtDay}
+                tick={{ fill: INK_MUTED, fontSize: 11 }}
+                tickLine={false}
+                axisLine={{ stroke: "#d8d0c0" }}
+                minTickGap={40}
+              />
+              <YAxis
+                tick={{ fill: INK_MUTED, fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                cursor={{ fill: "rgba(34,29,21,0.045)" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const p = payload[0].payload as SeriesPoint;
+                  return (
+                    <TooltipBox
+                      label={fmtDay(p.date)}
+                      rows={[
+                        ["Day load", Math.round(p.load) + ""],
+                        ["Distance", miNum(p.km).toFixed(1) + " mi"],
+                        ["Acute (7d avg)", Math.round(p.acute) + ""],
+                        ["Chronic (28d avg)", Math.round(p.chronic) + ""],
+                      ]}
+                    />
+                  );
+                }}
+              />
+              <Bar
+                dataKey="load"
+                fill="rgba(34,29,21,0.30)"
+                radius={[3, 3, 0, 0]}
+                maxBarSize={6}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="acute"
+                stroke={BRAND}
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+                style={GLOW(BRAND)}
+              />
+              <Line
+                type="monotone"
+                dataKey="chronic"
+                stroke={SERIES_1}
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+                style={GLOW(SERIES_1)}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div className="flex gap-4 pl-2 pt-1 text-xs" style={{ color: "#55503f" }}>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-0.5 rounded" style={{ background: BRAND }} />
+              Acute load (7d)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-0.5 rounded" style={{ background: SERIES_1 }} />
+              Chronic load (28d)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block w-2 h-2 rounded-sm"
+                style={{ background: "rgba(34,29,21,0.30)" }}
+              />
+              Daily load
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
