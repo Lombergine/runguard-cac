@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getAthleteByToken, getActivityById } from "@/lib/db";
-import { athleteTokenFromCookie } from "@/lib/session";
+import { getAthleteByToken, getActivityById, getAthlete } from "@/lib/db";
+import { athleteTokenFromCookie, isDemoSession } from "@/lib/session";
+import { demoTeamId } from "@/lib/demo";
 import { fmtTime } from "@/lib/engine";
 import { miNum, fmtMilesFromMeters } from "@/lib/units";
 
@@ -109,15 +110,36 @@ function RouteMap({ route }: { route: string | null }) {
 export default async function ActivityDetail({ params }: { params: Promise<{ id: string }> }) {
   const token = await athleteTokenFromCookie();
   const athlete = token ? await getAthleteByToken(token) : undefined;
-  if (!athlete) redirect("/athlete/login");
 
   const { id } = await params;
   const activityId = Number(id);
   if (!Number.isInteger(activityId)) notFound();
 
   const activity = await getActivityById(activityId);
+  if (!activity) notFound();
+
+  /**
+   * Two kinds of visitor reach this page. An athlete opening one of their own
+   * runs, and a coach in the read-only demo who clicked a run from the athlete
+   * tab of the roster. The demo coach carries no athlete cookie, so requiring
+   * one bounced them to the athlete login in the middle of the demo.
+   *
+   * Let that coach through, but only for runs belonging to the sample team, and
+   * only while the demo is actually on. Everyone else still gets the login.
+   */
+  const owner = await getAthlete(activity.athlete_id);
+  const demoTeam = demoTeamId();
+  const viaDemoCoach =
+    !athlete && demoTeam !== null && owner?.team_id === demoTeam && (await isDemoSession());
+
+  if (!athlete && !viaDemoCoach) redirect("/athlete/login");
   // ownership: an athlete can only open their own runs
-  if (!activity || activity.athlete_id !== athlete.id) notFound();
+  if (athlete && activity.athlete_id !== athlete.id) notFound();
+
+  // Send the coach back to the roster page they came from, not the athlete app.
+  const backHref = viaDemoCoach
+    ? `/dashboard/athlete/${activity.athlete_id}?view=athlete`
+    : "/athlete?tab=Home";
 
   const km = activity.distance_m / 1000;
   const hasDistance = activity.distance_m > 0;
@@ -142,7 +164,7 @@ export default async function ActivityDetail({ params }: { params: Promise<{ id:
         style={{ borderColor: "var(--hairline)" }}
       >
         <div className="mx-auto max-w-3xl px-4 h-14 flex items-center gap-3">
-          <Link href="/athlete?tab=Home" className="text-sm font-medium" style={{ color: "var(--ink-2)" }}>
+          <Link href={backHref} className="text-sm font-medium" style={{ color: "var(--ink-2)" }}>
             ← Back
           </Link>
           <span className="ml-auto text-xs px-2.5 py-1 rounded-full" style={{ background: "var(--surface-2)", color: "var(--ink-muted)" }}>
