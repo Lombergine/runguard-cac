@@ -40,6 +40,14 @@ import {
 import { getProfile, isUnauthorized } from "./api";
 import { useSession } from "./session";
 import type { Profile } from "./types";
+import { useLiveRefresh } from "./useLiveRefresh";
+
+/**
+ * A coach's plan edit — or the athlete's own device finishing a sync — should
+ * show up here without a pull-to-refresh. 25s, foreground-only; see
+ * `useLiveRefresh`.
+ */
+const LIVE_REFRESH_MS = 25_000;
 
 /** "idle" = nobody has asked yet. A screen sees it exactly as it sees "loading". */
 export type ProfileState = "idle" | "loading" | "ready" | "failed";
@@ -135,6 +143,15 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     () => ({ profile, state, refreshing, refresh, invalidate, ensure }),
     [profile, state, refreshing, refresh, invalidate, ensure]
   );
+
+  // Still LAZY: `started` is read fresh on every tick rather than captured,
+  // so a poll before any screen has asked for `/me` does nothing — the same
+  // rule `ensure()` enforces, just checked here on a timer instead of on
+  // mount. A refetch already in flight is a no-op too: `load()` returns the
+  // same in-flight promise rather than starting a second request.
+  useLiveRefresh(() => {
+    if (started.current) void load();
+  }, LIVE_REFRESH_MS);
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 }

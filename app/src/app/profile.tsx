@@ -360,19 +360,16 @@ function TeamPanel({
  * ------------------------------------------------------------------ */
 
 /**
- * The number every run's intensity is scored against, and the only place in the
- * app the athlete can correct it.
+ * The number every run's intensity is scored against.
  *
- * The 400 the route returns names its own bounds. That message is shown
- * verbatim rather than being pre-empted with a client-side range check: the
- * constants live in website/src/lib/hrmax.ts, and a second copy here would keep
- * telling the athlete the old range for as long as it took anyone to notice.
- *
- * The one check that IS client-side lives in `setHrMax`, not here:
- * `JSON.stringify({ hrMax: NaN })` emits `{"hrMax":null}`, and null is the
- * route's CLEAR signal — so an unparseable entry would silently erase a measured
- * HRmax and come back `{ ok: true }`. `setHrMax` refuses it with a 400 that
- * `explain()` shows exactly the way it shows the server's.
+ * There is no manual-entry control here any more: `health.ts` now requests the
+ * live HeartRate HealthKit scope and `readSince()` computes a real peak per
+ * workout, so `hrmax.ts`'s `detected` resolution (an athlete's own workout
+ * history) is a better source than a figure typed once and never revisited.
+ * The one write this panel still offers is `send(null)` — reverting a
+ * previously-entered manual/calibrated value back to automatic — because a
+ * number an athlete already set stays authoritative (`resolveHrMax` prefers a
+ * stored choice over anything detected) until they choose to let it go.
  */
 function HrMaxPanel({
   hrMax,
@@ -381,16 +378,15 @@ function HrMaxPanel({
   hrMax: AppProfile["risk"]["hrMax"];
   onChanged: () => void;
 }) {
-  const [entry, setEntry] = useState(hrMax ? String(hrMax.value) : "");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
-  async function send(value: number | null) {
+  async function useAutomatic() {
     if (busy) return;
     setBusy(true);
     setProblem(null);
     try {
-      await setHrMax(value);
+      await setHrMax(null);
       onChanged();
     } catch (err) {
       setProblem(explain(err, "Could not save that."));
@@ -419,38 +415,25 @@ function HrMaxPanel({
       <Text style={styles.hrValue}>{`${hrMax.value} bpm`}</Text>
       {isEstimate ? (
         <Text style={styles.body}>
-          This is an estimate, not something measured on you. Every run&apos;s intensity,
-          your training load and your workload ratio are all scored against it, so a real
-          figure from a test or an all-out race is worth entering.
+          This is an estimate, not something measured on you. It updates on its own once
+          enough workouts have synced from Apple Health — every run&apos;s intensity, your
+          training load and your workload ratio are all scored against it.
         </Text>
-      ) : (
+      ) : isSet ? (
         <Text style={styles.body}>
           Every run&apos;s intensity is scored against this number, so it feeds your
           training load and your workload ratio.
         </Text>
+      ) : (
+        <Text style={styles.body}>
+          Read from your own workout history in Apple Health, and it feeds your training
+          load and your workload ratio.
+        </Text>
       )}
-      <View style={styles.hrRow}>
-        <TextInput
-          style={styles.hrInput}
-          value={entry}
-          onChangeText={setEntry}
-          keyboardType="number-pad"
-          inputMode="numeric"
-          editable={!busy}
-          placeholder="bpm"
-          placeholderTextColor={color.muted}
-          accessibilityLabel="Max heart rate in beats per minute"
-        />
-        <EmberButton
-          label={busy ? "Saving…" : "Save"}
-          onPress={() => send(Number(entry))}
-          disabled={busy || entry.trim().length === 0}
-        />
-      </View>
       {isSet ? (
         <QuietButton
-          label="Use automatic"
-          onPress={() => send(null)}
+          label={busy ? "Saving…" : "Use automatic"}
+          onPress={useAutomatic}
           disabled={busy}
         />
       ) : null}

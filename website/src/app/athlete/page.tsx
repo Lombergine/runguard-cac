@@ -6,6 +6,7 @@ import { athleteTokenFromCookie, isDemoSession } from "@/lib/session";
 import DemoBanner from "@/components/DemoBanner";
 import { buildProfile } from "@/lib/profile";
 import Avatar from "@/components/Avatar";
+import LiveRefresh from "@/components/athlete/LiveRefresh";
 import {
   HomeTab,
   TrainingTab,
@@ -53,6 +54,7 @@ export default async function AthletePortal({
 
   return (
     <div className="flex-1 flex flex-col">
+      <LiveRefresh />
       {demo && <DemoBanner />}
       {/* athlete header */}
       <header
