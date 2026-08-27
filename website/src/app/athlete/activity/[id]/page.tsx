@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getAthleteByToken, getActivityById, getAthlete } from "@/lib/db";
+import { getAthleteByToken, getActivityById, getAthlete, parseStream } from "@/lib/db";
+import type { Split, SeriesSample } from "@/lib/db";
+import { ActivityHrChart, ActivityElevChart } from "@/components/charts";
 import { athleteTokenFromCookie, isDemoSession } from "@/lib/session";
 import { demoTeamId } from "@/lib/demo";
 import { fmtTime } from "@/lib/engine";
@@ -107,6 +109,64 @@ function RouteMap({ route }: { route: string | null }) {
   );
 }
 
+
+/** Pace for one split, normalised to a full mile so the final partial mile is
+ *  comparable to the rest rather than looking like a sprint. */
+function splitPace(sp: Split): number {
+  const frac = sp.partial > 0 ? sp.partial : 1;
+  return sp.seconds / frac;
+}
+
+/**
+ * Strava-style split table. The bar is scaled against the FASTEST mile, not
+ * against a fixed maximum, so the shape of the run is legible whether it was
+ * an even 8:00 grind or a progression run.
+ */
+function Splits({ splits }: { splits: Split[] }) {
+  if (!splits.length) {
+    return (
+      <p className="text-sm rounded-2xl border p-4" style={{ borderColor: "var(--hairline)", background: "var(--surface)", color: "var(--ink-muted)" }}>
+        Mile splits are not recorded for this run. The RunGuard app stores the
+        totals Apple Health reports for a workout; the per-mile breakdown needs
+        the sample series, which it does not collect yet.
+      </p>
+    );
+  }
+  const paces = splits.map(splitPace);
+  const best = Math.min(...paces);
+  return (
+    <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
+      <div className="grid grid-cols-[2.4rem_4.2rem_1fr_3.2rem_3.4rem] gap-2 px-4 py-2 text-[11px] font-medium uppercase tracking-wide"
+           style={{ color: "var(--ink-muted)", borderBottom: "1px solid var(--hairline)" }}>
+        <div>Mi</div><div>Pace</div><div /><div className="text-right">HR</div><div className="text-right">Elev</div>
+      </div>
+      {splits.map((sp, i) => {
+        const pace = paces[i];
+        const width = Math.max(8, (best / pace) * 100);
+        const isBest = pace === best;
+        return (
+          <div key={sp.mi} className="grid grid-cols-[2.4rem_4.2rem_1fr_3.2rem_3.4rem] gap-2 px-4 py-2 items-center text-sm"
+               style={{ borderTop: i === 0 ? "none" : "1px solid var(--hairline)" }}>
+            <div className="tabular-nums" style={{ color: "var(--ink-muted)" }}>
+              {sp.partial < 0.98 ? sp.partial.toFixed(2).replace(/^0/, "") : sp.mi}
+            </div>
+            <div className="tabular-nums font-medium" style={{ color: "var(--ink)" }}>{fmtTime(pace)}</div>
+            <div className="h-2.5 rounded-full" style={{ background: "var(--surface-2)" }}>
+              <div className="h-2.5 rounded-full" style={{ width: `${width}%`, background: isBest ? "var(--status-good, #16a34a)" : "#2a78d6" }} />
+            </div>
+            <div className="text-right tabular-nums" style={{ color: "var(--ink-muted)" }}>
+              {sp.avg_hr != null ? Math.round(sp.avg_hr) : "\u2014"}
+            </div>
+            <div className="text-right tabular-nums" style={{ color: "var(--ink-muted)" }}>
+              {sp.elev_delta_m != null ? `${sp.elev_delta_m >= 0 ? "+" : ""}${Math.round(sp.elev_delta_m * 3.28084)}` : "\u2014"}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default async function ActivityDetail({ params }: { params: Promise<{ id: string }> }) {
   const token = await athleteTokenFromCookie();
   const athlete = token ? await getAthleteByToken(token) : undefined;
@@ -140,6 +200,15 @@ export default async function ActivityDetail({ params }: { params: Promise<{ id:
   const backHref = viaDemoCoach
     ? `/dashboard/athlete/${activity.athlete_id}?view=athlete`
     : "/athlete?tab=Home";
+
+  const splits = parseStream<Split>(activity.splits);
+  const hr = parseStream<SeriesSample>(activity.hr_series)
+    .filter((p) => typeof p.bpm === "number")
+    .map((p) => ({ t_s: p.t_s, bpm: p.bpm as number }));
+  // Metres on the wire, feet on the screen — the rest of this page is imperial.
+  const elev = parseStream<SeriesSample>(activity.elev_series)
+    .filter((p) => typeof p.m === "number")
+    .map((p) => ({ t_s: p.t_s, ft: (p.m as number) * 3.28084 }));
 
   const km = activity.distance_m / 1000;
   const hasDistance = activity.distance_m > 0;
@@ -199,6 +268,32 @@ export default async function ActivityDetail({ params }: { params: Promise<{ id:
           <Stat label="Cadence" value={activity.cadence !== null ? `${Math.round(activity.cadence)}` : "—"} sub={activity.cadence !== null ? "spm" : "not recorded"} />
           <Stat label="Type" value={activity.type || "Run"} sub={`${miNum(km, 2)} mi total`} />
         </div>
+
+        {/* splits */}
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--ink-2)" }}>Mile splits</h2>
+          <Splits splits={splits} />
+        </div>
+
+        {/* heart rate through the run */}
+        {hr.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold" style={{ color: "var(--ink-2)" }}>Heart rate</h2>
+            <div className="rounded-2xl border p-3" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
+              <ActivityHrChart data={hr} />
+            </div>
+          </div>
+        )}
+
+        {/* elevation profile */}
+        {elev.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold" style={{ color: "var(--ink-2)" }}>Elevation</h2>
+            <div className="rounded-2xl border p-3" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
+              <ActivityElevChart data={elev} />
+            </div>
+          </div>
+        )}
 
         {/* route */}
         <div className="space-y-2">

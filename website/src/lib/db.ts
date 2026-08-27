@@ -248,7 +248,37 @@ export type ActivityRow = {
   cadence: number | null;
   /** Encoded polyline for the activity detail map. Null for most sources. */
   route: string | null;
+  /**
+   * Per-run detail, as JSON text. Null means the source never recorded it —
+   * which today is every real run, because the iPhone app does not yet pull the
+   * HealthKit sample series. The UI must render "not recorded" for null rather
+   * than deriving a plausible-looking number: a coach can act on a mile split.
+   */
+  splits: string | null;
+  hr_series: string | null;
+  elev_series: string | null;
 };
+
+export type Split = {
+  mi: number;
+  /** 1 for a full mile, <1 for the final partial one. */
+  partial: number;
+  seconds: number;
+  avg_hr: number | null;
+  elev_delta_m: number | null;
+};
+export type SeriesSample = { t_s: number; bpm?: number; m?: number };
+
+/** Parse one of the JSON stream columns. Bad or absent data yields [], never a throw. */
+export function parseStream<T>(raw: string | null): T[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? (v as T[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 export async function listAthletes(): Promise<AthleteRow[]> {
   return all<AthleteRow>("SELECT * FROM athletes ORDER BY name");

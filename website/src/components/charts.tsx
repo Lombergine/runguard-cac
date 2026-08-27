@@ -528,3 +528,67 @@ export function LoadSpark({ data }: { data: SeriesPoint[] }) {
     </ResponsiveContainer>
   );
 }
+
+
+/* ---------------- single-activity detail ---------------- */
+
+const fmtClock = (t: number) => {
+  const m = Math.floor(t / 60);
+  const sec = Math.round(t % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+};
+
+/**
+ * Heart rate across one run. The y-domain is padded off the true min/max rather
+ * than anchored at zero: nobody's heart rate starts at 0, and a 0-based axis
+ * squashes the whole trace into the top third where the shape is unreadable.
+ */
+export function ActivityHrChart({ data }: { data: { t_s: number; bpm: number }[] }) {
+  if (data.length < 4) return <InsufficientData />;
+  const lo = Math.min(...data.map((d) => d.bpm));
+  const hi = Math.max(...data.map((d) => d.bpm));
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+        <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+        <XAxis dataKey="t_s" tickFormatter={fmtClock} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={44} />
+        <YAxis domain={[Math.max(0, Math.floor(lo - 6)), Math.ceil(hi + 6)]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
+        <Tooltip
+          cursor={{ stroke: INK_MUTED, strokeDasharray: "3 3" }}
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            const p = payload[0].payload as { t_s: number; bpm: number };
+            return <TooltipBox label={fmtClock(p.t_s) + " in"} rows={[["Heart rate", `${p.bpm} bpm`]]} />;
+          }}
+        />
+        <Line type="monotone" dataKey="bpm" stroke={CRITICAL} strokeWidth={2} dot={false} isAnimationActive={false} style={GLOW(CRITICAL)} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Elevation across one run, in feet. */
+export function ActivityElevChart({ data }: { data: { t_s: number; ft: number }[] }) {
+  if (data.length < 4) return <InsufficientData />;
+  const lo = Math.min(...data.map((d) => d.ft));
+  const hi = Math.max(...data.map((d) => d.ft));
+  const pad = Math.max(10, (hi - lo) * 0.2);
+  return (
+    <ResponsiveContainer width="100%" height={150}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+        <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+        <XAxis dataKey="t_s" tickFormatter={fmtClock} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={44} />
+        <YAxis domain={[Math.floor(lo - pad), Math.ceil(hi + pad)]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
+        <Tooltip
+          cursor={{ stroke: INK_MUTED, strokeDasharray: "3 3" }}
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            const p = payload[0].payload as { t_s: number; ft: number };
+            return <TooltipBox label={fmtClock(p.t_s) + " in"} rows={[["Elevation", `${Math.round(p.ft)} ft`]]} />;
+          }}
+        />
+        <Line type="monotone" dataKey="ft" stroke={GOOD} strokeWidth={2} dot={false} isAnimationActive={false} style={GLOW(GOOD)} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
