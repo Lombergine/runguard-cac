@@ -280,7 +280,7 @@ export default function ChatScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: "RunGuard AI",
+          title: "Ask RunGuard",
           headerStyle: { backgroundColor: color.bg },
           headerTintColor: color.ink,
           headerShadowVisible: false,
@@ -308,7 +308,7 @@ export default function ChatScreen() {
         */}
         {signedOut ? (
           <View style={styles.loadFailed}>
-            <Panel title="RunGuard AI" note="Signed out">
+            <Panel title="Ask RunGuard" note="Signed out">
               <Text style={styles.plain}>
                 This device is no longer signed in, so nothing can be sent from
                 here. Sign in again to use it.
@@ -344,7 +344,7 @@ export default function ChatScreen() {
             // about the athlete, and "Nothing sent yet" would assert one.
             messages === null || historyDiscarded ? null : (
               <View style={styles.opener}>
-                <Panel title="Ask RunGuard AI" note="Nothing sent yet">
+                <Panel title="Ask RunGuard" note="Nothing sent yet">
                   <Text style={styles.plain}>
                     Ask about a run, a workout, or how you have been feeling.
                   </Text>

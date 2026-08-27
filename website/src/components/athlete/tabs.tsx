@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CoreProfile } from "@/lib/profile";
+import { aiEnabled, assistantName } from "@/lib/ai";
 import { miNum } from "@/lib/units";
 import {
   AcwrChart,
@@ -192,7 +193,7 @@ export function HomeTab({ p }: { p: CoreProfile }) {
         <div className="flex-1 min-w-60">
           <div className="text-2xl font-extrabold" style={{ color: z }}>{verdict}</div>
           <p className="text-base mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
-            <span className="text-ember font-semibold">RunGuard AI: </span>
+            <span className="text-ember font-semibold">{assistantName()}: </span>
             {p.aiInsight}
           </p>
         </div>
@@ -967,8 +968,25 @@ function RaceHistoryRow({
 /* ---------------- CHAT ---------------- */
 
 export function ChatTab({ p }: { p: CoreProfile }) {
+  /*
+   * The name follows what is actually answering — see lib/ai.ts.
+   *
+   * With a model configured this is "Ask RunGuard AI" and the blurb says so.
+   * Without one, every reply comes from the rule engine reading this athlete's
+   * own numbers, and claiming otherwise is the kind of thing a coach checks.
+   * Both are true statements about their own deployment.
+   */
+  const ai = aiEnabled();
   return (
-    <Panel title="Ask RunGuard AI" note="reads your last 14 days automatically · coach sees a summary">
+    <Panel
+      title={`Ask ${assistantName()}`}
+      note="answers from your last 14 days · your coach sees a summary"
+    >
+      <p className="text-xs mb-3 leading-relaxed" style={{ color: "var(--ink-muted)" }}>
+        {ai
+          ? "Reads your own training, sleep and check-ins before it answers. Ask about a workout, a niggle, or what to do before a race."
+          : "Answers are worked out from your own training, sleep and check-ins. Ask about a workout, a niggle, or what to do before a race."}
+      </p>
       <ChatBox athleteId={p.athlete.id} />
     </Panel>
   );
@@ -1085,7 +1103,7 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
       </Panel>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Injury history" note="RunGuard AI knows your weak spots">
+        <Panel title="Injury history" note="factored into your plan and your readiness">
           {p.injuries.length === 0 ? (
             <p className="text-sm" style={{ color: "var(--ink-muted)" }}>No injuries logged. Keep it that way.</p>
           ) : (

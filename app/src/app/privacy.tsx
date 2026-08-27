@@ -146,9 +146,11 @@ export default function PrivacyScreen() {
             whether school is stressful right now. Check-ins are optional.
           </Text>
           <Text style={styles.p}>
-            <Text style={styles.lead}>Coach chat, only if it is switched on. </Text>
-            The messages you type, and the training context needed to answer them, are
-            sent to our AI provider, Anthropic, to write the reply.
+            <Text style={styles.lead}>Chat messages. </Text>
+            The questions you type in the chat tab, and the replies. They are stored so
+            you and your coach can see the conversation. They are not sent to any outside
+            company &mdash; answers are worked out on our own servers from your training
+            data.
           </Text>
           <Text style={styles.p}>
             No payment details are collected. RunGuard carries no advertising SDKs and no
@@ -205,11 +207,8 @@ export default function PrivacyScreen() {
             hosts the web app and the API.
           </Text>
           <Text style={styles.p}>
-            <Text style={styles.lead}>Anthropic </Text>
-            is involved only if the coach chat is switched on, to generate replies.
-          </Text>
-          <Text style={styles.p}>
-            Each of them handles the data only to provide their service to us.
+            Each of them handles the data only to provide their service to us. No
+            third-party AI service receives your data.
           </Text>
         </Panel>
 

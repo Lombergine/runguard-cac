@@ -388,7 +388,30 @@ export type RaceInput = {
   distanceM: number;
   /** Truncated to 120 characters. */
   location?: string;
+  /**
+   * Gun time as 24-hour "HH:MM". Anything else is a 400 with its own sentence
+   * ("Start time must look like 09:30 or 16:05.") — the route validates rather
+   * than coercing, so a half-typed time is refused, not silently dropped.
+   */
+  startTime?: string;
+  /** One of exactly: "Track" | "Cross country" | "Road" | "Trail". */
+  courseType?: RaceCourseType;
+  /**
+   * How much this one matters: "A" | "B" | "C". A races are the ones the taper
+   * is built around; C races are training efforts.
+   */
+  priority?: RacePriority;
+  /** Free text. Truncated to 1000 characters. */
+  notes?: string;
 };
+
+/** The four course types the route accepts. Anything else is a 400. */
+export const RACE_COURSE_TYPES = ["Track", "Cross country", "Road", "Trail"] as const;
+export type RaceCourseType = (typeof RACE_COURSE_TYPES)[number];
+
+/** The three priorities the route accepts. */
+export const RACE_PRIORITIES = ["A", "B", "C"] as const;
+export type RacePriority = (typeof RACE_PRIORITIES)[number];
 
 /**
  * POST /api/race — add a race to the athlete's own calendar.
@@ -447,6 +470,22 @@ export type RaceResultInput = {
    * answer — so there is no need to strip one before sending.
    */
   conditions?: string;
+  /**
+   * Per-lap times in SECONDS — not cumulative, and not a string.
+   *
+   * The column has existed since first release and nothing but the seeder ever
+   * wrote it. The route now checks three things and each is its own 400: every
+   * entry a finite number in (0, 3600]; at most 60 of them; and the SUM within
+   * 10% of `timeS`. That last one catches the common mistake of entering a
+   * running total instead of individual laps, which would otherwise store a
+   * plausible-looking set of splits that describe a different race.
+   *
+   * An empty array is stored as NULL — "none reported" — so there is no need to
+   * omit the field when the athlete typed nothing.
+   */
+  splits?: number[];
+  /** Free text about how it went. Truncated to 1000 characters. */
+  notes?: string;
 };
 
 /**

@@ -1,3 +1,4 @@
+import { aiEnabled } from "@/lib/ai";
 import Link from "next/link";
 
 export const metadata = {
@@ -25,6 +26,21 @@ function P({ children }: { children: React.ReactNode }) {
 }
 
 export default function PrivacyPage() {
+  /*
+   * The policy describes THIS deployment, not an aspiration.
+   *
+   * It previously stated that chat messages "may be sent to our AI provider
+   * (Anthropic)" unconditionally. No code in src/ reads any provider key, so on
+   * every deployment that has ever existed the sentence was false — and false in
+   * the direction that frightens a parent reading it. A policy that over-states
+   * what leaves the building is not a safe default; it is just wrong, and it is
+   * the kind of wrong that loses a school.
+   *
+   * So it follows the same flag the interface does: disclose the provider when
+   * one is actually answering, and say plainly that nothing leaves when nothing
+   * does. Wire a hosted model up and this paragraph changes with it.
+   */
+  const ai = aiEnabled();
   return (
     <div className="min-h-screen" style={{ background: "var(--page, var(--surface))" }}>
       <main className="mx-auto max-w-3xl px-5 py-12">
@@ -63,9 +79,20 @@ export default function PrivacyPage() {
           severity, energy, motivation, and whether you&rsquo;re under academic stress.
         </P>
         <P>
-          <strong>AI chat messages</strong>, only if the optional AI coaching chat is enabled: the messages you
-          type and the training context needed to answer them may be sent to our AI provider (Anthropic) to
-          generate a response.
+          <strong>Chat messages</strong>: the questions you type in the chat tab, and the replies. These are
+          stored so you and your coach can see the conversation.{" "}
+          {ai ? (
+            <>
+              The message and the training context needed to answer it are sent to the AI model that
+              generates the reply.
+            </>
+          ) : (
+            <>
+              They are <strong>not</strong>{" "}
+              sent to any outside company &mdash; answers are worked out on our own servers from
+              your training data.
+            </>
+          )}
         </P>
         <P>
           We do <strong>not</strong> collect payment information, and RunGuard does not use third-party
@@ -98,8 +125,8 @@ export default function PrivacyPage() {
         <H2>Service providers we use</H2>
         <P>
           <strong>Supabase</strong> (database storage, authentication, backend hosting); <strong>Vercel</strong>{" "}
-          (web app and API hosting); and <strong>Anthropic</strong> (only if the AI chat is enabled, to generate chat replies). These providers
-          process data only to provide their service to us.
+          (web app and API hosting). These providers process data only to provide their service to us.
+          {ai ? "" : " No third-party AI service receives your data."}
         </P>
 
         <H2>Data retention and deletion</H2>

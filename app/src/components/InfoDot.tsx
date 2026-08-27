@@ -235,8 +235,8 @@ function place(
  * ------------------------------------------------------------------ */
 
 /**
- * The ten explainers, ported CHARACTER FOR CHARACTER from the `info=` props on
- * the website's Stats and Recovery tabs, with the source line beside each.
+ * The explainers, ported CHARACTER FOR CHARACTER from the `info=` props on the
+ * website's Home, Stats and Recovery tabs, with the source beside each.
  *
  * They live here, in one object, rather than inline on the two screens that
  * use them, for one reason: this is duplicated prose, and duplicated prose
@@ -263,6 +263,27 @@ function place(
  * ONE STRING DIVERGES FROM THE WEBSITE, and it is `sleep7d` — see its note.
  */
 export const EXPLAINERS = {
+  /* ── Home ───────────────────────────────────────────────────────────── */
+
+  /**
+   * The one number this app is really about, and until now the only one on the
+   * hero with nothing behind it.
+   *
+   * Two clauses are load-bearing and must survive any edit:
+   *
+   *   - "adjusted down for soreness you reported" is what makes the check-in
+   *     worth filling in honestly. An athlete who cannot see that their own
+   *     report moves the number has no reason to believe it does.
+   *   - "It is not a fitness score" separates it from `fitnessScore` below,
+   *     which is the confusion this screen invites by showing one large 0–100
+   *     figure — the same distinction `bodyBattery` has to make.
+   *
+   * Matches the web home tile (website/src/components/athlete/tabs.tsx,
+   * BentoTile label="Readiness").
+   */
+  readiness:
+    "0–100, built from your sleep, HRV and resting heart rate against your own baselines, then adjusted down for soreness you reported. It answers one question: how ready are you to absorb hard work today. Under 40 means back off; 65 and up means you're clear to run it as written. It is not a fitness score — you can be very fit and very flat.",
+
   /* ── Stats ──────────────────────────────────────────────────────────── */
 
   /** tabs.tsx:448 — verbatim. */

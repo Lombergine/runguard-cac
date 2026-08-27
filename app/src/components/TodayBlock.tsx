@@ -79,6 +79,22 @@ export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
         <Text style={styles.note}>{dateLabel}</Text>
       </View>
 
+      {/*
+        Who decided today.
+
+        A line rather than a badge: the head is already title-left/date-right,
+        and § "Roomy, not dense" governs this screen. But it has to be said
+        somewhere — "your coach wrote this" and "a computer suggested this" are
+        different instructions, and the athlete acts on them differently.
+
+        `source` is optional on the wire (a phone on this build can talk to a
+        server that predates the team calendar), so this matches "coach"
+        explicitly and says nothing at all otherwise.
+      */}
+      {day?.source === "coach" ? (
+        <Text style={styles.attribution}>From your coach</Text>
+      ) : null}
+
       <View style={styles.body}>
         {!day ? (
           <Absent label="No plan recorded for today" />
@@ -90,6 +106,22 @@ export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
           <Stat label="Distance" value={formatDistance(day.distanceKm)} />
         )}
       </View>
+
+      {/*
+        When this athlete's readiness eased a distance their coach wrote, BOTH
+        numbers appear. The Stat above shows the eased one because that is what
+        the rest of the app computes against; this line restores the coach's.
+        Showing only the eased number would have the home screen contradicting
+        the board at practice, and the athlete will run the board.
+      */}
+      {day?.source === "coach" &&
+      day.coachDistanceKm != null &&
+      day.distanceKm !== null &&
+      Math.abs(day.coachDistanceKm - day.distanceKm) > 0.15 ? (
+        <Text style={styles.eased}>
+          {`Your coach wrote ${formatDistance(day.coachDistanceKm)}. Run their number unless they say otherwise — show them this.`}
+        </Text>
+      ) : null}
 
       {/*
         The session broken down, and why it is in the plan — the website shows
@@ -195,6 +227,10 @@ const styles = StyleSheet.create({
   title: { ...text.title, color: color.ink },
   note: { ...text.meta, color: color.muted },
   body: { marginTop: space.md },
+  /** Ember-coloured meta, the same pairing `countdown` uses on this surface. */
+  attribution: { ...text.meta, color: color.brandText, marginTop: space.xs },
+  /** A note, not a warning: it reports a disagreement, it does not resolve it. */
+  eased: { ...text.meta, color: color.ink2, marginTop: space.sm },
   status: { ...text.meta, color: color.ink2, marginTop: space.md },
 
   /**

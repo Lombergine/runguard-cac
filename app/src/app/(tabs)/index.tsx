@@ -68,6 +68,7 @@ import { Notifications } from "../../components/Notifications";
 import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
 import { WeekProgress } from "../../components/WeekProgress";
 import { ApiError, getHome, isUnauthorized, postCheckin } from "../../lib/api";
+import InfoDot, { EXPLAINERS } from "../../components/InfoDot";
 import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
 import { useInvalidateProfile } from "../../lib/profileStore";
 import {
@@ -453,7 +454,7 @@ export default function CheckInScreen() {
             hitSlop={hitSlopFor(styles.headerAction)}
             style={styles.headerAction}
           >
-            <Text style={styles.headerActionLabel}>RunGuard AI</Text>
+            <Text style={styles.headerActionLabel}>Ask RunGuard</Text>
           </Pressable>
           <Pressable
             onPress={() => router.push("/settings")}
@@ -581,7 +582,19 @@ function ReadinessHero({
       <EmberEdge />
       <View style={styles.panelBody}>
         <View style={styles.panelHead}>
-          <Text style={styles.panelTitle}>Readiness</Text>
+          {/*
+            The dot sits with the TITLE, not in the note slot on the right.
+            "higher is fresher" is a reading instruction for the numeral; the
+            explainer is about what the numeral IS, and the two are different
+            questions. Wrapped in a fixed-height column so it stays level with
+            the first line of the title, the way Tile does it.
+          */}
+          <View style={styles.panelTitleRow}>
+            <Text style={styles.panelTitle}>Readiness</Text>
+            <View style={styles.panelTitleDot}>
+              <InfoDot label="Readiness" text={EXPLAINERS.readiness} />
+            </View>
+          </View>
           <Text style={styles.panelNote}>higher is fresher</Text>
         </View>
 
@@ -620,7 +633,7 @@ function ReadinessHero({
         */}
         {state.known && insight ? (
           <Text style={styles.insight}>
-            <Text style={styles.insightByline}>RunGuard AI: </Text>
+            <Text style={styles.insightByline}>RunGuard: </Text>
             {insight}
           </Text>
         ) : null}
@@ -898,6 +911,9 @@ const styles = StyleSheet.create({
    * two-layer shadow every surface gets, not a device for making this card
    * shout over the tiles below it.
    */
+  panelTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
+  /** Keeps the dot level with the first line if the title ever wraps. */
+  panelTitleDot: { height: text.title.lineHeight as number, justifyContent: "center" },
   hero: {
     marginTop: layout.section,
     backgroundColor: color.card,

@@ -1,7 +1,19 @@
+import { demoEnabled } from "@/lib/demo";
+import { aiEnabled } from "@/lib/ai";
 import Link from "next/link";
 import WaitlistForm from "@/components/WaitlistForm";
 
 export default function Landing() {
+  /*
+   * Whether there is a demo to send anyone to.
+   *
+   * Without this the hero shows "See the coach dashboard" on a deployment
+   * with DEMO_TEAM_ID unset, and the button 404s — which is worse than not
+   * having a demo at all, because the first thing a coach does with a link
+   * someone sent them is press the biggest button on it.
+   */
+  const demo = demoEnabled();
+
   return (
     <div className="flex-1">
       {/* nav — sticky, on the glass utility the design system already defines */}
@@ -62,27 +74,60 @@ export default function Landing() {
           load, and flags who&apos;s at risk — before practice even starts.
         </p>
 
-        {/* One primary action. Three buttons at equal weight made a first
-            visitor choose instead of click; the demos are still one click away. */}
-        <div className="enter mt-9 flex justify-center" style={{ ["--i" as string]: 3 }}>
+        {/*
+          THE DEMO IS THE PRIMARY ACTION NOW, and "create your team" is second.
+
+          The old order asked a coach to open an account before seeing anything,
+          with the demos demoted to underlined words in a sentence below — and
+          both of those words led to a SIGN-IN FORM, which is the one thing a
+          demo link must not do. A coach opening this from an email on the
+          touchline has about five seconds of patience and no reason yet to type
+          anything.
+
+          `prefetch={false}`: these are GETs that set a cookie. Harmless to fire
+          twice (see api/demo/coach), but there is no reason to open a session
+          for someone who only scrolled past the button.
+        */}
+        <div
+          className="enter mt-9 flex flex-wrap justify-center gap-3"
+          style={{ ["--i" as string]: 3 }}
+        >
+          {demo && (
+            <Link
+              href="/api/demo/coach"
+              prefetch={false}
+              className="lift rounded-full px-8 py-4 text-base font-semibold text-black"
+              style={{ background: "var(--ember)", boxShadow: "0 6px 28px rgba(245,158,11,0.32)" }}
+            >
+              See the coach dashboard →
+            </Link>
+          )}
           <Link
             href="/signup"
-            className="lift rounded-full px-8 py-4 text-base font-semibold text-black"
-            style={{ background: "var(--ember)", boxShadow: "0 6px 28px rgba(245,158,11,0.32)" }}
+            className={`lift rounded-full px-8 py-4 text-base font-semibold ${demo ? "border" : "text-black"}`}
+            style={
+              demo
+                ? { borderColor: "var(--ink)", color: "var(--ink)" }
+                : { background: "var(--ember)", boxShadow: "0 6px 28px rgba(245,158,11,0.32)" }
+            }
           >
-            Create your team — free →
+            Create your team — free{demo ? "" : " →"}
           </Link>
         </div>
-        <p className="enter mt-5 text-sm" style={{ ["--i" as string]: 4, color: "var(--ink-muted)" }}>
-          Or look around first —{" "}
-          <Link href="/login" className="underline underline-offset-4 hover:opacity-70" style={{ color: "var(--ink-2)" }}>
-            coach demo
-          </Link>
-          {" · "}
-          <Link href="/athlete/login" className="underline underline-offset-4 hover:opacity-70" style={{ color: "var(--ink-2)" }}>
-            athlete demo
-          </Link>
-        </p>
+        {demo && (
+          <p className="enter mt-5 text-sm" style={{ ["--i" as string]: 4, color: "var(--ink-muted)" }}>
+            No sign-up, no card — the dashboard opens on a sample team. Or see{" "}
+            <Link
+              href="/api/demo/athlete"
+              prefetch={false}
+              className="underline underline-offset-4 hover:opacity-70"
+              style={{ color: "var(--ink-2)" }}
+            >
+              what a runner sees
+            </Link>
+            .
+          </p>
+        )}
       </section>
 
       {/* The page had no picture of the product anywhere — it was argument with
@@ -186,7 +231,11 @@ export default function Landing() {
           <ul className="mt-6 space-y-3 text-sm" style={{ color: "var(--ink-2)" }}>
             <Li>Sign up on your own — no coach or team required</Li>
             <Li>Your readiness score, weekly plan, and race predictions</Li>
-            <Li>An AI assistant that actually knows your training</Li>
+            <Li>
+              {aiEnabled()
+                ? "An AI assistant that actually knows your training"
+                : "An assistant that answers from their own training data"}
+            </Li>
             <Li>iPhone app with live Apple Health sync · join a team anytime</Li>
             <Li>Android support lands after the iOS launch</Li>
           </ul>

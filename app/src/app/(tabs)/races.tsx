@@ -175,11 +175,40 @@ function UpcomingCard({
             {countdownLabel(race.daysUntil)}
           </Text>
         </View>
+        {/*
+          Everything known about WHERE and WHEN, joined at render.
+
+          Built by filtering then joining rather than interpolating with
+          separators: the old line was `${date} · ${location}` behind a ternary,
+          and adding two more optional parts that way produces "Sat 12 Sep ·  ·
+          09:30" the moment one of them is missing — a gap that reads as data
+          that failed to load rather than a field nobody filled in.
+
+          All three new fields are optional on the wire (see lib/types), so an
+          older server simply contributes fewer parts.
+        */}
         <Text style={styles.eyebrow}>
-          {race.location
-            ? `${dayLabel(race.date)} · ${race.location}`
-            : dayLabel(race.date)}
+          {[
+            dayLabel(race.date),
+            race.course_type,
+            race.location,
+            race.start_time ? `gun ${race.start_time}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </Text>
+
+        {/*
+          The priority, spelled out rather than shown as a bare letter. "A" is
+          jargon; what the athlete needs to know is whether this is the race the
+          season points at. No colour and no fill — it describes the race, it
+          does not rate it (non-negotiable #5).
+        */}
+        {race.priority ? (
+          <Text style={styles.priority}>{PRIORITY_WORD[race.priority] ?? race.priority}</Text>
+        ) : null}
+
+        {race.notes ? <Text style={styles.raceNote}>{race.notes}</Text> : null}
 
         <View style={styles.upcomingStats}>
           <Stat label="Event" value={race.event} />
@@ -273,6 +302,19 @@ const PRE_RACE = [
   "A warm-up is usually 20 minutes plus four strides, finishing about 15 minutes before the gun.",
 ] as const;
 
+/**
+ * What an A/B/C race actually is, in words.
+ *
+ * The letters are coaching shorthand an athlete may never have been taught, and
+ * the difference matters most to the person deciding how hard to go: a C race
+ * run flat out is how a season gets wrecked in September.
+ */
+const PRIORITY_WORD: Record<string, string> = {
+  A: "A race — the one this season points at",
+  B: "B race — race it, but the week is not built around it",
+  C: "C race — a training effort",
+};
+
 const FEEL_WORD: Record<string, string> = {
   great: "felt great",
   ok: "felt ok",
@@ -309,6 +351,10 @@ function ResultRow({ result }: { result: RaceHistoryEntry }) {
             {[feel, result.conditions].filter(Boolean).join(" · ")}
           </Text>
         ) : null}
+        {/* The athlete's own sentence about the race, on its own line rather
+            than joined to the row above: it is prose, and joining it to "felt
+            rough · windy" with a dot would read as a fourth tag. */}
+        {result.notes ? <Text style={styles.raceNote}>{result.notes}</Text> : null}
       </View>
       <View style={styles.resultRight}>
         {result.isPr ? <Text style={styles.pr}>PR</Text> : null}
@@ -479,6 +525,9 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   raceNote: { ...text.meta, color: color.muted, marginTop: space.xs },
+  /** Ember-coloured meta on the card ground — the pairing `countdown` uses.
+      A word about the race, not a badge that rates it. */
+  priority: { ...text.meta, color: color.brandText, marginTop: space.xs },
   checklist: { gap: space.xs, marginTop: space.md },
   checklistHead: { ...text.micro, color: color.muted },
   /** Prose, no marker, no glyph — see the block that renders this. */

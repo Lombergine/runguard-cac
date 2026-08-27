@@ -1,7 +1,9 @@
+import { chatTabLabel } from "@/lib/ai";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAthleteByToken } from "@/lib/db";
-import { athleteTokenFromCookie } from "@/lib/session";
+import { athleteTokenFromCookie, isDemoSession } from "@/lib/session";
+import DemoBanner from "@/components/DemoBanner";
 import { buildProfile } from "@/lib/profile";
 import Avatar from "@/components/Avatar";
 import {
@@ -16,7 +18,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const TABS = ["Home", "Training", "Stats", "Recovery", "Race", "AI Chat", "Profile"] as const;
+/*
+ * The tab IDS are stable and the LABEL for the chat tab is not — see lib/ai.ts.
+ *
+ * Keeping the id fixed matters: it is what `?tab=` carries, so a link someone
+ * saved must not stop working because a model was switched on. Only the word on
+ * screen changes.
+ */
+const TABS = ["Home", "Training", "Stats", "Recovery", "Race", "Chat", "Profile"] as const;
+
+function tabLabel(tab: (typeof TABS)[number]): string {
+  return tab === "Chat" ? chatTabLabel() : tab;
+}
 
 export default async function AthletePortal({
   searchParams,
@@ -36,9 +49,11 @@ export default async function AthletePortal({
   if (!p) redirect("/athlete/login");
 
   const unread = p.notifications.length;
+  const demo = await isDemoSession();
 
   return (
     <div className="flex-1 flex flex-col">
+      {demo && <DemoBanner />}
       {/* athlete header */}
       <header
         className="sticky top-0 z-20 border-b glass"
@@ -89,7 +104,7 @@ export default async function AthletePortal({
                   : { color: "var(--ink-2)" }
               }
             >
-              {t}
+              {tabLabel(t)}
             </Link>
           ))}
         </div>
@@ -99,7 +114,7 @@ export default async function AthletePortal({
         {activeTab === "Stats" && <StatsTab p={p} />}
         {activeTab === "Recovery" && <RecoveryTab p={p} />}
         {activeTab === "Race" && <RaceTab p={p} />}
-        {activeTab === "AI Chat" && <ChatTab p={p} />}
+        {activeTab === "Chat" && <ChatTab p={p} />}
         {activeTab === "Profile" && <ProfileTab p={p} />}
 
         <p className="text-xs text-center pb-4" style={{ color: "var(--ink-muted)" }}>
