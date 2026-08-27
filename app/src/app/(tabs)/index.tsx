@@ -71,6 +71,10 @@ import { ApiError, getHome, isUnauthorized, postCheckin } from "../../lib/api";
 import InfoDot, { EXPLAINERS } from "../../components/InfoDot";
 import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
 import { useInvalidateProfile } from "../../lib/profileStore";
+import { useLiveRefresh } from "../../lib/useLiveRefresh";
+
+/** A coach's plan edit should reach the home screen without a manual reload. */
+const LIVE_REFRESH_MS = 25_000;
 import {
   readinessBand,
   readinessValue,
@@ -247,6 +251,26 @@ export default function CheckInScreen() {
       alive = false;
     };
   }, [reveal, reloadKey]);
+
+  /**
+   * Quietly re-reads `/home` on a timer once the first load has landed, so a
+   * coach's plan edit shows up here without a pull-to-refresh. Skipped while
+   * `profile` is still null (the effect above owns the first load and its own
+   * `unpaired`/`failed` branches) and while a check-in write is in flight
+   * (`submitting`) or the soreness card is reopened — a background refetch
+   * landing mid-write could hand `setProfile` a `todaySoreness` that has not
+   * caught up with what this screen just posted, and this tab already refetches
+   * explicitly the moment `finish()`/`closeSoreness()` change anything.
+   */
+  useLiveRefresh(() => {
+    if (!profile || submitting || reopened) return;
+    void getHome()
+      .then((p) => setProfile(p))
+      .catch(() => {
+        // A background poll failing is not news: the profile already on
+        // screen was true when it was fetched, and the next tick tries again.
+      });
+  }, LIVE_REFRESH_MS);
 
   /**
    * ONE ROW PER REQUEST, plus its supersedes. The route stores a single

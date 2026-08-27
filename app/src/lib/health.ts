@@ -81,6 +81,10 @@ export type IngestWorkout = {
   durationS: number;
   /** METRES. */
   distanceM: number;
+  /** BPM, mean over the workout. Absent when no heart-rate sample overlapped it. */
+  avgHr?: number;
+  /** BPM, peak over the workout — this is what `hrmax.ts` `detectHrMax()` reads. */
+  maxHr?: number;
 };
 
 /**
@@ -184,12 +188,20 @@ export function isAvailable(): boolean {
  * asking for write access it does not use would be a permission prompt the
  * athlete cannot refuse selectively.
  *
- * `HKQuantityTypeIdentifierHeartRate` is NOT requested, so `avgHr` / `maxHr` /
- * `cadence` are never sent. The ingest route accepts them and the server's zone
- * engine would use them; adding heart rate is a scope decision, not a code one.
+ * `HKQuantityTypeIdentifierHeartRate` IS requested — a deliberate scope decision,
+ * not a default. It exists so `readSince()` can compute a real max heart rate per
+ * workout (`workout.maxHr` below) and retire the manual-entry field in
+ * `app/profile.tsx`: HRmax sits upstream of every intensity, load and ACWR figure
+ * the engine computes, so an athlete's own workout history is a better source
+ * than a number they typed once. This widens what the permission sheet asks for
+ * — every heart-rate sample, not just workout summaries — which matters more on
+ * a roster of minors than it would elsewhere. `cadence` is still never sent:
+ * nothing in this file reads it, on principle that a scope is requested because
+ * something uses it, not because the type exists.
  */
 const READ_SCOPES = [
   WorkoutTypeIdentifier,
+  "HKQuantityTypeIdentifierHeartRate",
   "HKQuantityTypeIdentifierRestingHeartRate",
   "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
   "HKCategoryTypeIdentifierSleepAnalysis",
@@ -330,7 +342,7 @@ export async function readSince(since: Date): Promise<IngestPayload> {
       });
     }
 
-    const [restingHr, hrv, respRate, vo2max] = await Promise.all([
+    const [restingHr, hrv, respRate, vo2max, heartRate] = await Promise.all([
       hk.queryQuantitySamples("HKQuantityTypeIdentifierRestingHeartRate", {
         filter: { date },
         limit: 0,
@@ -354,7 +366,42 @@ export async function readSince(since: Date): Promise<IngestPayload> {
         unit: "ml/(kg*min)",
         ascending: true,
       }),
+      // Every live heart-rate sample in the window — this is the one that feeds
+      // `workout.avgHr` / `workout.maxHr` below, not a per-day mean like the
+      // others here. Ascending so the per-workout scan below can rely on order.
+      hk.queryQuantitySamples("HKQuantityTypeIdentifierHeartRate", {
+        filter: { date },
+        limit: 0,
+        unit: "count/min",
+        ascending: true,
+      }),
     ]);
+
+    // Attribute heart-rate samples to the workout whose time window contains
+    // them. A nested scan rather than a merge-pointer: workouts are HealthKit's
+    // own order, not necessarily start-ascending, and a 30-day backfill is at
+    // most a few dozen workouts against at most a few thousand HR samples — not
+    // worth the bug surface of a pointer that has to rewind for an out-of-order
+    // workout. `avgHr`/`maxHr` stay ABSENT (never 0) when no sample overlapped,
+    // matching every other optional reading in this file.
+    for (const w of workouts) {
+      const startMs = Date.parse(w.start);
+      const endMs = startMs + w.durationS * 1000;
+      let sum = 0;
+      let n = 0;
+      let max = 0;
+      for (const s of heartRate) {
+        const t = s.startDate.getTime();
+        if (t < startMs || t > endMs) continue;
+        sum += s.quantity;
+        n++;
+        if (s.quantity > max) max = s.quantity;
+      }
+      if (n > 0) {
+        w.avgHr = Math.round(sum / n);
+        w.maxHr = Math.round(max);
+      }
+    }
 
     for (const s of restingHr) {
       const acc = day(localDay(s.startDate)).restingHr;

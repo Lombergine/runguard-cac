@@ -1,20 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+/** How long a fallback plaintext reveal stays on screen before hiding itself. */
+const REVEAL_TIMEOUT_MS = 20_000;
+
 /**
- * The athlete's app token, revealed on demand.
+ * The athlete's app token — copied to the phone, never displayed if it can be
+ * helped.
  *
- * This is a Bearer credential, so it stays behind a click rather than sitting
- * in the page for anyone reading over a coach's shoulder at a meet. The button
- * used to share this row with Strava connect/sync controls; those are gone
- * along with the OAuth flow, and what remains is the one thing a coach needs
- * from this table.
+ * This is a Bearer credential for a minor's health data (see `DEPLOY.md` →
+ * *Credentials*), and getting it onto the athlete's phone is the one thing a
+ * coach genuinely needs this row for — pairing has no other path today (see
+ * `app/pair.tsx`). But "needs to reach the phone" and "needs to sit rendered on
+ * a laptop screen at a meet" are different requirements, so `copy()` writes
+ * straight to the clipboard and the raw token is never put in the DOM at all
+ * unless that fails. The old version had a standalone "reveal" toggle that
+ * left the plaintext on screen indefinitely until someone remembered to click
+ * "Hide"; this version only ever shows it as a last resort (clipboard access is
+ * permission-gated and throws on non-HTTPS origins), and even then it hides
+ * itself after `REVEAL_TIMEOUT_MS` rather than waiting to be dismissed.
+ *
+ * Rotating this token is deliberately NOT offered here: `POST
+ * /api/athlete/rotate-token` refuses any caller on the coach path by design —
+ * a coach able to silently reissue an athlete's credential could grant
+ * themself ongoing access to a minor's data under that athlete's identity,
+ * which is worse than the exposure this component is trying to reduce. Only
+ * the athlete, from their own session, can rotate it.
  */
 export function TokenButton({ deviceToken }: { deviceToken: string | null }) {
-  const [shown, setShown] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
 
   if (!deviceToken) {
     return (
@@ -30,36 +54,33 @@ export function TokenButton({ deviceToken }: { deviceToken: string | null }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Clipboard is permission-gated and throws on http:// origins. The token
-      // is already on screen at this point, so failing here costs nothing.
-      setShown(true);
+      // Clipboard is permission-gated and throws on http:// origins. This is
+      // the only path that ever renders the raw token — and even here it
+      // hides itself rather than waiting for someone to remember to.
+      setRevealed(true);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = setTimeout(() => setRevealed(false), REVEAL_TIMEOUT_MS);
     }
   }
 
   return (
     <span className="inline-flex items-center gap-2 justify-end">
-      {shown && (
+      {revealed && (
         <code
           className="text-[11px] px-2 py-1 rounded-lg border select-all"
           style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
+          title="Copy failed, so this is shown as a fallback — it hides itself shortly"
         >
           {deviceToken}
         </code>
       )}
       <button
-        onClick={() => setShown((v) => !v)}
-        className="text-xs rounded-full border px-3 py-1.5 cursor-pointer"
-        style={{ borderColor: "var(--hairline)", color: "var(--ink-muted)" }}
-        title="The token this athlete signs into the iPhone app with"
-      >
-        {shown ? "Hide" : "App token"}
-      </button>
-      <button
         onClick={copy}
         className="text-xs rounded-full border px-3 py-1.5 cursor-pointer"
         style={{ borderColor: "var(--hairline)", color: "var(--ink-2)" }}
+        title="Copies the token this athlete pairs the iPhone app with — never shown on screen unless copying fails"
       >
-        {copied ? "Copied" : "Copy"}
+        {copied ? "Copied" : "Copy app token"}
       </button>
     </span>
   );
