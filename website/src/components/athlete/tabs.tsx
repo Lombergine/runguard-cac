@@ -521,10 +521,10 @@ export function StatsTab({ p }: { p: CoreProfile }) {
         <Panel title="Pace trend — season" note="up = faster"><PaceChart data={p.paceSeason} /></Panel>
         <Panel title="Fitness score trend" note="improving or plateauing?"><FitnessChart data={p.fitness.weekly} /></Panel>
         <Panel title="Weekly mileage"><WeeklyKmChart data={p.weeks} /></Panel>
-        <Panel title="ACWR — your injury risk over time" note="band = safe zone · dashed = danger"><AcwrChart data={p.series.slice(-60)} /></Panel>
+        <Panel title="ACWR — your injury risk over time" note="band = safe zone · dashed = danger"><AcwrChart data={p.series} /></Panel>
       </div>
 
-      <Panel title="Training load history" note="spot exactly when you spiked"><LoadChart data={p.series.slice(-60)} /></Panel>
+      <Panel title="Training load history" note="spot exactly when you spiked"><LoadChart data={p.series} /></Panel>
 
       {/* HR zones */}
       <Panel title="Time in HR zones — this week" note={`${Object.values(p.load.weekZones).reduce((s, x) => s + x, 0)} total minutes`}>
@@ -855,7 +855,7 @@ export function RaceTab({ p }: { p: CoreProfile }) {
  * <details> rather than React state so this stays a server component and works
  * with JS still loading.
  */
-function RaceHistoryRow({
+export function RaceHistoryRow({
   r,
 }: {
   r: CoreProfile["races"]["history"][number];

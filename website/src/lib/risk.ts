@@ -103,6 +103,14 @@ const DAY_MS = 86400000;
 export const NOT_ENOUGH_ACWR_HISTORY =
   "Not enough training history yet for a reliable workload ratio — sync more data or give it a couple of weeks.";
 
+/**
+ * How far back `p.series` (the ACWR/Load daily series) reaches — the ceiling
+ * on the Stats tab's "6 months" range option. `activities` is already fetched
+ * back 400 days (`profile.ts`), so raising this is free; it used to be 120,
+ * which quietly capped "6 months" at four and a half.
+ */
+export const SERIES_WINDOW_DAYS = 183;
+
 export function isoDay(d: Date): string {
   return localDay(d);
 }
@@ -460,7 +468,7 @@ export function computeRisk(
   // value without threading it through. `athlete` only refines the answer (a
   // manually-set figure, or their age); history alone is usually enough.
   const hrMax = resolveHrMax(athlete, activities);
-  const daily = dailySeries(activities, 120, now, hrMax.value);
+  const daily = dailySeries(activities, SERIES_WINDOW_DAYS, now, hrMax.value);
   const series = acwrSeries(daily);
   const last = series[series.length - 1];
 
