@@ -44,6 +44,7 @@ import {
   AccessibilityInfo,
   Animated,
   Pressable,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -60,7 +61,9 @@ import {
   SorenessList,
   type LoggedSoreness,
 } from "../../components/CheckInCard";
+import { CheckInPrompt } from "../../components/CheckInPrompt";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
+import { ReadinessRing } from "../../components/ReadinessRing";
 import { Absent } from "../../components/Nothing";
 import { Tile } from "../../components/Tile";
 import { Notifications } from "../../components/Notifications";
@@ -156,6 +159,8 @@ export default function CheckInScreen() {
    * Suppresses the receipt branch so the card comes back; see the control there.
    */
   const [reopened, setReopened] = useState(false);
+  /** The check-in sheet. Opened by the ember card, closed when it completes. */
+  const [sheetOpen, setSheetOpen] = useState(false);
   /**
    * THE MIRROR OF WHAT THE SERVER HOLDS, keyed "left knee" → 0–10.
    *
@@ -538,6 +543,31 @@ export default function CheckInScreen() {
           </Animated.View>
         ) : (
           <>
+            {/*
+              The design's Home: a compact ember card, not a full-viewport one.
+              Tapping opens the real check-in in a sheet, which keeps every bit
+              of that card's state and handlers exactly where they already live
+              — nothing is lifted across a route boundary.
+            */}
+            <CheckInPrompt
+              dateLabel={dayLabel(localDay())}
+              onPress={() => setSheetOpen(true)}
+            />
+            <UnknownReadiness pending={false} />
+            <AfterCheckIn profile={profile} />
+          </>
+        )}
+      </ScrollView>
+
+      {/* The check-in itself. A sheet you can swipe away, per the design. */}
+      <Modal
+        visible={sheetOpen}
+        presentationStyle="pageSheet"
+        animationType="slide"
+        onRequestClose={() => setSheetOpen(false)}
+      >
+        <SafeAreaView style={styles.sheet} edges={["bottom"]}>
+          <ScrollView contentContainerStyle={styles.sheetPage}>
             <CheckInCard
               dateLabel={dayLabel(localDay())}
               logged={logged}
@@ -550,13 +580,9 @@ export default function CheckInScreen() {
               sorenessOnly={reopened}
               onDone={closeSoreness}
             />
-            {/* No receipt means no check-in today — `readinessState` is
-                `{known:false}` by construction, so this footer is given no way
-                to render a value at all. */}
-            <UnknownReadiness pending={false} />
-          </>
-        )}
-      </ScrollView>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -624,19 +650,32 @@ function ReadinessHero({
         </View>
 
         {state.known ? (
-          <View style={styles.readinessRow}>
-            {/* The numeral with "/100" welded on, then the verdict. See
-                lib/readinessVerdict for the bands and wording, which are
-                copied from tabs.tsx rather than invented. */}
-            <Text style={styles.readinessValue}>{readinessValue(state.value)}</Text>
-            <Text
-              style={[
-                styles.readinessVerdict,
-                { color: VERDICT_COLOR[readinessBand(state.value)] },
-              ]}
-            >
-              {readinessVerdict(state.value)}
-            </Text>
+          /*
+            The design's shape: the ring on the left, the verdict and the
+            insight beside it. A ring shows the figure AGAINST its range, so 73
+            reads as "most of the way" rather than as a grade — which is a
+            better fit for a monitoring signal than a bare numeral was.
+          */
+          <View style={styles.ringRow}>
+            <ReadinessRing
+              value={state.value}
+              tint={VERDICT_COLOR[readinessBand(state.value)]}
+            />
+            <View style={styles.ringBody}>
+              <Text
+                style={[
+                  styles.readinessVerdict,
+                  { color: VERDICT_COLOR[readinessBand(state.value)] },
+                ]}
+              >
+                {readinessVerdict(state.value)}
+              </Text>
+              {insight ? <Text style={styles.insight}>{insight}</Text> : null}
+              {/* The figure still exists as text for anyone who wants it
+                  exactly, with "/100" welded on — the ring is the reading, not
+                  a replacement for the number. */}
+              <Text style={styles.ringValue}>{readinessValue(state.value)}</Text>
+            </View>
           </View>
         ) : (
           <View style={styles.readinessPlaceholder} />
@@ -656,12 +695,6 @@ function ReadinessHero({
           in prose. `aiInsight` is composed from the same inputs `readiness` is,
           so if one is not founded neither is the other.
         */}
-        {state.known && insight ? (
-          <Text style={styles.insight}>
-            <Text style={styles.insightByline}>RunGuard: </Text>
-            {insight}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
@@ -1048,4 +1081,21 @@ const styles = StyleSheet.create({
   addSorenessLabel: { ...text.base, color: color.ink2 },
 
   footer: { marginTop: layout.section },
+
+  /* The design's readiness block: ring left, verdict and insight beside it. */
+  ringRow: { flexDirection: "row", alignItems: "center", gap: space.lg },
+  ringBody: { flex: 1, gap: space.xs },
+  /** The exact figure, for anyone who wants it — the ring is the reading. */
+  ringValue: { ...text.meta, color: color.muted },
+
+  /**
+   * The check-in sheet. `bg` and not `card`: a pageSheet is its own page, and a
+   * white ground here would make the card inside it invisible.
+   */
+  sheet: { flex: 1, backgroundColor: color.bg },
+  sheetPage: {
+    flexGrow: 1,
+    paddingHorizontal: layout.page,
+    paddingVertical: layout.section,
+  },
 });
