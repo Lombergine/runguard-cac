@@ -84,7 +84,7 @@ import { Tile } from "../../components/Tile";
 import { SleepChart } from "../../components/charts/SleepChart";
 import { SleepStages } from "../../components/charts/SleepStages";
 import { useProfile } from "../../lib/profileStore";
-import { readinessState } from "../../lib/readiness";
+import { fitnessKnown, readinessState } from "../../lib/readiness";
 import { readinessBand, readinessValue, type ReadinessBand } from "../../lib/readinessVerdict";
 import type { Profile } from "../../lib/types";
 import { layout, radius, space, target } from "../../theme/space";
@@ -426,7 +426,7 @@ function Readings({ profile }: { profile: Profile }) {
 
       <View style={styles.section}>
         <SectionHeading
-          title="Scored from those"
+          title="Worked out, not measured"
           note={
             <>
               <Text style={styles.figure}>0–100</Text>
@@ -444,7 +444,20 @@ function Readings({ profile }: { profile: Profile }) {
             label="Body battery"
             info={EXPLAINERS.bodyBattery}
             value={
-              profile.risk.hasActivityHistory && profile.fitness
+              /*
+                `fitnessKnown`, NOT `hasActivityHistory`.
+
+                lib/readiness.ts documents why at length: hasActivityHistory is
+                `activities.length > 0` over a 400-day window, so for anyone who
+                has ever run once it is permanently true and never goes false
+                again. Meanwhile `computeFitness` falls back to a bare score
+                whenever no week holds enough running — which is exactly the
+                athlete this gate is supposed to catch. `fitness.weekly` is
+                empty precisely when there was nothing to compute from, so it is
+                the honest test for anything derived from `fitness`, and
+                freshness is.
+              */
+              fitnessKnown(profile) && profile.fitness
                 ? `${profile.fitness.freshness}/100`
                 : null
             }
