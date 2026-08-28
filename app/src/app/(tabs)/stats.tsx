@@ -98,16 +98,6 @@ function longestStreak(badges: Badge[] | undefined): string | null {
   return `${n} ${n === 1 ? "day" : "days"}`;
 }
 
-/* ------------------------------------------------------------------ *
- * Panel — the website's information unit (athlete/tabs.tsx:22): title left, an
- * optional note right carrying the caveat or the unit, then the content.
- *
- * Local to this screen, as it is on every screen that has one: components/ is
- * not this pass's to add to. Every value comes from a token, so the panels
- * cannot drift apart even though the code is not shared.
- * ------------------------------------------------------------------ */
-
-
 /**
  * The screen header. `stale` adds ONE quiet line when a refetch failed over
  * numbers already on the glass; the whole-page failure stays reserved for
@@ -155,7 +145,19 @@ function HrZones({ zones }: { zones: ZoneMinutes | undefined }) {
   return (
     <Panel
       title="Time in HR zones"
-      note={total > 0 ? `${total} min · last 7 days` : "last 7 days"}
+      /* The total is a figure sitting in prose. It changes FACE, not colour —
+         mono and tabular inside the note's own body text, with the unit welded
+         into the same node. */
+      note={
+        total > 0 ? (
+          <>
+            <Text style={styles.figure}>{`${total} min`}</Text>
+            {" · last 7 days"}
+          </>
+        ) : (
+          "last 7 days"
+        )
+      }
     >
       {zones === undefined || total === 0 ? (
         <Absent label="No heart-rate minutes recorded this week." />
@@ -195,8 +197,9 @@ function HrZones({ zones }: { zones: ZoneMinutes | undefined }) {
           </View>
 
           <Text style={styles.note}>
-            Z1 is your easiest running, Z5 your hardest. Runs synced without
-            heart rate are not counted here.
+            <Text style={styles.figure}>Z1</Text> is your easiest running,{" "}
+            <Text style={styles.figure}>Z5</Text> your hardest. Runs synced
+            without heart rate are not counted here.
           </Text>
         </>
       )}
@@ -409,14 +412,18 @@ export default function StatsScreen() {
           {/* 3. Heart-rate zones. */}
           <HrZones zones={profile.load?.weekZones} />
 
-          {/* 4. PRs against what the model thinks you would run today. */}
-          {prs.length > 0 ? (
-            <PrTable prs={prs} predictions={predictions} />
-          ) : (
-            <Panel title="PRs & predicted times" note="no races logged yet">
-              <Absent label="No personal records recorded yet." />
-            </Panel>
-          )}
+          {/*
+            4. PRs against what the model thinks you would run today.
+
+            UNCONDITIONAL. There used to be a fallback Panel here for the empty
+            case, and it was worse than nothing twice over: `PrTable` already
+            renders its own <Absent/> ("No events on record.") when `prs` is
+            empty, so the branch duplicated a state its own child owns — and the
+            two panels did not carry the same note, so the caveat an athlete
+            read about their PRs depended on whether they had any. One component
+            renders this section in both states, so it cannot say two things.
+          */}
+          <PrTable prs={prs} predictions={predictions} />
 
           {/*
             5. THE CHARTS. Each owns its own Panel — do not wrap them.
@@ -472,6 +479,12 @@ const styles = StyleSheet.create({
   eyebrow: { ...text.micro, color: color.muted },
   heading: { ...text.title, color: color.ink, marginTop: space.xs },
   note: { ...text.meta, color: color.muted, marginTop: space.sm },
+  /**
+   * A numeral inside a sentence. FACE ONLY — no size, no colour — so it
+   * inherits the line it sits in and the sentence keeps one voice while the
+   * figure inside it stays mono and tabular (non-negotiable #3).
+   */
+  figure: { ...tabular, fontFamily: font.mono },
 
 
   failed: { ...text.base, color: color.ink2 },
@@ -483,6 +496,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: space.xl,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     backgroundColor: color.brand,
   },
   retryLabel: { ...text.baseSemi, color: color.ink },
@@ -505,6 +519,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     height: space.xl,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     // The unfilled remainder is the sunken well, so a short week reads as a
     // short bar rather than as a full one at low intensity.
     backgroundColor: color.well,
@@ -517,7 +532,12 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  swatch: { width: space.md, height: space.md, borderRadius: radius.mark },
+  swatch: {
+    width: space.md,
+    height: space.md,
+    borderRadius: radius.mark,
+    borderCurve: "continuous",
+  },
   /** Mono at metadata size: it carries a numeral, and every numeral is mono. */
   legendValue: {
     ...text.meta,
@@ -527,7 +547,11 @@ const styles = StyleSheet.create({
   },
 
   /* ── Skeletons. Grey blocks at final height, never a dash. ─────────── */
-  skeleton: { backgroundColor: color.well, borderRadius: radius.card },
+  skeleton: {
+    backgroundColor: color.well,
+    borderRadius: radius.card,
+    borderCurve: "continuous",
+  },
   skeletonScan: { height: space.xxxl * 4 },
   skeletonTile: {
     // Matches the tile grid's own two-up geometry: half the row, less the gap.

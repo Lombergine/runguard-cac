@@ -26,22 +26,47 @@
  * while someone is signed in. It therefore states the signed-in case plainly and
  * carries no signed-out branch: there is no frame in which this file renders to
  * a signed-out phone.
+ *
+ * ── THE SHAPE: components/List.tsx, NOT A LOCAL ONE ─────────────────────────
+ *
+ * Every key/value and every link here is a `ListRow` inside a `List` — the iOS
+ * inset grouped list. This file is where that shape was first hand-written
+ * (`LinkRow`, `StaticRow`, `Divider`, a local `Chevron`), and the component was
+ * lifted out of it; those four are deleted rather than kept alive beside their
+ * own extract, because a second definition is how a codebase ends up with three
+ * competing row heights.
+ *
+ * The rule this file used to state locally now lives in the component and is
+ * enforced by its API: an inert row is simply a row with no `onPress`, which
+ * renders as a plain `View` — no chevron, no press flash, no accessibility
+ * role. Nothing on this screen has to remember not to look tappable.
+ *
+ * `List` has no counterpart to `Panel`'s note, so each group's caveat is folded
+ * into the group header ("UNITS · DISPLAY ONLY"). Dropping those was not an
+ * option — "not available in this build" is the honest half of the
+ * Notifications group, not decoration. See the NEEDS PRIMITIVE note in the
+ * hand-off.
+ *
+ * The two prose-and-a-button sections at the bottom stay `Panel`s. They are not
+ * lists and forcing them into one would cost the paragraph that explains what
+ * the red button actually does.
  */
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import Constants from "expo-constants";
-import Svg, { Path } from "react-native-svg";
 
 import { Absent } from "../components/Nothing";
+import { List, ListRow } from "../components/List";
 import { getHome, isUnauthorized } from "../lib/api";
 import { isDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
-import { screenHeader } from "../theme/header";
+import { useScreenHeader } from "../theme/header";
 import { Panel } from "../components/Panel";
+import { dim } from "../theme/press";
 import { color } from "../theme/tokens";
-import { text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
@@ -50,11 +75,6 @@ import { layout, radius, ruleWidth, space, target } from "../theme/space";
  * someone is reporting a bug against it.
  */
 const APP_VERSION = Constants.expoConfig?.version ?? null;
-
-/** Coordinate grid the chevron is drawn on, matching the tab bar's glyphs. */
-const GRID = 24;
-const CHEVRON_SIZE = 20;
-const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
 
 /**
  * The athlete's name is the only server value on this screen. Three states, not
@@ -69,79 +89,6 @@ type NameState =
   | { kind: "loading" }
   | { kind: "known"; name: string }
   | { kind: "failed" };
-
-function Divider() {
-  return <View style={styles.divider} />;
-}
-
-function Chevron() {
-  return (
-    <Svg width={CHEVRON_SIZE} height={CHEVRON_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
-      <Path
-        d={CHEVRON}
-        fill="none"
-        stroke={color.muted}
-        strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
-      />
-    </Svg>
-  );
-}
-
-/** A row that goes somewhere. The only tappable row shape on this screen. */
-function LinkRow({
-  label,
-  note,
-  onPress,
-}: {
-  label: string;
-  note: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="link"
-      accessibilityLabel={label}
-      accessibilityHint={note}
-      // `accentSoft` is the token's own named use — a pressed wash. No opacity
-      // trick, and no ember fill: the ember marks the primary action, and every
-      // row here is equally ordinary.
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-    >
-      <View style={styles.rowBody}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowNote}>{note}</Text>
-      </View>
-      <Chevron />
-    </Pressable>
-  );
-}
-
-/**
- * A setting that exists but cannot be changed from here, or cannot be offered at
- * all. Deliberately NOT a Pressable and deliberately not a dimmed control: there
- * is nothing to press, so there is no affordance to dim. `reason` is required —
- * a disabled row without one is just a broken row.
- */
-function StaticRow({
-  label,
-  value,
-  reason,
-}: {
-  label: string;
-  value: string;
-  reason: string;
-}) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowBody}>
-        <Text style={styles.eyebrow}>{label}</Text>
-        <Text style={styles.staticValue}>{value}</Text>
-        <Text style={styles.reason}>{reason}</Text>
-      </View>
-    </View>
-  );
-}
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -227,46 +174,48 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen options={screenHeader("Settings")} />
+      <Stack.Screen options={useScreenHeader("Settings")} />
 
       <ScrollView contentContainerStyle={styles.page}>
         {/* ---- Account ------------------------------------------------- */}
-        <Panel title="Account" note="This phone">
+        <List header="Account · this phone">
           {name.kind === "known" ? (
-            <View style={styles.row}>
-              <View style={styles.rowBody}>
-                <Text style={styles.eyebrow}>SIGNED IN AS</Text>
-                <Text style={styles.value}>{name.name}</Text>
-              </View>
-            </View>
+            <ListRow title="Signed in as" detail={name.name} />
           ) : name.kind === "loading" ? (
-            // Reserves the same height as the row above, so nothing jumps when
-            // the name lands. Not a spinner: it is one line of text arriving.
-            <View style={styles.row}>
-              <View style={styles.rowBody}>
-                <Text style={styles.eyebrow}>SIGNED IN AS</Text>
-                <Text style={styles.loading}>Loading…</Text>
-              </View>
-            </View>
+            // `target.row` reserves the row's height, so nothing jumps when the
+            // name lands. Not a spinner: it is one line of text arriving, and
+            // the row's detail is already muted so it cannot read as the answer.
+            <ListRow title="Signed in as" detail="Loading…" />
           ) : (
-            <View style={styles.absentRow}>
+            /*
+              Absent, not an em dash in the detail slot. A failed fetch is "we
+              do not know", and in this app that is one specific object: dashed
+              border, sunken fill, the word that says what the dash means. It
+              keeps its own eyebrow because it replaces the whole row, title
+              included.
+
+              It is a block, so it cannot go through `detail` (a `Text`) and it
+              draws no row separator. See the NEEDS PRIMITIVE note.
+            */
+            <View style={styles.blockRow}>
               <Absent eyebrow="SIGNED IN AS" label="Could not reach the server." />
             </View>
           )}
 
-          <Divider />
-          <LinkRow
-            label="Profile"
-            note="School, events, team and max heart rate"
+          <ListRow
+            title="Profile"
+            sub="School, events, team and max heart rate"
             onPress={() => router.push("/profile")}
+            chevron
           />
-          <Divider />
-          <LinkRow
-            label="Connect data"
-            note="Where your runs, sleep and heart rate come from"
+          <ListRow
+            title="Connect data"
+            sub="Where your runs, sleep and heart rate come from"
             onPress={() => router.push("/connect")}
+            chevron
+            isLast
           />
-        </Panel>
+        </List>
 
         {/* ---- Units --------------------------------------------------- */}
         {/*
@@ -277,20 +226,23 @@ export default function SettingsScreen() {
           stored preference, and to every screen that formats a distance or a
           pace, so it is more than a display-layer change and it is not offered
           as one.
+
+          No `onPress`, so `ListRow` renders a plain View: no chevron promising
+          a screen underneath, and no flash promising an effect.
         */}
-        <Panel title="Units" note="Display only">
-          <StaticRow
-            label="DISTANCE"
-            value="Miles"
-            reason="The server records kilometres; the app converts them on the way to the screen."
+        <List header="Units · display only">
+          <ListRow
+            title="Distance"
+            detail="Miles"
+            sub="The server records kilometres; the app converts them on the way to the screen."
           />
-          <Divider />
-          <StaticRow
-            label="PACE"
-            value="Minutes per mile"
-            reason="Kilometres are not a setting yet — the conversion is written into the app rather than read from a preference, so there is nothing here to switch."
+          <ListRow
+            title="Pace"
+            detail="Minutes per mile"
+            sub="Kilometres are not a setting yet — the conversion is written into the app rather than read from a preference, so there is nothing here to switch."
+            isLast
           />
-        </Panel>
+        </List>
 
         {/* ---- Notifications ------------------------------------------- */}
         {/*
@@ -301,39 +253,48 @@ export default function SettingsScreen() {
           setting an athlete would actually rely on, and it would silently do
           nothing.
         */}
-        <Panel title="Notifications" note="Not available in this build">
-          <StaticRow
-            label="CHECK-IN REMINDER"
-            value="Off"
-            reason="RunGuard cannot send notifications yet — nothing in this build can deliver one, so there is no switch to turn on. Until then the check-in waits for you on the home screen."
+        <List header="Notifications · not available in this build">
+          <ListRow
+            title="Check-in reminder"
+            detail="Off"
+            sub="RunGuard cannot send notifications yet — nothing in this build can deliver one, so there is no switch to turn on. Until then the check-in waits for you on the home screen."
+            isLast
           />
-        </Panel>
+        </List>
 
         {/* ---- About --------------------------------------------------- */}
-        <Panel title="About" note="RunGuard">
-          {APP_VERSION ? (
-            <View style={styles.row}>
-              <View style={styles.rowBody}>
-                <Text style={styles.eyebrow}>VERSION</Text>
-                <Text style={styles.version}>{APP_VERSION}</Text>
+        <View>
+          <List header="About · RunGuard">
+            {APP_VERSION ? (
+              /*
+                A numeral, so mono and tabular (non-negotiable #3). Nested inside
+                the row's own detail `Text`, which supplies the size and the
+                muted colour — only the FACE changes, so a version can never
+                drift a point away from the value beside it on another row.
+              */
+              <ListRow
+                title="Version"
+                detail={<Text style={styles.figure}>{APP_VERSION}</Text>}
+              />
+            ) : (
+              <View style={styles.blockRow}>
+                <Absent eyebrow="VERSION" label="Not recorded in this build." />
               </View>
-            </View>
-          ) : (
-            <View style={styles.absentRow}>
-              <Absent eyebrow="VERSION" label="Not recorded in this build." />
-            </View>
-          )}
+            )}
 
-          <Divider />
-          <LinkRow
-            label="Privacy policy"
-            note="What RunGuard collects, and who can see it"
-            onPress={() => router.push("/privacy")}
-          />
-          <Divider />
+            <ListRow
+              title="Privacy policy"
+              sub="What RunGuard collects, and who can see it"
+              onPress={() => router.push("/privacy")}
+              chevron
+              isLast
+            />
+          </List>
+
           {/*
-            The line the whole product is built around, in plain type. It is NOT
-            styled as a SafetyNotice: that component belongs to safety-
+            The line the whole product is built around, in plain type, as the
+            group's footer — where iOS puts the sentence that qualifies a group.
+            It is NOT styled as a SafetyNotice: that component belongs to safety-
             intercepted chat replies alone, and spending its shape on a footer
             would blunt it where it matters.
           */}
@@ -342,16 +303,20 @@ export default function SettingsScreen() {
             your runs, sleep and check-ins show. It does not diagnose anything, and
             it is not a substitute for your coach, an athletic trainer or a doctor.
           </Text>
-        </Panel>
+        </View>
 
         {/* ---- Danger zone --------------------------------------------- */}
         {/*
+          Prose plus one button, so a `Panel` and not a `List`. A grouped list
+          would render the red action as a bare centred row, which is the iOS
+          idiom but costs the paragraph — and "your data stays on the server" is
+          the reassurance that actually matters before tapping it.
+
           "Unpair this device" was the old title, and it asked the athlete to
           know what pairing is. It is the app's word for its own plumbing — the
           device token in the keychain — not a thing a 16-year-old came here to
           do. They came to sign out. The mechanism is still described in the
-          body, where it belongs, because "your data stays on the server" is the
-          reassurance that actually matters before tapping a red button.
+          body, where it belongs.
 
           In the demo it is a different act entirely: nothing was paired, there
           is nothing to sign out of, and everything the visitor typed lived on
@@ -372,7 +337,7 @@ export default function SettingsScreen() {
               disabled={unpairing}
               accessibilityRole="button"
               accessibilityState={{ disabled: unpairing }}
-              style={({ pressed }) => [styles.danger, pressed && styles.dangerPressed]}
+              style={({ pressed }) => [styles.danger, dim(pressed)]}
             >
               <Text style={styles.dangerLabel}>
                 {unpairing ? "Leaving…" : "Leave the demo"}
@@ -393,7 +358,7 @@ export default function SettingsScreen() {
               disabled={unpairing}
               accessibilityRole="button"
               accessibilityState={{ disabled: unpairing }}
-              style={({ pressed }) => [styles.danger, pressed && styles.dangerPressed]}
+              style={({ pressed }) => [styles.danger, dim(pressed)]}
             >
               <Text style={styles.dangerLabel}>
                 {unpairing ? "Signing out…" : "Sign out"}
@@ -414,63 +379,45 @@ const styles = StyleSheet.create({
     gap: layout.section,
   },
 
-  /* Panel — same surface as chat.tsx's, minus the horizontal margin, which the
-     page inset already supplies here. */
-
-  /* Rows */
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.md,
-    minHeight: target.min,
-    paddingVertical: space.sm,
-    // Pulled out to the panel's edge so the pressed wash reads as a full row
-    // rather than a floating patch, then padded back in.
-    marginHorizontal: -layout.cardPadding,
-    paddingHorizontal: layout.cardPadding,
-    borderRadius: radius.control,
-  },
   /**
-   * The system fill, NOT the ember wash it used to be.
-   *
-   * `accentSoft` made every settings row a brand surface for as long as a thumb
-   * was on it, which spends the ember on the most ordinary control in the app
-   * and reads as a highlight rather than a press. iOS flashes a neutral grey
-   * across the row; the brand is reserved for the thing you tap to commit
-   * something. See theme/press.ts.
+   * A block standing in for a row inside the slab — currently only `Absent`,
+   * which draws its own border and fill and therefore cannot be a `Text`
+   * detail. Padded to the slab's own row inset so it lines up with the titles
+   * above and below it.
    */
-  rowPressed: { backgroundColor: color.press },
-  rowBody: { flex: 1, gap: space.xs },
-  rowLabel: { ...text.baseSemi, color: color.ink },
-  rowNote: { ...text.meta, color: color.muted },
-  eyebrow: { ...text.micro, color: color.muted },
-  value: { ...text.base, color: color.ink },
-  /** A setting that is fixed: stated in ink, because it is a real current value. */
-  staticValue: { ...text.baseSemi, color: color.ink },
-  /** Why it cannot be changed, or why it is not offered. */
-  reason: { ...text.meta, color: color.ink2 },
-  /** In flight. Muted, so it cannot be mistaken for the answer. */
-  loading: { ...text.base, color: color.muted },
-  /** A numeral, so mono and tabular — text.stat is the app's figure style. */
-  version: { ...text.stat, color: color.ink },
-  /** Absent is a block, not a line: give it the row's vertical rhythm. */
-  absentRow: { paddingVertical: space.sm },
-
-  divider: {
-    height: ruleWidth,
-    backgroundColor: color.ruleSoft,
-    marginHorizontal: -layout.cardPadding,
+  blockRow: {
+    paddingHorizontal: layout.cardPadding,
+    paddingVertical: space.sm,
   },
+
+  /**
+   * The mono face alone. Size and colour are inherited from `ListRow`'s detail
+   * `Text`, so this changes a numeral's FACE without pinning its size — the
+   * pattern `ListRow`'s own docs prescribe for figures.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
 
   body: { ...text.base, color: color.ink2 },
-  disclaimer: { ...text.meta, color: color.ink2, paddingTop: space.sm },
+  /**
+   * A group footer: the same left inset as `List`'s header, so the caveat lines
+   * up with the group it qualifies rather than floating at the page edge.
+   */
+  disclaimer: {
+    ...text.meta,
+    color: color.ink2,
+    paddingTop: space.md,
+    paddingHorizontal: layout.cardPadding,
+  },
 
   /**
    * Destructive, and therefore NOT the ember: the ember is the brand's yes, and
    * this is the one action in the app that undoes the athlete's setup. An
    * outline in `unusual` with the `unusualText` glyph (5.18:1 on card) reads as
    * serious without shouting, and carries no fill that a mis-tap could ride.
+   *
+   * Pressed state is `dim`, not the row wash it used to paint. This is an
+   * OBJECT, not a surface: theme/press.ts draws that line, and a button that
+   * fills on press is the row language borrowed by something that is not a row.
    */
   danger: {
     minHeight: target.min,
@@ -481,7 +428,7 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.unusual,
     borderRadius: radius.control,
+    borderCurve: "continuous",
   },
-  dangerPressed: { backgroundColor: color.well },
   dangerLabel: { ...text.baseSemi, color: color.unusualText },
 });

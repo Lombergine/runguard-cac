@@ -45,9 +45,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack } from "expo-router";
 
-import { screenHeader } from "../theme/header";
+import { useScreenHeader } from "../theme/header";
 import { Absent } from "../components/Nothing";
-import { Card } from "../components/Card";
+import { ListRow } from "../components/List";
+import { Panel } from "../components/Panel";
 import { Stat } from "../components/Stat";
 import { dayLabel, localDay, timeLabel } from "../lib/dates";
 import {
@@ -63,7 +64,7 @@ import { useProfile } from "../lib/profileStore";
 import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
 import { color } from "../theme/tokens";
-import { text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
@@ -156,6 +157,18 @@ export default function ConnectScreen() {
   const sources: string[] | null =
     signedIn && profile ? ((profile as ProfileWithSources).connectedSources ?? []) : null;
   const sourcesFailed = state === "failed";
+  /**
+   * The sources that are real names, or null.
+   *
+   * Derived once because the panel below asks the same question twice: which
+   * branch to render, and whether the card should carry its own padding (rows
+   * are full-bleed and bring their own; an <Absent/> slot is not and does not).
+   * Two spellings of "is there anything to list" is how one of them ends up
+   * disagreeing with the other. `NO_SOURCES` is a placeholder, not a name — see
+   * its declaration — so a list containing it is an empty list.
+   */
+  const listedSources =
+    sources && sources.length > 0 && !sources.includes(NO_SOURCES) ? sources : null;
 
   useEffect(() => {
     if (!signedIn) {
@@ -254,15 +267,27 @@ export default function ConnectScreen() {
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       {/* Pushed from Settings, so without this the only way back was the iOS
           edge-swipe — invisible, untappable, and absent on Android. */}
-      <Stack.Screen options={screenHeader("Connect")} />
+      <Stack.Screen options={useScreenHeader("Connect")} />
       <ScrollView
         contentContainerStyle={styles.page}
+        /*
+         * Required by `screenHeader`, not decoration: without it the iOS large
+         * title never collapses and sits permanently above content scrolling
+         * behind it. See theme/header.ts.
+         */
+        contentInsetAdjustmentBehavior="automatic"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
         }
       >
-        <Text style={styles.eyebrow}>DATA SOURCES</Text>
-        <Text style={styles.heading}>Where your numbers come from</Text>
+        {/*
+          No eyebrow and no in-content heading. `screenHeader` draws the iOS
+          large title, so this screen used to carry TWO headings — "Connect" in
+          the bar and "DATA SOURCES / Where your numbers come from" immediately
+          under it. theme/header.ts names this file for exactly that doubling.
+          The native title is the heading; the lede below is the first thing the
+          screen actually claims.
+        */}
         <Text style={styles.lede}>
           RunGuard reads your workouts and your overnight recovery figures from Apple
           Health on this phone, and sends them to your team&apos;s RunGuard server.
@@ -277,17 +302,21 @@ export default function ConnectScreen() {
 
         {/* ── Apple Health ─────────────────────────────────────────────── */}
         <View style={styles.section}>
-          <Card>
-            <View style={styles.head}>
-              <Text style={styles.title}>Apple Health</Text>
-              {/* "Never synced" is a claim about an athlete's history and must
-                  not be made on their behalf once they are gone; with no
-                  session the line says what it actually knows. */}
-              <Text style={styles.note}>
-                {lastAt ? `Last synced ${lastAt}` : signedIn ? "Never synced" : "Signed out"}
-              </Text>
-            </View>
+          {/*
+            `Panel`, not a locally drawn head. Panel.tsx counts nine files that
+            spelled this title-left, note-right shape out by hand from the same
+            tokens; this was one of them, and one of the ones that had drifted
+            to a 19pt title rather than the website's 14.
 
+            The note is the second half of the old head: "Never synced" is a
+            claim about an athlete's history and must not be made on their
+            behalf once they are gone, so with no session it says what it
+            actually knows instead.
+          */}
+          <Panel
+            title="Apple Health"
+            note={lastAt ? `Last synced ${lastAt}` : signedIn ? "Never synced" : "Signed out"}
+          >
             {!avail.ok ? (
               <Text style={styles.body}>{explainUnavailable(avail)}</Text>
             ) : (
@@ -362,13 +391,28 @@ export default function ConnectScreen() {
                     {refused ? (
                       <Text style={styles.problem} accessibilityLiveRegion="polite">
                         Your server refused{" "}
-                        {refused.workouts > 0
-                          ? `${refused.workouts} workout${refused.workouts === 1 ? "" : "s"}`
-                          : ""}
+                        {/*
+                          The counts are numerals sitting in prose, so they
+                          change FACE — mono and tabular — while keeping the
+                          sentence's size and colour. The thing counted is
+                          welded into the same node ("3 workouts", never "3" +
+                          "workouts"); "of readings" is a qualifier, not a unit,
+                          so it stays in the body face.
+                        */}
+                        {refused.workouts > 0 ? (
+                          <Text style={styles.figure}>
+                            {`${refused.workouts} workout${refused.workouts === 1 ? "" : "s"}`}
+                          </Text>
+                        ) : null}
                         {refused.workouts > 0 && refused.metrics > 0 ? " and " : ""}
-                        {refused.metrics > 0
-                          ? `${refused.metrics} day${refused.metrics === 1 ? "" : "s"} of readings`
-                          : ""}{" "}
+                        {refused.metrics > 0 ? (
+                          <>
+                            <Text style={styles.figure}>
+                              {`${refused.metrics} day${refused.metrics === 1 ? "" : "s"}`}
+                            </Text>
+                            {" of readings"}
+                          </>
+                        ) : null}{" "}
                         as unreadable. They were not stored, and they are not counted as
                         new.
                       </Text>
@@ -396,16 +440,22 @@ export default function ConnectScreen() {
                 {failure}
               </Text>
             ) : null}
-          </Card>
+          </Panel>
         </View>
 
         {/* ── Connected sources ────────────────────────────────────────── */}
         <View style={styles.section}>
-          <Card>
-            <View style={styles.head}>
-              <Text style={styles.title}>Connected sources</Text>
-              <Text style={styles.note}>As your server sees them</Text>
-            </View>
+          {/*
+            `padded` follows the CONTENT, the way PrTable does it: a list of
+            sources is full-bleed rows that inset their own separators and set
+            their own 52pt height, while every other state here is a single
+            <Absent/> slot that needs the card's normal padding around it.
+          */}
+          <Panel
+            title="Connected sources"
+            note="As your server sees them"
+            padded={listedSources === null}
+          >
             {!signedIn ? (
               // Not "nothing has reported data" — that would be a claim about an
               // athlete we are not entitled to describe. Dashed: we don't know.
@@ -418,18 +468,31 @@ export default function ConnectScreen() {
                     : "Checking with your server"
                 }
               />
-            ) : sources.length === 0 || sources.includes(NO_SOURCES) ? (
+            ) : listedSources === null ? (
               <Absent label="Nothing has reported data yet" />
             ) : (
-              <View style={styles.chips}>
-                {sources.map((s) => (
-                  <Text key={s} style={styles.chip}>
-                    {s}
-                  </Text>
+              /*
+                Wrapped in ONE view rather than returned as loose children:
+                `Panel` puts a 12pt gap between its children, which would strand
+                each row's separator in the middle of a band of card instead of
+                pooling the rows into a continuous list.
+
+                The rows are inert — no `onPress`, so no chevron, no press flash
+                and no role. A source is a fact the server reported, and there is
+                nothing underneath it to open. See List.tsx's one non-cosmetic
+                rule.
+              */
+              <View>
+                {listedSources.map((src, i) => (
+                  <ListRow
+                    key={src}
+                    title={src}
+                    isLast={i === listedSources.length - 1}
+                  />
                 ))}
               </View>
             )}
-          </Card>
+          </Panel>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -442,28 +505,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.page,
     paddingVertical: layout.section,
   },
-  eyebrow: { ...text.micro, color: color.muted },
-  heading: { ...text.title, color: color.ink, marginTop: space.sm },
-  lede: { ...text.base, color: color.ink2, marginTop: space.md },
+  /**
+   * The screen's opening sentence, and now its first element — the eyebrow and
+   * the 19pt heading above it are gone with the doubled heading. No
+   * `marginTop`: the page's own padding already spaces it.
+   */
+  lede: { ...text.base, color: color.ink2 },
   /** The stale-data line. Quiet by construction: the size and colour of a note. */
   stale: { ...text.meta, color: color.muted, marginTop: space.md },
   section: { marginTop: layout.section },
 
-  /** The Panel head: title left, note right, both on the same baseline. */
-  head: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  title: { ...text.title, color: color.ink },
-  note: { ...text.meta, color: color.muted },
+  /**
+   * No `marginTop` here or on `problem` below. `Panel` carries a 12pt `gap`, so
+   * every direct child is already spaced from the one above it, and the margins
+   * these used to set were laid on TOP of that gap once the hand-written head
+   * became a Panel. Where a child still needs more than 12, it now asks for the
+   * DIFFERENCE rather than the whole distance.
+   */
+  body: { ...text.base, color: color.ink2 },
 
-  body: { ...text.base, color: color.ink2, marginTop: space.sm },
-
-  /** The ember signature, on the one thing you tap. See app/pair.tsx. */
+  /**
+   * The ember signature, on the one thing you tap. See app/pair.tsx.
+   *
+   * No `dim` and no `rowPress`: an ember button drops its GRADIENT to the flat
+   * `brandStrong` ground beneath, which is the richer signal and the one the
+   * four other ember screens use. theme/press.ts says so explicitly.
+   *
+   * `space.md` + the Panel's 12pt gap keeps the 24pt of air this button had
+   * before the Panel existed.
+   */
   action: {
     minHeight: target.min,
     alignItems: "center",
@@ -471,14 +541,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     backgroundColor: color.brandStrong,
     borderRadius: radius.control,
-    marginTop: space.xl,
+    // The squircle iOS draws itself, rather than a circular arc.
+    borderCurve: "continuous",
+    marginTop: space.md,
     overflow: "hidden",
   },
   /** INK on the ember, never white — 5.25:1 on the pressed `brandStrong`. */
   actionLabel: { ...text.baseSemi, color: color.ink },
 
+  /**
+   * `space.xs` + the Panel's 12pt gap puts 16pt above the rule to match the
+   * 16pt below it — the rule reads as a divider between two blocks rather than
+   * as an underline on the button.
+   */
   figures: {
-    marginTop: space.xl,
+    marginTop: space.xs,
     paddingTop: space.lg,
     borderTopWidth: ruleWidth,
     borderTopColor: color.ruleSoft,
@@ -489,18 +566,12 @@ const styles = StyleSheet.create({
   caption: { ...text.meta, color: color.muted },
 
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
-  problem: { ...text.meta, color: color.ink2, marginTop: space.md },
+  problem: { ...text.meta, color: color.ink2 },
 
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  chip: {
-    ...text.baseSemi,
-    color: color.ink2,
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
-    borderRadius: radius.control,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    overflow: "hidden",
-  },
+  /**
+   * A numeral inside a sentence. Keeps the surrounding size and colour and
+   * changes only the face, so a count reads as a figure rather than a word —
+   * the same span the other screens use (chat, stats, races, WeekProgress).
+   */
+  figure: { fontFamily: font.mono, ...tabular },
 });

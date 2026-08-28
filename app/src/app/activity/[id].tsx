@@ -37,16 +37,17 @@ import Svg, { Path } from "react-native-svg";
 
 import { Card } from "../../components/Card";
 import { Absent, Zero } from "../../components/Nothing";
+import { Panel } from "../../components/Panel";
 import { Stat } from "../../components/Stat";
 import { ApiError, getActivity, isUnauthorized } from "../../lib/api";
 import { dayLabel, localDay, timeLabel } from "../../lib/dates";
 import { useSession } from "../../lib/session";
 import type { ActivityDetail, RoutePoint } from "../../lib/types";
 import { fmtDuration, formatPaceFromKmPace, ftNumFromMeters, miNumFromMeters } from "../../lib/units";
-import { screenHeader } from "../../theme/header";
+import { useScreenHeader } from "../../theme/header";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
+import { layout, radius, space } from "../../theme/space";
 
 /**
  * A nullable server figure → a whole number, or null.
@@ -231,16 +232,6 @@ function Words({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-/** Title left, note right — the Panel head used across the app. */
-function Head({ title, note }: { title: string; note?: string }) {
-  return (
-    <View style={styles.head}>
-      <Text style={styles.headTitle}>{title}</Text>
-      {note ? <Text style={styles.headNote}>{note}</Text> : null}
-    </View>
-  );
-}
-
 /* ------------------------------------------------------------------ *
  * The screen
  * ------------------------------------------------------------------ */
@@ -315,48 +306,39 @@ export default function ActivityScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen options={screenHeader("Run")} />
+      <Stack.Screen options={useScreenHeader("Run")} />
       <ScrollView contentContainerStyle={styles.page}>
         {load.state === "ready" ? (
           <Detail activity={load.activity} />
+        ) : load.state === "loading" ? (
+          <Panel title="This run" note="Opening">
+            <Text style={styles.plain}>Reading it from your server.</Text>
+          </Panel>
+        ) : load.state === "signedOut" ? (
+          <Panel title="This run" note="Signed out">
+            <Text style={styles.plain}>
+              This device is no longer signed in, so this run cannot be opened. Sign in
+              again to see your runs.
+            </Text>
+          </Panel>
+        ) : load.state === "failed" ? (
+          <Panel title="This run" note="Could not load">
+            <Text style={styles.plain}>
+              Could not reach your server, so this run could not be opened. It will be
+              here when the connection is.
+            </Text>
+          </Panel>
         ) : (
-          <Card>
-            {load.state === "loading" ? (
-              <>
-                <Head title="This run" note="Opening" />
-                <Text style={styles.plain}>Reading it from your server.</Text>
-              </>
-            ) : load.state === "signedOut" ? (
-              <>
-                <Head title="This run" note="Signed out" />
-                <Text style={styles.plain}>
-                  This device is no longer signed in, so this run cannot be opened. Sign
-                  in again to see your runs.
-                </Text>
-              </>
-            ) : load.state === "failed" ? (
-              <>
-                <Head title="This run" note="Could not load" />
-                <Text style={styles.plain}>
-                  Could not reach your server, so this run could not be opened. It will
-                  be here when the connection is.
-                </Text>
-              </>
-            ) : (
-              <>
-                {/* Not "this run is private": see the file header. The server
-                    gives one answer to two different questions, and the copy
-                    says so rather than implying which one applies. */}
-                <Head title="Not in your log" note="Nothing to show" />
-                <Text style={styles.plain}>
-                  RunGuard could not open this run. It may not exist, or it may belong to
-                  another athlete — your server answers the same way for both, so there
-                  is nothing more it can tell you. The runs you can open are in your run
-                  log.
-                </Text>
-              </>
-            )}
-          </Card>
+          /* Not "this run is private": see the file header. The server gives one
+             answer to two different questions, and the copy says so rather than
+             implying which one applies. */
+          <Panel title="Not in your log" note="Nothing to show">
+            <Text style={styles.plain}>
+              RunGuard could not open this run. It may not exist, or it may belong to
+              another athlete — your server answers the same way for both, so there is
+              nothing more it can tell you. The runs you can open are in your run log.
+            </Text>
+          </Panel>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -408,7 +390,18 @@ function Detail({ activity }: { activity: ActivityDetail }) {
         </View>
       ) : null}
 
-      {/* Distance / Time / Pace, always those three, always in that order. */}
+      {/*
+        Distance / Time / Pace, always those three, always in that order, and
+        THREE-UP in a single row — the same shape `RunCard` gives them in the run
+        log, so a run reads identically in the list and on its own screen.
+
+        This was a 2 × 2 with a hard-coded empty fourth cell. A hole in a stats
+        grid is precisely the thing the three-kinds-of-nothing rule exists to
+        forbid: at arm's length an empty slot beside "Avg pace" is unreadable as
+        "there is no fourth metric" and reads instead as a metric that failed to
+        arrive. Absent is dashed and says so; nothing else in this app is allowed
+        to imply a missing figure.
+      */}
       <View style={styles.section}>
         <Card>
           <View style={styles.row}>
@@ -428,8 +421,6 @@ function Detail({ activity }: { activity: ActivityDetail }) {
                 format={fmtDuration}
               />
             </View>
-          </View>
-          <View style={[styles.row, styles.rowGap]}>
             <View style={styles.cell}>
               {/* A pace that was never run is absent — never "0:00 /mi". */}
               {pace === null ? (
@@ -438,46 +429,53 @@ function Detail({ activity }: { activity: ActivityDetail }) {
                 <Stat label="Avg pace" value={pace} />
               )}
             </View>
-            <View style={styles.cell} />
           </View>
         </Card>
       </View>
 
+      {/*
+        DELIBERATELY NOT a grouped `List`. These read as key/value rows, but five
+        of the six are nullable and render `Absent` — a dashed, filled, padded
+        slot. `ListRow`'s `detail` is a `Text`, so an Absent cannot go in one,
+        and the only ways to force it are to flatten a not-recorded HR into a
+        muted "—" (collapsing absent into an ordinary value, non-negotiable #4)
+        or to copy List's internals in here. Both are worse than a grid.
+      */}
       <View style={styles.section}>
-        <Card>
-          <Head title="Details" />
-          <View style={styles.row}>
-            <View style={styles.cell}>
-              <Metric label="Avg HR" value={rounded(activity.avgHr)} unit="bpm" />
+        <Panel title="Details">
+          <View style={styles.grid}>
+            <View style={styles.row}>
+              <View style={styles.cell}>
+                <Metric label="Avg HR" value={rounded(activity.avgHr)} unit="bpm" />
+              </View>
+              <View style={styles.cell}>
+                <Metric label="Max HR" value={rounded(activity.maxHr)} unit="bpm" />
+              </View>
             </View>
-            <View style={styles.cell}>
-              <Metric label="Max HR" value={rounded(activity.maxHr)} unit="bpm" />
+            <View style={styles.row}>
+              <View style={styles.cell}>
+                <Metric label="Elevation" value={elevationFt} unit="ft" />
+              </View>
+              <View style={styles.cell}>
+                <Metric label="Calories" value={rounded(activity.calories)} unit="kcal" />
+              </View>
+            </View>
+            <View style={styles.row}>
+              <View style={styles.cell}>
+                <Metric label="Cadence" value={rounded(activity.cadence)} unit="spm" />
+              </View>
+              <View style={styles.cell}>
+                <Words label="Type" value={type} />
+              </View>
             </View>
           </View>
-          <View style={[styles.row, styles.rowGap]}>
-            <View style={styles.cell}>
-              <Metric label="Elevation" value={elevationFt} unit="ft" />
-            </View>
-            <View style={styles.cell}>
-              <Metric label="Calories" value={rounded(activity.calories)} unit="kcal" />
-            </View>
-          </View>
-          <View style={[styles.row, styles.rowGap]}>
-            <View style={styles.cell}>
-              <Metric label="Cadence" value={rounded(activity.cadence)} unit="spm" />
-            </View>
-            <View style={styles.cell}>
-              <Words label="Type" value={type} />
-            </View>
-          </View>
-        </Card>
+        </Panel>
       </View>
 
       <View style={styles.section}>
-        <Card>
-          <Head title="Route" />
+        <Panel title="Route">
           <RouteMap route={activity.route} />
-        </Card>
+        </Panel>
       </View>
     </>
   );
@@ -500,13 +498,18 @@ const styles = StyleSheet.create({
   },
   /** Mono, because it is figures. ink, not muted: this is the run's identity. */
   started: { ...text.micro, color: color.ink, flexShrink: 1 },
+  /**
+   * The source badge. An iOS system fill, not a drawn rectangle: it lost its
+   * 1.5pt rule to `color.fill`, Apple's neutral (120,120,128) at 12% — the token
+   * exists so an inert control reads as a system control rather than as a bordered
+   * web badge (see theme/tokens.ts). `ink2` on it still measures well past 4.5:1.
+   */
   chip: {
     ...text.meta,
     color: color.ink2,
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
+    backgroundColor: color.fill,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
     overflow: "hidden",
@@ -516,21 +519,19 @@ const styles = StyleSheet.create({
 
   section: { marginTop: layout.section },
 
-  head: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  headTitle: { ...text.title, color: color.ink },
-  headNote: { ...text.meta, color: color.muted },
   plain: { ...text.base, color: color.ink2 },
 
-  /** Two columns. Top-aligned, because a dashed slot is taller than a figure. */
+  /**
+   * A row of equal cells — three for the headline stats, two in Details.
+   * Top-aligned, because a dashed slot is taller than a figure.
+   */
   row: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  rowGap: { marginTop: space.lg },
+  /**
+   * The Details rows. `gap` lives here rather than as a `marginTop` on every row
+   * but the first, so Panel's own 12pt gap spaces the head from this block once
+   * and does not compound with a row margin.
+   */
+  grid: { gap: space.lg },
   cell: { flex: 1 },
 
   /** `Words`: the micro-label of a Stat, then prose rather than a numeral. */
@@ -542,6 +543,7 @@ const styles = StyleSheet.create({
     aspectRatio: VIEW.w / VIEW.h,
     width: "100%",
     borderRadius: radius.card,
+    borderCurve: "continuous",
     backgroundColor: color.well,
     overflow: "hidden",
   },

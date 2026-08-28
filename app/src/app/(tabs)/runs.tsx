@@ -240,6 +240,16 @@ export default function RunsScreen() {
         data={runs}
         keyExtractor={(run) => String(run.id)}
         contentContainerStyle={styles.list}
+        /*
+         * The list IS the screen, so it takes its insets from the system the
+         * way a UIScrollView does inside a native controller, rather than from
+         * a number typed here. This does NOT double the top: `Screen` already
+         * spends that inset on its SafeAreaView, so the scroll view's own top
+         * safe area is zero and the adjustment resolves to the bottom — the
+         * home indicator, under the tab bar — plus whatever a header above it
+         * comes to need.
+         */
+        contentInsetAdjustmentBehavior="automatic"
         ItemSeparatorComponent={Separator}
         /* A refetch never dims or shimmers what is already here: the spinner
            says a request is out, the numbers stay exactly as true as they were. */
@@ -347,6 +357,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: space.xl,
     borderRadius: radius.control,
+    // The squircle, per space.ts: every radius but `pill` is drawn continuous.
+    borderCurve: "continuous",
     backgroundColor: color.brand,
   },
   retryLabel: { ...text.baseSemi, color: color.ink },
@@ -362,6 +374,9 @@ const styles = StyleSheet.create({
     backgroundColor: color.well,
     borderTopLeftRadius: radius.card,
     borderTopRightRadius: radius.card,
+    // Matches `Card`'s own corner, which this shape sits inside and must not
+    // cut across — Card draws continuous, so the fill under it does too.
+    borderCurve: "continuous",
   },
   skeletonPlanRow: {
     height: planWeekMetrics.row,
@@ -372,12 +387,14 @@ const styles = StyleSheet.create({
     height: runCardMetrics.headerLine,
     width: "58%",
     borderRadius: radius.control,
+    borderCurve: "continuous",
     backgroundColor: color.well,
   },
   skeletonStats: {
     height: runCardMetrics.statsRowAbsent,
     marginTop: runCardMetrics.gap,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     backgroundColor: color.well,
   },
 });

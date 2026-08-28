@@ -20,9 +20,10 @@
  * real one, and it changes depending on where you came from.
  */
 import type { ComponentProps } from "react";
+import { useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 
-import { color } from "./tokens";
+import { darkColor, staticColor } from "./tokens";
 import { font, text } from "./type";
 
 /**
@@ -64,33 +65,68 @@ type HeaderOptions = NonNullable<ComponentProps<typeof Stack.Screen>["options"]>
  * Screens using this should carry `edges={["bottom"]}` on their SafeAreaView,
  * as every other headered screen does, or the top inset is applied twice.
  */
-export function backOnlyHeader(): HeaderOptions {
+export function useBackOnlyHeader(): HeaderOptions {
+  const dark = useColorScheme() === "dark";
   return {
     headerShown: true,
     headerTitle: "",
-    headerStyle: { backgroundColor: color.bg },
-    headerTintColor: color.ink,
+    headerStyle: { backgroundColor: dark ? darkColor.bg : staticColor.bg },
+    headerTintColor: dark ? darkColor.ink : staticColor.ink,
     headerShadowVisible: false,
     headerBackTitle: "Back",
     headerBackTitleStyle: { fontFamily: font.body },
   };
 }
 
-export function screenHeader(title: string): HeaderOptions {
+/**
+ * Header options for one pushed screen.
+ *
+ * A HOOK, not a plain function, and that is not stylistic. **The native stack
+ * header does not resolve a `DynamicColorIOS` value.** Handing it `color.bg`
+ * flattened to the light branch, so in dark mode every pushed screen wore a
+ * cream bar over a near-black page — and the system status-bar glyphs, which DO
+ * follow the appearance, were drawn white on cream at 1.05:1. Invisible.
+ *
+ * So this resolves the appearance itself and passes concrete strings. Screens
+ * already call it inside render, so it being a hook costs them nothing.
+ *
+ * ── NO LARGE TITLE, AND WHY ────────────────────────────────────────────────
+ *
+ * `headerLargeTitleEnabled` was tried and reverted. It broke three things at
+ * once, on all six pushed screens:
+ *
+ *  1. The title stopped rendering AT ALL — large or collapsed. An empty ~190pt
+ *     bar with only a Back pill.
+ *  2. Content was clipped underneath it on four of six screens, because a large
+ *     title requires `contentInsetAdjustmentBehavior="automatic"` on the
+ *     screen's own ScrollView and only `connect.tsx` had it.
+ *  3. It needed a second background token (`headerLargeStyle`), doubling the
+ *     surface that could disagree with the page.
+ *
+ * A large title is worth having, but not at the price of a header that shows no
+ * title and eats the first paragraph. If it comes back it needs the inset set on
+ * every consumer first, and the font checked on device — the title font here is
+ * Archivo via `expo-font`, and a native header wants a PostScript name.
+ */
+export function useScreenHeader(title: string): HeaderOptions {
+  const dark = useColorScheme() === "dark";
+  const ink = dark ? darkColor.ink : staticColor.ink;
   return {
     headerShown: true,
     title,
     // `bg`, not `card`: the header is part of the page's ground, and a white
     // strip above a cream page reads as a floating bar — which the visual spec
     // rules out ("Lines instead of shadows. Nothing floats.").
-    headerStyle: { backgroundColor: color.bg },
-    headerTintColor: color.ink,
+    headerStyle: { backgroundColor: dark ? darkColor.bg : staticColor.bg },
+    headerTintColor: ink,
     headerShadowVisible: false,
     headerTitleStyle: {
       fontFamily: text.title.fontFamily,
       fontSize: text.title.fontSize,
+      color: ink,
     },
     headerBackTitle: "Back",
     headerBackTitleStyle: { fontFamily: font.body },
   };
 }
+

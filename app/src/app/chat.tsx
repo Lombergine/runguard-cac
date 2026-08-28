@@ -35,11 +35,11 @@ import { SafetyNotice } from "../components/SafetyNotice";
 import { getChat, isUnauthorized, postChat } from "../lib/api";
 import { useSession } from "../lib/session";
 import type { ChatMessage } from "../lib/types";
+import { List, ListRow } from "../components/List";
 import { Panel } from "../components/Panel";
-import { screenHeader } from "../theme/header";
-import { dim } from "../theme/press";
+import { useScreenHeader } from "../theme/header";
 import { color } from "../theme/tokens";
-import { text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
@@ -88,12 +88,19 @@ function Row({ message }: { message: ChatMessage }) {
  * this screen, and nothing here can put a reply on screen without `bubbleText`
  * being asked first.
  *
- * Shape: full-width, sunken, control radius, no shadow, left-aligned — nothing a
- * `ChatBubble` has (84% width, a side, card radius, elevation) and nothing
- * `SafetyNotice` has. Five sentences in boxes must not read as a transcript, so
- * the micro-label above says what they are. No ember: the composer's Send button
- * is the one accent on this screen, and a row of glowing prompts would make the
- * app the one with something to say.
+ * Shape: the inset grouped list — `List`/`ListRow`, the iOS structure, five
+ * rows pooled into ONE slab under a section eyebrow. Nothing a `ChatBubble` has
+ * (84% width, a side, card radius, elevation) and nothing `SafetyNotice` has
+ * (full-bleed, flat, a heavy left rule). Five sentences on a chat screen must
+ * not read as a transcript, so the eyebrow says what they are and the slab
+ * makes them one object rather than five loose boxes. No chevron — nothing is
+ * underneath, the row sends the question — and no ember: the composer's Send
+ * button is the one accent on this screen, and a row of glowing prompts would
+ * make the app the one with something to say.
+ *
+ * Disabled drops `onPress` rather than dimming, because that is what a row
+ * offers: without a handler `ListRow` renders inert — no role, no chevron, no
+ * press flash — so nothing on screen promises a tap that `send` would refuse.
  */
 function Suggestions({
   disabled,
@@ -103,27 +110,21 @@ function Suggestions({
   onPick: (q: string) => void;
 }) {
   return (
-    <View style={styles.suggestions}>
-      {/*
-        Non-negotiable #5: options, not instructions. Descriptive — "Some things
-        people ask", not "Try asking" — so the row reads as examples of what this
-        is for rather than a list of things the app wants from the athlete.
-      */}
-      <Text style={styles.suggestLabel}>Some things people ask</Text>
-      {SUGGESTED.map((q) => (
-        <Pressable
+    /*
+      Non-negotiable #5: options, not instructions. Descriptive — "Some things
+      people ask", not "Try asking" — so the group reads as examples of what
+      this is for rather than a list of things the app wants from the athlete.
+    */
+    <List header="Some things people ask" style={styles.suggestions}>
+      {SUGGESTED.map((q, i) => (
+        <ListRow
           key={q}
-          style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
-          onPress={() => onPick(q)}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={`Ask ${q}`}
-          accessibilityState={{ disabled }}
-        >
-          <Text style={styles.chipLabel}>{q}</Text>
-        </Pressable>
+          title={q}
+          onPress={disabled ? undefined : () => onPick(q)}
+          isLast={i === SUGGESTED.length - 1}
+        />
       ))}
-    </View>
+    </List>
   );
 }
 
@@ -250,7 +251,7 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen options={screenHeader("Ask RunGuard")} />
+      <Stack.Screen options={useScreenHeader("Ask RunGuard")} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -366,8 +367,19 @@ export default function ChatScreen() {
               multiline
               accessibilityLabel="Message"
             />
+            {/*
+              The ember signature, 135° as on the web. The label is `ink`, NOT
+              `brandText`: measured on the gradient's darkest stop (#F97316)
+              ink is 5.97:1 and brandText only 1.86:1.
+
+              An ember primary does not dim and does not flash a row fill —
+              pressing DROPS the gradient to reveal the flat `brandStrong`
+              ground beneath it, the same signal `login.tsx` and `welcome.tsx`
+              give. A deeper, calmer ember, and a token rather than a
+              hand-mixed press tint.
+            */}
             <Pressable
-              style={({ pressed }) => [styles.send, dim(pressed)]}
+              style={[styles.send, canSend ? styles.sendEmber : styles.sendOff]}
               // Wrapped, not passed by reference: `send` now takes the text,
               // and Pressable would hand it a gesture event.
               onPress={() => send(draft)}
@@ -376,22 +388,20 @@ export default function ChatScreen() {
               accessibilityLabel="Send"
               accessibilityState={{ disabled: !canSend }}
             >
-              {canSend ? (
-                // The ember signature, 135° as on the web. The label is `ink`,
-                // NOT `brandText`: measured on the gradient's darkest stop
-                // (#F97316) ink is 5.97:1 and brandText only 1.86:1.
-                <LinearGradient
-                  colors={color.ember}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.sendFill}
-                >
-                  <Text style={styles.sendLabel}>Send</Text>
-                </LinearGradient>
-              ) : (
-                <View style={[styles.sendFill, styles.sendOff]}>
-                  <Text style={styles.sendLabelOff}>Send</Text>
-                </View>
+              {({ pressed }) => (
+                <>
+                  {canSend && !pressed ? (
+                    <LinearGradient
+                      colors={color.ember}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  ) : null}
+                  <Text style={canSend ? styles.sendLabel : styles.sendLabelOff}>
+                    Send
+                  </Text>
+                </>
               )}
             </Pressable>
           </View>
@@ -416,7 +426,8 @@ export default function ChatScreen() {
             because fine print is the wrong register for this sentence.
           */}
           <Text style={styles.coachNote}>
-            Your coach can read your last 5 messages here, word for word.
+            Your coach can read your last <Text style={styles.figure}>5</Text>{" "}
+            messages here, word for word.
           </Text>
         </View>
       </KeyboardAvoidingView>
@@ -443,29 +454,18 @@ const styles = StyleSheet.create({
   /** The empty state: the panel, then the openers under it. */
   opener: { gap: space.xl },
   /**
-   * The chips carry the page inset themselves — the list has none, because
-   * SafetyNotice is full-bleed.
+   * The openers carry the page inset themselves — the list has none, because
+   * SafetyNotice is full-bleed. Layout only: `List` owns the slab, its corner
+   * and its row rhythm.
    */
-  suggestions: { paddingHorizontal: layout.page, gap: target.gap },
-  suggestLabel: { ...text.micro, color: color.muted, marginBottom: space.xs },
-  /**
-   * A control, not a bubble and not a notice: full width (no side), sunken,
-   * `radius.control` rather than the card radius a bubble uses, no shadow.
-   */
-  chip: {
-    minHeight: target.min,
-    justifyContent: "center",
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
-    borderRadius: radius.control,
-  },
-  /** Pressed state matches the check-in answers: a soft ember wash, no fill. */
-  chipPressed: { backgroundColor: color.accentSoft },
-  chipLabel: { ...text.meta, color: color.ink2 },
+  suggestions: { marginHorizontal: layout.page },
   coachNote: { ...text.meta, color: color.ink2 },
+  /**
+   * The "5" in the note above. Non-negotiable #3: a numeral is mono and
+   * tabular even one word deep in a sentence, so it reads as a figure the
+   * coach's screen actually counts to rather than as a word.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
   /** Quiet and inline: no overlay, no spinner, no animation. */
   pending: { ...text.meta, color: color.muted },
   composer: {
@@ -486,26 +486,29 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.ruleSoft,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     paddingHorizontal: space.md,
     paddingVertical: space.md,
     minHeight: target.min,
     maxHeight: target.min * 3,
   },
-  /** Clips the gradient to the control radius; the fill carries the padding. */
+  /**
+   * Clips the gradient to the control radius. It carries the padding and the
+   * centring itself now: the gradient is an `absoluteFill` behind the label,
+   * so there is no inner fill view left to hold them.
+   */
   send: {
-    minWidth: target.min,
-    minHeight: target.min,
-    borderRadius: radius.control,
-    overflow: "hidden",
-  },
-  sendFill: {
-    flex: 1,
     minWidth: target.min,
     minHeight: target.min,
     paddingHorizontal: space.lg,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: radius.control,
+    borderCurve: "continuous",
+    overflow: "hidden",
   },
+  /** The flat ground the gradient sits on, and what a press reveals. */
+  sendEmber: { backgroundColor: color.brandStrong },
   /** Disabled: no ember at all, so "cannot send" is not a dimmed brand. */
   sendOff: {
     backgroundColor: color.well,

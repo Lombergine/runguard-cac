@@ -58,15 +58,17 @@ import {
   InjuryHistory,
   SeasonGoals,
 } from "../components/ProfilePanels";
+import { ListRow } from "../components/List";
 import { Panel } from "../components/Panel";
 import { MentalChart } from "../components/charts/MentalChart";
 import { ApiError, joinTeam, leaveTeam, setHrMax } from "../lib/api";
 import { useProfile } from "../lib/profileStore";
 import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
-import { screenHeader } from "../theme/header";
+import { useScreenHeader } from "../theme/header";
+import { dim } from "../theme/press";
 import { color } from "../theme/tokens";
-import { font, text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
@@ -95,38 +97,52 @@ function explain(err: unknown, fallback: string): string {
  * ------------------------------------------------------------------ */
 
 /**
- * One labelled fact in the identity list.
+ * One labelled fact, as a grouped-list row.
+ *
+ * This was a hand-drawn `Field` — a stacked label over a value — which is the
+ * web shape. On iOS a key/value fact is a ROW: label left, value right, a
+ * separator inset under the label. `ListRow` owns that shape now, so this is
+ * only the two things the row cannot know about itself.
  *
  * A missing value renders as an inline dash in `color.unknown` with "Not
- * recorded" beneath it — the same treatment `Tile` uses, and for the same
- * reason: absence must be distinguishable, not prominent, and four dashed boxes
- * stacked down a profile would make not knowing someone's grade the loudest
- * thing on the screen. It is still never a blank and never a zero.
+ * recorded" as the row's sub-line — the same treatment `Tile` uses, and for the
+ * same reason: absence must be distinguishable, not prominent, and four dashed
+ * boxes stacked down a profile would make not knowing someone's grade the
+ * loudest thing on the screen. It is still never a blank and never a zero, and
+ * the dash is never left alone to carry the meaning.
  *
- * `mono` is not styling: the rule is that every numeral is mono, so a grade is
- * and a school is not.
+ * The row is inert on purpose — no `onPress`, so `ListRow` draws no chevron and
+ * no press flash. None of these facts is editable from the phone.
+ *
+ * `mono` is not styling: the rule is that every numeral is mono and tabular, so
+ * a grade is and a school is not.
  */
-function Field({
+function FactRow({
   label,
   value,
   mono,
+  isLast,
 }: {
   label: string;
   value: string | null;
   mono?: boolean;
+  isLast?: boolean;
 }) {
   return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {value === null ? (
-        <>
-          <Text style={styles.fieldAbsent}>—</Text>
-          <Text style={styles.fieldAbsentLabel}>Not recorded</Text>
-        </>
-      ) : (
-        <Text style={[styles.fieldValue, mono && styles.fieldValueMono]}>{value}</Text>
-      )}
-    </View>
+    <ListRow
+      title={label}
+      detail={
+        value === null ? (
+          <Text style={styles.rowAbsent}>—</Text>
+        ) : mono ? (
+          <Text style={styles.rowMono}>{value}</Text>
+        ) : (
+          value
+        )
+      }
+      sub={value === null ? "Not recorded" : undefined}
+      isLast={isLast}
+    />
   );
 }
 
@@ -185,7 +201,17 @@ function EmberButton({
   );
 }
 
-/** A bordered, unfilled control. Leaving, clearing, unpairing. */
+/**
+ * A bordered, unfilled control. Leaving, clearing, unpairing.
+ *
+ * `dim` and not `rowPress`: this is an OBJECT, not a surface, so it dims as a
+ * whole rather than flashing a fill behind its own label (see theme/press). It
+ * had no pressed state at all, which on "Leave team" and "Unpair this device"
+ * is the worst place for one to be missing — both post, both take a moment, and
+ * a control that does not acknowledge the tap gets tapped twice.
+ *
+ * The dim is skipped while `disabled`, where a press is not registered anyway.
+ */
 function QuietButton({
   label,
   onPress,
@@ -197,7 +223,7 @@ function QuietButton({
 }) {
   return (
     <Pressable
-      style={styles.quiet}
+      style={({ pressed }) => [styles.quiet, dim(pressed && !disabled)]}
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -371,8 +397,14 @@ function HrMaxPanel({
 
   if (!hrMax) {
     return (
-      <Panel title="Max heart rate" note="Every run's intensity is scored against this">
-        <Field label="Current" value={null} />
+      // `padded={false}`: the panel's whole content is one full-bleed row, so
+      // the row supplies its own inset rather than sitting inside the card's.
+      <Panel
+        title="Max heart rate"
+        note="Every run's intensity is scored against this"
+        padded={false}
+      >
+        <FactRow label="Current" value={null} isLast />
       </Panel>
     );
   }
@@ -523,7 +555,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen options={screenHeader("Profile")} />
+      <Stack.Screen options={useScreenHeader("Profile")} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -546,14 +578,29 @@ export default function ProfileScreen() {
 
           {profile ? (
             <>
-              <Panel title={profile.athlete.name} note={profile.athlete.school}>
-                <View style={styles.fields}>
-                  <Field
+              {/*
+                Identity, as a grouped list of facts rather than three stacked
+                label-over-value blocks. `padded={false}` so the rows run edge
+                to edge and draw their own inset separators, the way `PrTable`
+                and the race history do.
+              */}
+              <Panel
+                title={profile.athlete.name}
+                note={profile.athlete.school}
+                padded={false}
+              >
+                {/*
+                  ONE child on purpose. `Panel` puts `gap: space.md` between its
+                  children, so three rows passed directly would sit 12pt apart
+                  and stop being a list.
+                */}
+                <View>
+                  <FactRow
                     label="Grade"
                     value={profile.athlete.grade === null ? null : String(profile.athlete.grade)}
                     mono
                   />
-                  <Field
+                  <FactRow
                     label="Events"
                     value={
                       profile.athlete.events && profile.athlete.events.length > 0
@@ -561,7 +608,7 @@ export default function ProfileScreen() {
                         : null
                     }
                   />
-                  <Field label="Fitness tier" value={profile.fitness?.tier ?? null} />
+                  <FactRow label="Fitness tier" value={profile.fitness?.tier ?? null} isLast />
                 </View>
               </Panel>
 
@@ -633,15 +680,21 @@ const styles = StyleSheet.create({
   /** The stale-data line. Quiet by construction: the size and colour of a note. */
   stale: { ...text.meta, color: color.muted },
 
-  fields: { gap: space.lg },
+  /** The join-code fact, which is not a row — see `TeamPanel`. */
   field: { gap: space.xs },
   fieldLabel: { ...text.micro, color: color.muted },
-  fieldValue: { ...text.base, color: color.ink },
-  /** Every numeral is mono. A grade is a number; a school is not. */
-  fieldValueMono: { ...text.stat },
+
+  /**
+   * Nested inside `ListRow`'s own `detail` node, so these carry the FACE only
+   * — size and colour are inherited from the row and must stay the row's, or
+   * one screen's key/value pairs read a size apart from every other screen's.
+   *
+   * `text.stat` is deliberately not used here: it is 22pt, which is a figure a
+   * screen is about, not a value sitting at the right-hand end of a 52pt row.
+   */
+  rowMono: { fontFamily: font.mono, ...tabular },
   /** `unknown` #6F675C: 5.21:1 on card. Distinguishable, not prominent. */
-  fieldAbsent: { ...text.stat, color: color.unknown },
-  fieldAbsentLabel: { ...text.meta, color: color.ink2 },
+  rowAbsent: { fontFamily: font.mono, ...tabular, color: color.unknown },
 
   /** A code, not prose: mono, tracked out, so O and 0 are told apart. */
   codeValue: { ...text.stat, color: color.ink, letterSpacing: 2 },
@@ -655,6 +708,9 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.rule,
     borderRadius: radius.control,
+    // The squircle iOS draws itself. See space.ts: every non-pill radius in
+    // this app is paired with it.
+    borderCurve: "continuous",
     paddingHorizontal: space.md,
     minHeight: target.min,
   },
@@ -672,6 +728,7 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.rule,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     paddingHorizontal: space.md,
     minHeight: target.min,
     minWidth: target.min * 2,
@@ -684,6 +741,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     backgroundColor: color.brandStrong,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     overflow: "hidden",
   },
   emberLabel: { ...text.baseSemi, color: color.ink },
@@ -699,6 +757,7 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.rule,
     borderRadius: radius.control,
+    borderCurve: "continuous",
   },
   quietLabel: { ...text.baseSemi, color: color.ink2 },
 

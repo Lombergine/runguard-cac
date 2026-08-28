@@ -250,9 +250,17 @@ function UpcomingCard({
         {soon ? (
           <View style={styles.checklist}>
             <Text style={styles.checklistHead}>In the last few days</Text>
-            {PRE_RACE.map((line) => (
-              <Text key={line} style={styles.checklistLine}>
-                {line}
+            {PRE_RACE.map((line, i) => (
+              <Text key={i} style={styles.checklistLine}>
+                {line.map((part, j) =>
+                  typeof part === "string" ? (
+                    part
+                  ) : (
+                    <Text key={j} style={styles.figure}>
+                      {part.fig}
+                    </Text>
+                  ),
+                )}
               </Text>
             ))}
           </View>
@@ -266,6 +274,13 @@ function UpcomingCard({
     </Card>
   );
 }
+
+/**
+ * A line of prose that has figures in it. Strings render in the body face; a
+ * `{ fig }` part becomes a mono, tabular span inside the same text flow, so the
+ * sentence still wraps as one paragraph.
+ */
+type ProseLine = readonly (string | { fig: string })[];
 
 /**
  * How the race went, in the athlete's own word.
@@ -295,13 +310,25 @@ function UpcomingCard({
  * Same four facts, same numbers, no imperative verb and no checkbox. The last
  * one is also the wording `lib/workout`'s race-day block already uses, so the
  * two places that describe a warm-up agree.
+ *
+ * Each sentence is a SEQUENCE OF PARTS rather than one string, because every
+ * numeral in this app is mono and tabular (non-negotiable #3) and these are the
+ * only figures on the screen that sit inside body prose. A `{ fig }` part is one
+ * welded node carrying the numeral AND its unit — "8+ hours", "20 minutes" —
+ * never a bare numeral with the word rendered beside it.
  */
-const PRE_RACE = [
-  "Most people sleep 8+ hours on each of the two nights before.",
-  "The day before usually means carbohydrate and water with every meal.",
-  "Kit is usually laid out the night before.",
-  "A warm-up is usually 20 minutes plus four strides, finishing about 15 minutes before the gun.",
-] as const;
+const PRE_RACE: readonly ProseLine[] = [
+  ["Most people sleep ", { fig: "8+ hours" }, " on each of the two nights before."],
+  ["The day before usually means carbohydrate and water with every meal."],
+  ["Kit is usually laid out the night before."],
+  [
+    "A warm-up is usually ",
+    { fig: "20 minutes" },
+    " plus four strides, finishing about ",
+    { fig: "15 minutes" },
+    " before the gun.",
+  ],
+];
 
 /**
  * What an A/B/C race actually is, in words.
@@ -533,6 +560,12 @@ const styles = StyleSheet.create({
   checklistHead: { ...text.micro, color: color.muted },
   /** Prose, no marker, no glyph — see the block that renders this. */
   checklistLine: { ...text.meta, color: color.ink2 },
+  /**
+   * A figure inside a body sentence. Family and tabular figures ONLY — size,
+   * leading and colour inherit from the enclosing `Text`, so the numeral changes
+   * face without breaking the paragraph it sits in.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
   eyebrow: { ...text.micro, color: color.muted },
   title: { ...text.title, color: color.ink, flexShrink: 1 },
   failed: { ...text.base, color: color.ink2 },
@@ -544,6 +577,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: space.xl,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     backgroundColor: color.brand,
   },
   retryLabel: { ...text.baseSemi, color: color.ink },
@@ -562,8 +596,18 @@ const styles = StyleSheet.create({
   /**
    * Mono, with the noun welded on. Never a bare numeral. Ember on type, so it
    * takes `brandText` — 4.88:1 on `bg`, where `brand` itself is 2.01:1.
+   *
+   * A mono span at `text.base`, NOT `text.stat`. At 22 it outranked the 19pt
+   * "Races" beside it, so the loudest thing in the header was the count of the
+   * rows rather than the screen it names — and the count is a caption on the
+   * heading, not the figure the screen is about. Overriding the family on a body
+   * role has to bring `tabular` along, exactly as `splits` does below.
+   *
+   * The noun stays inside the SAME node at the same size rather than becoming a
+   * body-face word beside a mono numeral: "6 races" is one welded fact
+   * (non-negotiable #4), and the countLabel docblock is explicit about it.
    */
-  count: { ...text.stat, color: color.brandText },
+  count: { ...text.base, fontFamily: font.mono, ...tabular, color: color.brandText },
   sectionTitle: { ...text.title, color: color.ink },
   sectionNote: { ...text.meta, color: color.muted, flexShrink: 1 },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
@@ -573,6 +617,8 @@ const styles = StyleSheet.create({
     height: space.xs,
     borderTopLeftRadius: radius.card - ruleWidth,
     borderTopRightRadius: radius.card - ruleWidth,
+    // The squircle iOS draws, matching the Card corner this strip caps.
+    borderCurve: "continuous",
   },
   upcomingBody: { padding: layout.cardPadding },
   countdown: { ...text.micro, color: color.muted },
@@ -623,6 +669,7 @@ const styles = StyleSheet.create({
   skeletonCard: {
     height: space.xxxl * 2,
     borderRadius: radius.card,
+    borderCurve: "continuous",
     backgroundColor: color.well,
   },
 });

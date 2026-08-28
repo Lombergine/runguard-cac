@@ -120,6 +120,33 @@ export const text = {
   } as TextStyle,
 
   /**
+   * 34 display 700, +0.4 — the iOS large-title navigation rank.
+   *
+   * This is the collapsing title the native stack draws above a scrolled
+   * screen (see theme/header.ts), NOT a role a screen sets on a `Text`. It
+   * exists so that title stays in the app's own display face instead of
+   * falling back to SF Pro the moment the header is asked for a large one —
+   * the app would then carry two display voices, one of them Apple's.
+   *
+   * DISTINCT FROM `prompt`, which is also 34: prompt is display-800 with
+   * NEGATIVE tracking and is reserved for the check-in question and nothing
+   * else. A nav title is chrome and a check-in question is the thing the whole
+   * app exists to ask, so they must not be the same object — 700 versus 800
+   * and +0.4 versus -0.68 keeps the question the louder of the two even at
+   * identical size.
+   *
+   * The positive tracking is iOS's own for a large title: Archivo at 34 is
+   * tighter than SF Pro Display, and letting it set solid makes the title read
+   * as a headline rather than as navigation.
+   */
+  largeTitle: {
+    fontFamily: font.displayBold,
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: 0.4,
+  } as TextStyle,
+
+  /**
    * 30–40 display 800, -0.02em — the check-in prompt, and nothing else.
    * Sized at 34 to sit mid-range and survive Dynamic Type scaling at 360px.
    */

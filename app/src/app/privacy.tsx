@@ -25,9 +25,9 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Card } from "../components/Card";
 import { dayLabel } from "../lib/dates";
-import { screenHeader } from "../theme/header";
+import { useScreenHeader } from "../theme/header";
 import { color } from "../theme/tokens";
-import { font, text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, space } from "../theme/space";
 
 /** Same address as the website policy. Changing one without the other is a bug. */
@@ -69,14 +69,21 @@ const EMBER_END = { x: 1, y: 1 } as const;
  *
  * So this is a legal-document section header that happens to share a silhouette
  * with a Panel, not a copy of one. If the shared component ever grows a note
- * variant, fold this in then.
+ * variant AND a node title, fold this in then.
  */
 function Panel({
   title,
   note,
   children,
 }: {
-  title: string;
+  /**
+   * A NODE, not a string, for the same reason the shared `Panel`'s note is one:
+   * "Athletes under 18" carries a numeral, and every numeral in this app is
+   * mono and tabular (non-negotiable #3) even one word deep in a heading. The
+   * shared component types this `string`, which is the other half of why this
+   * Panel stays local.
+   */
+  title: React.ReactNode;
   note?: string;
   children: React.ReactNode;
 }) {
@@ -98,7 +105,7 @@ function Panel({
 export default function PrivacyScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen options={screenHeader("Privacy")} />
+      <Stack.Screen options={useScreenHeader("Privacy")} />
 
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.panel}>
@@ -125,8 +132,8 @@ export default function PrivacyScreen() {
               <Text style={styles.p}>
                 This covers the RunGuard iPhone app and the RunGuard web dashboard: what
                 is collected, what it is used for, who sees it, and what you can change.
-                Many RunGuard athletes are under 18; the section for them is below and
-                worth reading.
+                Many RunGuard athletes are under <Text style={styles.figure}>18</Text>; the
+                section for them is below and worth reading.
               </Text>
             </View>
           </Card>
@@ -230,27 +237,34 @@ export default function PrivacyScreen() {
             <Text style={styles.email} selectable accessibilityRole="text">
               {CONTACT_EMAIL}
             </Text>{" "}
-            from your account email address. For an athlete under 18, a parent or guardian
-            can write instead. You can stop RunGuard reading Apple Health at any time in
-            Settings, which stops all further collection.
+            from your account email address. For an athlete under{" "}
+            <Text style={styles.figure}>18</Text>, a parent or guardian can write
+            instead. You can stop RunGuard reading Apple Health at any time in Settings,
+            which stops all further collection.
           </Text>
         </Panel>
 
-        <Panel title="Athletes under 18" note="COPPA AND FERPA">
+        <Panel
+          title={<>Athletes under <Text style={styles.figure}>18</Text></>}
+          note="COPPA AND FERPA"
+        >
           <Text style={styles.p}>
             RunGuard is built for school and club teams, and many of its athletes are
             minors. It is meant to be used with a coach or school involved and, for
-            athletes under 18, with a parent or guardian's permission. Coaches and schools
-            who invite athletes are responsible for getting whatever consent their
+            athletes under <Text style={styles.figure}>18</Text>, with a parent or
+            guardian's permission. Coaches and schools who invite athletes are
+            responsible for getting whatever consent their
             institution and the law require before an athlete's data is collected. Parents
             and guardians can contact us to review, correct or delete their child's
             information, or to withdraw consent.
           </Text>
           <Text style={styles.p}>
-            RunGuard is not directed at children under 13, and we do not knowingly collect
-            personal information from a child under 13 without the verifiable parental
-            consent COPPA requires. If you believe a child under 13 gave us information
-            without that consent, contact us and it will be deleted. Where a school uses
+            RunGuard is not directed at children under <Text style={styles.figure}>13</Text>,
+            and we do not knowingly collect personal information from a child under{" "}
+            <Text style={styles.figure}>13</Text> without the verifiable parental consent
+            COPPA requires. If you believe a child under <Text style={styles.figure}>13</Text>{" "}
+            gave us information without that consent, contact us and it will be deleted.
+            Where a school uses
             RunGuard, the data may also fall under school-privacy obligations such as
             FERPA. Health data belonging to a minor gets exactly the protections above:
             never sold, never used for advertising, never given to data brokers.
@@ -360,6 +374,10 @@ const styles = StyleSheet.create({
   commitment: {
     backgroundColor: color.well,
     borderRadius: radius.control,
+    // The squircle iOS draws itself. Every non-pill corner in the app carries
+    // it; `mark` above is the exception because it is a capsule, where it is a
+    // no-op (see theme/space.ts).
+    borderCurve: "continuous",
     padding: layout.cardPadding,
     gap: space.sm,
   },
@@ -370,6 +388,19 @@ const styles = StyleSheet.create({
   },
   commitmentLine: { ...text.meta, color: color.ink2 },
 
+  /**
+   * A numeral inside a sentence — "under 18", "under 13".
+   *
+   * Same name and same shape as `chat.tsx`, `login.tsx` and `pair.tsx`: it sets
+   * only the FACE, inheriting size and colour from the paragraph around it, so
+   * an age stays mono and tabular a word deep in prose. On a policy the ages
+   * are the operative numbers in the whole section, and reading them as words
+   * is exactly what non-negotiable #3 exists to stop.
+   *
+   * `VO2max` is deliberately NOT wrapped: its 2 is a subscript in a term, not a
+   * quantity, and mono there would read as a typo.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
   /** Ember on type, so `brandText` — 5.21:1 on card. `brand` would be 2.01:1. */
   email: { fontFamily: font.bodySemi, color: color.brandText },
 });

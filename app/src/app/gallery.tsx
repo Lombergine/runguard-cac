@@ -3,8 +3,9 @@
  *
  * Every shared primitive in every state, labelled, so the system can be
  * verified by eye: the three kinds of nothing side by side, all four status
- * shapes, the advisory in each flag, cards, stats, run cards, the receipt, both
- * chat surfaces, the body map, and the type scale with its role names.
+ * shapes, the advisory in each flag, cards, grouped lists, stats, run cards,
+ * the receipt, both chat surfaces, the body map, and the type scale with its
+ * role names.
  *
  * The greyscale test lives here too, and it now has its own section at the top:
  * the three kinds of nothing and all four status shapes, adjacent, each
@@ -47,6 +48,7 @@ import { BodyMap } from "../components/BodyMap";
 import { Card } from "../components/Card";
 import { ChatBubble, bubbleText } from "../components/ChatBubble";
 import { CheckInReceipt } from "../components/CheckInReceipt";
+import { List, ListRow } from "../components/List";
 import { RunCard } from "../components/RunCard";
 import { SafetyNotice } from "../components/SafetyNotice";
 import { Stat } from "../components/Stat";
@@ -70,7 +72,7 @@ import { AcwrChart } from "../components/charts/AcwrChart";
 import { LoadChart } from "../components/charts/LoadChart";
 import type { DailyPoint } from "../lib/types";
 import { color } from "../theme/tokens";
-import { font, text, TextRole } from "../theme/type";
+import { font, tabular, text, TextRole } from "../theme/type";
 import { layout, radius, space } from "../theme/space";
 
 const FLAGS: Flag[] = ["clear", "watch", "unusual", "unknown"];
@@ -288,14 +290,35 @@ const SLEEP_NO_STAGES: SleepDay[] = SLEEP_NIGHTS.map((n) => ({
 /** Deep and light tracked, REM never — one dashed row beside two real ones. */
 const SLEEP_NO_REM: SleepDay[] = SLEEP_NIGHTS.map((n) => ({ ...n, rem: null }));
 
-const TYPE_SCALE: { role: TextRole; sample: string; use: string }[] = [
-  { role: "micro", sample: "Distance", use: "11.5 mono, +0.12em — micro-labels" },
-  { role: "meta", sample: "Tue 14 Oct · before practice", use: "14 body — secondary metadata" },
-  { role: "base", sample: "The app describes. It does not instruct.", use: "16.5 body — base" },
-  { role: "baseSemi", sample: "Checked in 6:12am", use: "16.5 body 600 — emphasis, controls" },
-  { role: "title", sample: "Yesterday's run", use: "19 display — card titles" },
-  { role: "stat", sample: "8:51 /mi", use: "22 mono — inline stats" },
-  { role: "prompt", sample: "How's your energy?", use: "34 display 800 — the check-in prompt" },
+/**
+ * The scale, one row per `TextRole`.
+ *
+ * `spec` is a separate field from `use` because it is nothing but figures —
+ * sizes, weights, tracking — and a figure is mono and tabular even a word deep
+ * in a caption (non-negotiable #3). The two are rendered back into the single
+ * line they used to be, so the row reads exactly as it did; only the numerals
+ * change face.
+ *
+ * Every role in `theme/type.ts` is listed, including the three that arrived
+ * after this block was first written. This is the only place the scale can be
+ * seen whole, and a specimen sheet that quietly omits a third of it is worse
+ * than no specimen at all.
+ *
+ * The SAMPLES stay in their own role's face, numerals and all — "Tue 14 Oct"
+ * in the body face is the specimen of `meta`, not a figure being rendered
+ * wrong. Wrapping those would destroy the thing the row exists to show.
+ */
+const TYPE_SCALE: { role: TextRole; sample: string; spec: string; use: string }[] = [
+  { role: "micro", sample: "Distance", spec: "11.5 mono, +0.12em", use: "micro-labels" },
+  { role: "meta", sample: "Tue 14 Oct · before practice", spec: "14 body", use: "secondary metadata" },
+  { role: "base", sample: "The app describes. It does not instruct.", spec: "16.5 body", use: "base" },
+  { role: "baseSemi", sample: "Checked in 6:12am", spec: "16.5 body 600", use: "emphasis, controls" },
+  { role: "title", sample: "Yesterday's run", spec: "19 display", use: "card titles" },
+  { role: "stat", sample: "8:51 /mi", spec: "22 mono", use: "inline stats" },
+  { role: "statLarge", sample: "72", spec: "28 mono", use: "the one figure a screen is about" },
+  { role: "display", sample: "You're all set.", spec: "28 display 800", use: "a screen that is one sentence" },
+  { role: "largeTitle", sample: "Recovery", spec: "34 display 700, +0.4", use: "the nav large title — chrome, never set on a Text" },
+  { role: "prompt", sample: "How's your energy?", spec: "34 display 800", use: "the check-in prompt" },
 ];
 
 /**
@@ -313,6 +336,13 @@ export default function Gallery() {
 function SpecimenSheet() {
   // Live, so the map's fill and its 48pt hit areas can be checked by thumb.
   const [soreParts, setSoreParts] = useState<string[]>(["calf"]);
+  /**
+   * Every pressable row in the grouped-list block feeds this counter, so no row
+   * on the sheet is a control that does nothing — the failure `List` exists to
+   * make impossible would be an odd thing for its own specimen to commit.
+   */
+  const [taps, setTaps] = useState(0);
+  const countTap = () => setTaps((n) => n + 1);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -388,7 +418,13 @@ function SpecimenSheet() {
 
         {/* ---------------------------------------------------------- */}
         <Section title="StatusDot" note="Shape first, colour last" />
-        <Specimen label="At the default 12px, inline size">
+        <Specimen
+          label={
+            <>
+              At the default <Text style={styles.figure}>12px</Text>, inline size
+            </>
+          }
+        >
           <View style={styles.dotInline}>
             {FLAGS.map((flag) => (
               <StatusDot key={flag} flag={flag} />
@@ -424,6 +460,44 @@ function SpecimenSheet() {
               Flush content — the card supplies no padding.
             </Text>
           </Card>
+        </Specimen>
+
+        {/* ---------------------------------------------------------- */}
+        <Section
+          title="Grouped list"
+          note="A row with no onPress is a plain View"
+        />
+        <Text style={styles.note}>
+          iOS pools rows into one slab and lets the corner radius do the
+          grouping, where a web page draws a bordered box per row. Two things
+          are on test and neither is the colour. The chevron is a promise that a
+          screen is underneath, so it is gated on `onPress`: the inert row below
+          has no chevron, no press flash and no accessibility role, because
+          there is nothing under it. And the press is a FLASH of `press` across
+          the row's full width, never a dim — a row is a surface, and dimming a
+          surface dims its own content.
+        </Text>
+        <Specimen label="With a header — a link row, a row that acts in place, an inert row">
+          <List header="Account">
+            <ListRow title="Profile" detail="Aria N." onPress={countTap} chevron />
+            <ListRow
+              title="Press flash"
+              detail={<Text style={styles.figure}>{taps} taps</Text>}
+              sub="Acts in place, so it wears no chevron"
+              onPress={countTap}
+            />
+            <ListRow
+              title="Team"
+              detail="Riverside XC"
+              sub="Ask your coach to change this"
+              isLast
+            />
+          </List>
+        </Specimen>
+        <Specimen label="No header — one unlabelled group, and its only row is also its last">
+          <List>
+            <ListRow title="Sign out" onPress={countTap} isLast />
+          </List>
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
@@ -489,7 +563,14 @@ function SpecimenSheet() {
           one heavy left rule; it is full-bleed in the thread and only inset
           here by the page. In greyscale the three stay unmistakable.
         </Text>
-        <Specimen label="Athlete — right, accent fill, 12px radius">
+        <Specimen
+          label={
+            <>
+              Athlete — right, accent fill,{" "}
+              <Text style={styles.figure}>12px</Text> radius
+            </>
+          }
+        >
           <ChatRow message={ATHLETE_MESSAGE} />
         </Specimen>
         <Specimen label="Coach — left, well fill and a rule">
@@ -505,7 +586,8 @@ function SpecimenSheet() {
           Tappable. Selection is a filled patch inside an outline, so it survives
           desaturation; the fill is track, not accent, because this is the
           athlete describing their body rather than actuating the system. Hit
-          areas are 48pt even where the drawing is a few points wide.
+          areas are <Text style={styles.figure}>48pt</Text> even where the
+          drawing is a few points wide.
         </Text>
         <Specimen label="Calf selected — tap to check the targets and the fill">
           <BodyMap
@@ -530,8 +612,9 @@ function SpecimenSheet() {
           series there are only TWO kinds of nothing, not three: a day with no
           run arrives as a measured zero, and which days were scheduled off is
           not knowable across thirty days. Zero is solid, filled and short on
-          the baseline; absent is dashed, hollow and 12px tall. Desaturate and
-          they are still two different objects.
+          the baseline; absent is dashed, hollow and{" "}
+          <Text style={styles.figure}>12px</Text> tall. Desaturate and they are
+          still two different objects.
         </Text>
 
         <Specimen label="Bars — a measured zero (Wed) next to an unknown (Thu)">
@@ -628,7 +711,15 @@ function SpecimenSheet() {
           <WeeklyKmChart />
         </Specimen>
 
-        <Specimen label="PaceChart — two weeks with no qualifying run (Apr 21, May 12)">
+        <Specimen
+          label={
+            <>
+              PaceChart — two weeks with no qualifying run (
+              <Text style={styles.figure}>Apr 21</Text>,{" "}
+              <Text style={styles.figure}>May 12</Text>)
+            </>
+          }
+        >
           <PaceChart paceSeason={SPECIMEN_PACE} />
         </Specimen>
 
@@ -650,9 +741,10 @@ function SpecimenSheet() {
           as a week of no sleep. Here the run of five adjacent nights in the
           middle of the chart is dashed and hollow, the one night that really
           logged zero is a solid stub in the bar fill, and tapping either says
-          which it was: &quot;Not recorded&quot; against &quot;0.0 h&quot;. The
-          meter has the same split one level down — a stage the watch never
-          tracked is a dashed track, not an empty one.
+          which it was: &quot;Not recorded&quot; against &quot;
+          <Text style={styles.figure}>0.0 h</Text>&quot;. The meter has the same
+          split one level down — a stage the watch never tracked is a dashed
+          track, not an empty one.
         </Text>
 
         <Specimen label="SleepChart — a genuine zero, then five adjacent unrecorded nights">
@@ -682,7 +774,16 @@ function SpecimenSheet() {
          * this app does not: watch the lines stop at the holes, and watch a day
          * with only one half recorded keep its point AND get a dashed mark.
          * -------------------------------------------------------- */}
-        <Specimen label="MentalChart — 8 check-ins in 30 days, a 14-day hole, and days with only one half recorded">
+        <Specimen
+          label={
+            <>
+              MentalChart — <Text style={styles.figure}>8</Text> check-ins in{" "}
+              <Text style={styles.figure}>30 days</Text>, a{" "}
+              <Text style={styles.figure}>14-day</Text> hole, and days with only
+              one half recorded
+            </>
+          }
+        >
           <MentalChart mental30={HALF_ANSWERED_MENTAL} />
         </Specimen>
 
@@ -690,7 +791,15 @@ function SpecimenSheet() {
           <MentalChart />
         </Specimen>
 
-        <Specimen label="FitnessChart — a model output on a fixed 0–100 axis: no trend arrow, no badge, no colour verdict">
+        <Specimen
+          label={
+            <>
+              FitnessChart — a model output on a fixed{" "}
+              <Text style={styles.figure}>0–100</Text> axis: no trend arrow, no
+              badge, no colour verdict
+            </>
+          }
+        >
           <FitnessChart weekly={SEASON_FITNESS} />
         </Specimen>
 
@@ -716,9 +825,9 @@ function SpecimenSheet() {
         />
         <Text style={styles.note}>
           One block per event, in one card. The website draws a panel per event
-          in a two-column grid; stacked on a phone that is four ~250pt panels,
-          three of which hold a single dot, so an event under three PRs is
-          listed rather than drawn. Nothing is lost — every PR the payload
+          in a two-column grid; stacked on a phone that is four{" "}
+          <Text style={styles.figure}>~250pt</Text> panels, three of which hold
+          a single dot, so an event under three PRs is listed rather than drawn. Nothing is lost — every PR the payload
           carries is on screen with its explicit local day either way. The step
           is `stepAfter`, not a slope: a PR HOLDS until it is beaten, and a
           diagonal would draw the athlete improving through months in which
@@ -754,14 +863,22 @@ function SpecimenSheet() {
           does this. Neither chart wears a status colour: `ok` / `watch` /
           `unusual` are verdicts, and a band is a region of an axis, not a
           judgement about a fifteen-year-old — so the safe zone is a neutral
-          wash and the 1.5 rule is `muted`, with the words underneath doing the
-          interpreting. The load panel is where the zero rule bites hardest:
-          seven of these thirty days are rest days that really logged zero and
-          draw as solid stubs on the baseline, while the two days missing from
-          the payload draw dashed and break all three series.
+          wash and the <Text style={styles.figure}>1.5</Text> rule is `muted`,
+          with the words underneath doing the interpreting. The load panel is
+          where the zero rule bites hardest: seven of these thirty days are rest
+          days that really logged zero and draw as solid stubs on the baseline,
+          while the two days missing from the payload draw dashed and break all
+          three series.
         </Text>
 
-        <Specimen label="AcwrChart — nineteen days inside the band, four below it, three over the 1.5 rule">
+        <Specimen
+          label={
+            <>
+              AcwrChart — nineteen days inside the band, four below it, three
+              over the <Text style={styles.figure}>1.5</Text> rule
+            </>
+          }
+        >
           <AcwrChart series={LOAD_SERIES} />
         </Specimen>
 
@@ -782,7 +899,9 @@ function SpecimenSheet() {
         {TYPE_SCALE.map((step) => (
           <View key={step.role} style={styles.typeRow}>
             <Text style={styles.typeRole}>{step.role}</Text>
-            <Text style={styles.typeUse}>{step.use}</Text>
+            <Text style={styles.typeUse}>
+              <Text style={styles.figure}>{step.spec}</Text> — {step.use}
+            </Text>
             <Text style={[text[step.role], styles.typeSample]}>
               {step.sample}
             </Text>
@@ -799,13 +918,14 @@ function SpecimenSheet() {
         <Text style={styles.note}>
           The explainers a stat tile can carry, ported from the website&apos;s
           `info=` props. Two things are on test here and neither shows in a
-          screenshot. First, the dot is drawn at 16px but its tap target is the
-          full 48px — added as `hitSlop`, so the label row is exactly as tall as
-          the tile below it with no dot at all. Second, the panel is placed from
-          the dot&apos;s window coordinates inside a `Modal` and clamped to the
-          screen, so the RIGHT-HAND tile of the pair opens a panel that is
-          left-aligned with the page rather than one that runs off the edge —
-          which is the case worth actually tapping. While a panel is open its
+          screenshot. First, the dot is drawn at{" "}
+          <Text style={styles.figure}>16px</Text> but its tap target is the full{" "}
+          <Text style={styles.figure}>48px</Text> — added as `hitSlop`, so the
+          label row is exactly as tall as the tile below it with no dot at all.
+          Second, the panel is placed from the dot&apos;s window coordinates
+          inside a `Modal` and clamped to the screen, so the RIGHT-HAND tile of
+          the pair opens a panel that is left-aligned with the page rather than
+          one that runs off the edge — which is the case worth actually tapping. While a panel is open its
           invisible full-bleed overlay is the only thing that can be touched, so
           a second dot cannot open over the first: that, and not a store, is
           what makes only one open at a time.
@@ -878,11 +998,17 @@ function Caption({
   );
 }
 
+/**
+ * `label` is a NODE rather than a string, for the same reason `PanelProps.note`
+ * is one: a caption here routinely carries a figure ("12px radius", "0–100
+ * axis"), and every numeral in this app is mono and tabular a word deep in
+ * prose. Callers pass a nested `Text style={styles.figure}` for those.
+ */
 function Specimen({
   label,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -947,6 +1073,10 @@ const styles = StyleSheet.create({
   emberRule: {
     height: space.xs,
     borderRadius: radius.card,
+    // The squircle, on every radius that is not a `pill` (space.ts). At 4pt
+    // tall RN clamps this corner to 2 and the curve is invisible — it is here
+    // so the rule holds without exception, not for what it does at this size.
+    borderCurve: "continuous",
     marginTop: space.sm,
     width: space.xxxl * 2,
   },
@@ -973,6 +1103,16 @@ const styles = StyleSheet.create({
 
   specimen: { marginTop: space.lg },
   specimenLabel: { ...text.meta, color: color.muted, marginBottom: space.sm },
+
+  /**
+   * A figure inside one of the sheet's own captions or notes. Nested in the
+   * surrounding `Text`, so it inherits that size and colour and changes only
+   * the face — the rule has no prose exemption: if it is a number, it is mono
+   * and tabular. Code identifiers in backticks (`hitSlop`, `charts.tsx:343`)
+   * are deliberately NOT wrapped: they are names, not measurements, and one of
+   * them going mono while its neighbours stayed body-face would read as drift.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
 
   caption: { ...text.meta, color: color.muted, marginTop: space.sm },
   captionCenter: { textAlign: "center" },

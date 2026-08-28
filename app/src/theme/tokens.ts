@@ -227,4 +227,29 @@ export const staticColor = {
   ruleSoft: "rgba(34,29,21,0.09)",
 } as const;
 
+/**
+ * The same tokens' DARK values, as raw strings.
+ *
+ * Needed for the same reason as `staticColor`, plus one that cost real
+ * breakage: **the native stack header does not resolve a `DynamicColorIOS`
+ * value.** Passing one to `headerStyle.backgroundColor` or `headerTintColor`
+ * flattens it to the light branch, so in dark mode every pushed screen wore a
+ * cream bar over a near-black page — with the system status-bar glyphs, which
+ * DO follow the appearance, drawn white on cream at 1.05:1. Invisible.
+ *
+ * `theme/header.ts` therefore resolves the appearance itself with
+ * `useColorScheme()` and picks from here. Anything rendering through React
+ * Native's own style system should keep using `color.*` and adapt for free.
+ */
+export const darkColor = {
+  ink: "#F6F2EB",
+  ink2: "#CDC5B8",
+  muted: "#A79E8F",
+  card: "#1F1C18",
+  bg: "#141210",
+  well: "#242019",
+  rule: "rgba(255,255,255,0.14)",
+  ruleSoft: "rgba(255,255,255,0.07)",
+} as const;
+
 export type ColorToken = keyof typeof color;

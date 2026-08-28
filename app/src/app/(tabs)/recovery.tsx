@@ -66,7 +66,7 @@
  * A null reading means NOT RECORDED, never zero — every one of the five goes
  * through `<Tile/>`, whose null case is a dash in `color.unknown`.
  */
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -90,7 +90,7 @@ import type { Profile } from "../../lib/types";
 import { layout, radius, space, target } from "../../theme/space";
 import { dim } from "../../theme/press";
 import { color } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { font, tabular, text } from "../../theme/type";
 
 /**
  * The website's three bands, in the app's register: lowercase, descriptive, no
@@ -212,11 +212,16 @@ function UnknownStatus() {
  * that it is a signal rather than a finding.
  *
  * The figures are the server's, already rounded, and each keeps its unit welded
- * into the sentence.
+ * into the sentence — in ONE nested node, set in `styles.figure`. Non-negotiable
+ * #3 is not "figures in tiles are mono", it is that a numeral is never in the
+ * body face; a figure sitting inside a sentence is the easiest place in the app
+ * to break it, because the sentence is a string until someone looks. That is why
+ * these are nodes rather than strings: a template literal has nowhere to put a
+ * typeface, so the type had to change for the rule to be expressible at all.
  */
-function recoveryTips(p: Profile): string[] {
+function recoveryTips(p: Profile): ReactNode[] {
   const r = p.risk.recovery;
-  const out: string[] = [];
+  const out: ReactNode[] = [];
 
   if (r.sleepAvg !== null && r.sleepAvg < LOW_SLEEP_H) {
     // The website appends "before your next hard workout" on the same
@@ -225,16 +230,26 @@ function recoveryTips(p: Profile): string[] {
       (d) => d.type.includes("Workout") && !d.status,
     );
     out.push(
-      `Your sleep is averaging ${r.sleepAvg} h a night, under the ${SLEEP_TARGET_H} h your sleep debt is counted against` +
-        (workoutAhead
+      <>
+        {"Your sleep is averaging "}
+        <Text style={styles.figure}>{`${r.sleepAvg} h`}</Text>
+        {" a night, under the "}
+        <Text style={styles.figure}>{`${SLEEP_TARGET_H} h`}</Text>
+        {" your sleep debt is counted against"}
+        {workoutAhead
           ? ", and there is a hard workout still unmarked on this week's plan."
-          : "."),
+          : "."}
+      </>,
     );
   }
 
   if (r.hrvDeltaPct !== null && r.hrvDeltaPct <= HRV_SUPPRESSED_PCT) {
     out.push(
-      `Your HRV is sitting ${Math.abs(r.hrvDeltaPct)}% below your own baseline. That usually goes with a body still carrying stress from recent training, and it comes back fastest across easy days and full nights.`,
+      <>
+        {"Your HRV is sitting "}
+        <Text style={styles.figure}>{`${Math.abs(r.hrvDeltaPct)}%`}</Text>
+        {" below your own baseline. That usually goes with a body still carrying stress from recent training, and it comes back fastest across easy days and full nights."}
+      </>,
     );
   }
 
@@ -269,7 +284,11 @@ function recoveryTips(p: Profile): string[] {
     p.patterns.sleepDebtH > SLEEP_DEBT_H
   ) {
     out.push(
-      `You are carrying ${p.patterns.sleepDebtH} h of sleep debt this week. About half of that is what a single early night covers.`,
+      <>
+        {"You are carrying "}
+        <Text style={styles.figure}>{`${p.patterns.sleepDebtH} h`}</Text>
+        {" of sleep debt this week. About half of that is what a single early night covers."}
+      </>,
     );
   }
 
@@ -314,8 +333,18 @@ function Header({ stale }: { stale?: boolean }) {
   );
 }
 
-/** The Panel hierarchy: title left, caveat right, content below. */
-function SectionHeading({ title, note }: { title: string; note?: string }) {
+/**
+ * The Panel hierarchy: title left, caveat right, content below.
+ *
+ * A SECOND RANK, not a panel title. It sits OUTSIDE the card at `text.title`
+ * (19) because it groups several cards — the two-tile grid, a chart, a prose
+ * card — where `Panel`'s 14pt title names the one surface it is drawn on. Do
+ * not convert it; the two are different jobs at different altitudes.
+ *
+ * `note` is a NODE for the same reason `PanelProps.note` is: a caveat is very
+ * often a figure ("0–100"), and every numeral in this app is mono and tabular.
+ */
+function SectionHeading({ title, note }: { title: string; note?: ReactNode }) {
   return (
     <View style={styles.panelHead}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -398,7 +427,12 @@ function Readings({ profile }: { profile: Profile }) {
       <View style={styles.section}>
         <SectionHeading
           title="Scored from those"
-          note="0–100, worked out rather than measured"
+          note={
+            <>
+              <Text style={styles.figure}>0–100</Text>
+              {", worked out rather than measured"}
+            </>
+          }
         />
         <View style={styles.gridRow}>
           {/*
@@ -683,6 +717,14 @@ const styles = StyleSheet.create({
     backgroundColor: color.brand,
   },
   tipText: { ...text.meta, color: color.ink2, flexShrink: 1 },
+  /**
+   * A numeral nested in prose. Contributes ONLY the mono face and tabular
+   * figures — size and colour are inherited from whichever line it sits in, so
+   * the same span works in a tip (`meta`/`ink2`) and in a section note
+   * (`meta`/`muted`) without either knowing about the other. Same shape as
+   * `WeekProgress.noteFigure`.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
 
   footnote: { ...text.meta, color: color.muted },
 
@@ -695,11 +737,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: space.xl,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     backgroundColor: color.brand,
   },
   retryLabel: { ...text.baseSemi, color: color.ink },
 
-  skeleton: { borderRadius: radius.card, backgroundColor: color.well },
+  skeleton: {
+    borderRadius: radius.card,
+    // The squircle iOS itself draws. A skeleton reserves the exact shape as
+    // well as the exact height, or the corners change as data lands.
+    borderCurve: "continuous",
+    backgroundColor: color.well,
+  },
   skeletonTile: { flex: 1, height: TILE_H },
   /** Half width, so the reserved heading reads as a heading, not as a card. */
   skeletonHeading: { height: HEADING_H, width: "50%" },

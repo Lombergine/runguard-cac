@@ -18,7 +18,7 @@
  *    "10th" or "" would be dropped without a word. The input only accepts
  *    digits so it cannot produce anything else.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -35,12 +35,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 
 import { Card } from "../components/Card";
+import { List, ListRow } from "../components/List";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
-import { backOnlyHeader } from "../theme/header";
+import { useBackOnlyHeader } from "../theme/header";
+import { rowPress } from "../theme/press";
 import { color } from "../theme/tokens";
-import { font, text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /** Matches lib/api: no health endpoint exists, so a wrong base URL just hangs. */
@@ -60,11 +62,20 @@ const EMBER_END = { x: 1, y: 1 } as const;
  * (website/src/app/athlete/signup/page.tsx:7-11). The route defaults to
  * "distance", so this starts there rather than empty — an unset radio group
  * would misreport what the server is about to store.
+ *
+ * The website writes each one as a single string, "Distance (5K / XC)". It is
+ * split here so the parenthetical can render in the mono face: "5K" and "800"
+ * are figures, and non-negotiable #3 does not exempt a figure for sitting
+ * inside a name. `events` holds the whole parenthetical rather than the digits
+ * alone — it reads as an event code, the same class of thing as the team code
+ * field above, and carving "5K" out of "5K / XC" would put two faces inside one
+ * two-word phrase. The accessibility label recomposes the website's sentence,
+ * because VoiceOver hears no font.
  */
 const EVENT_GROUPS = [
-  { id: "distance", label: "Distance (5K / XC)" },
-  { id: "mid", label: "Mid (800 / Mile)" },
-  { id: "sprint", label: "Sprint" },
+  { id: "distance", label: "Distance", events: "5K / XC" },
+  { id: "mid", label: "Mid", events: "800 / Mile" },
+  { id: "sprint", label: "Sprint", events: null },
 ] as const;
 
 type EventGroup = (typeof EVENT_GROUPS)[number]["id"];
@@ -89,22 +100,42 @@ type Problem =
   | { kind: "noToken" }
   | { kind: "storage" };
 
-function explain(problem: Problem): string {
+function explain(problem: Problem): ReactNode {
   switch (problem.kind) {
     case "empty":
       return "Fill in your name, email, and password.";
     case "malformed":
       return "That email doesn't look right. Check it and try again.";
     case "shortPassword":
-      return `Use at least ${MIN_PASSWORD} characters for your password.`;
+      return (
+        <>
+          Use at least <Text style={styles.figure}>{MIN_PASSWORD}</Text>{" "}
+          characters for your password.
+        </>
+      );
     case "rejected":
+      // The server's own sentence, unaltered — including any figure in it.
       return problem.message;
     case "network":
       // The base URL is shown deliberately: a wrong EXPO_PUBLIC_API_URL, or
-      // `localhost` on a physical phone, is otherwise invisible from here.
-      return `Could not reach the server at ${BASE_URL}. On a phone that address must be the computer's LAN address, not localhost.`;
+      // `localhost` on a physical phone, is otherwise invisible from here. Mono
+      // for the same reason the team code field is: this is an address being
+      // proof-read character by character against another screen.
+      return (
+        <>
+          Could not reach the server at{" "}
+          <Text style={styles.figure}>{BASE_URL}</Text>. On a phone that address
+          must be the computer&apos;s LAN address, not localhost.
+        </>
+      );
     case "server":
-      return `The server answered with ${problem.status}. No account was created.`;
+      return (
+        <>
+          The server answered with{" "}
+          <Text style={styles.figure}>{problem.status}</Text>. No account was
+          created.
+        </>
+      );
     case "noToken":
       return "Your account was created, but the server sent nothing this app can use to sign in. Log in with your email and password.";
     case "storage":
@@ -252,7 +283,7 @@ export default function SignupScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       {/* Back only — these screens carry their own heading in the content. */}
-      <Stack.Screen options={backOnlyHeader()} />
+      <Stack.Screen options={useBackOnlyHeader()} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -314,7 +345,11 @@ export default function SignupScreen() {
 
             <Field
               label="Password"
-              note={`${MIN_PASSWORD}+ characters`}
+              note={
+                <>
+                  <Text style={styles.figure}>{MIN_PASSWORD}+</Text> characters
+                </>
+              }
               value={password}
               onChangeText={setPassword}
               editable={!busy}
@@ -355,12 +390,24 @@ export default function SignupScreen() {
                   return (
                     <Pressable
                       key={group.id}
-                      style={[styles.radio, index > 0 && styles.radioRuled]}
+                      // A row is a SURFACE, so it FLASHES a fill across its full
+                      // width rather than dimming — dimming would take the dot
+                      // and the label down with it. `radios` clips the flash to
+                      // the track's corners.
+                      style={({ pressed }) => [
+                        styles.radio,
+                        index > 0 && styles.radioRuled,
+                        rowPress({ pressed }),
+                      ]}
                       onPress={() => setEventGroup(group.id)}
                       disabled={busy}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: selected, disabled: busy }}
-                      accessibilityLabel={group.label}
+                      accessibilityLabel={
+                        group.events
+                          ? `${group.label} (${group.events})`
+                          : group.label
+                      }
                     >
                       {/* The dot is the ember as a SHAPE, never under a glyph.
                           The ring stays drawn when unselected, so the row is a
@@ -370,6 +417,9 @@ export default function SignupScreen() {
                         style={selected ? styles.radioLabelOn : styles.radioLabel}
                       >
                         {group.label}
+                        {group.events ? (
+                          <Text style={styles.figure}> ({group.events})</Text>
+                        ) : null}
                       </Text>
                     </Pressable>
                   );
@@ -410,32 +460,36 @@ export default function SignupScreen() {
                 {explain(problem)}
               </Text>
             ) : null}
-
-            {/* The other two doors. `replace`, not `push`, because the three
-                entry points are equivalent rather than nested — a back stack of
-                half-filled sign-in forms is not worth preserving. */}
-            <View style={styles.footer}>
-              <Pressable
-                style={styles.alt}
-                onPress={() => router.replace("/login")}
-                disabled={busy}
-                accessibilityRole="link"
-                accessibilityState={{ disabled: busy }}
-              >
-                <Text style={styles.altLabel}>Already have an account? Log in</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.alt}
-                onPress={() => router.replace("/pair")}
-                disabled={busy}
-                accessibilityRole="link"
-                accessibilityState={{ disabled: busy }}
-              >
-                <Text style={styles.altLabel}>Use a pairing code</Text>
-              </Pressable>
-            </View>
           </Card>
+
+          {/* The other two doors. `replace`, not `push`, because the three
+              entry points are equivalent rather than nested — a back stack of
+              half-filled sign-in forms is not worth preserving.
+
+              A grouped list on the page ground, OUTSIDE the card, rather than
+              two ember links inside it. Two reasons: the screen already spends
+              its one ember on the button above, and iOS says "another screen is
+              under this" with a chevron rather than with colour. `List` also
+              owns the row's press flash, so these stop being the bare tappables
+              they were.
+
+              No `onPress` while `busy` renders the rows genuinely inert — no
+              chevron, no flash, no role — which is what `disabled` used to say
+              here. A row that keeps its chevron while it cannot be followed is
+              the lie `List`'s header describes. */}
+          <List style={styles.footer}>
+            <ListRow
+              title="Already have an account? Log in"
+              onPress={busy ? undefined : () => router.replace("/login")}
+              chevron
+            />
+            <ListRow
+              title="Use a pairing code"
+              onPress={busy ? undefined : () => router.replace("/pair")}
+              chevron
+              isLast
+            />
+          </List>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -447,13 +501,16 @@ export default function SignupScreen() {
  * website/src/components/athlete/tabs.tsx:22): semibold title left, muted note
  * right, content underneath. Here the note is the field's caveat — "optional",
  * the password floor — which is where the athlete looks for it.
+ *
+ * A NODE rather than a string, for the same reason `PanelProps.note` is one:
+ * the password floor is a figure, and a figure is mono even inside a caveat.
  */
 function Field({
   label,
   note,
   style,
   ...input
-}: { label: string; note?: string } & TextInputProps) {
+}: { label: string; note?: ReactNode } & TextInputProps) {
   return (
     <View style={styles.field}>
       <View style={styles.panelHead}>
@@ -534,10 +591,20 @@ const styles = StyleSheet.create({
   /** Two digits never need the full width, and a short field says so. */
   gradeInput: { fontFamily: font.mono, alignSelf: "flex-start", minWidth: target.min * 2 },
 
+  /**
+   * The system fill and NO border — the same well the text fields sit in. The
+   * three choices are one control, and an outline drawn around it is exactly
+   * the web convention `input` above already dropped; leaving it here would put
+   * two different ideas of "form control" on one screen.
+   *
+   * `overflow: "hidden"` was already load-bearing for the rules and is now also
+   * what clips a row's press flash to the track's rounded corners — an
+   * unclipped flash paints square corners over a rounded track.
+   */
   radios: {
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
+    backgroundColor: color.fill,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     overflow: "hidden",
   },
   radio: {
@@ -574,6 +641,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     backgroundColor: color.brandStrong,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     marginTop: space.xl,
     overflow: "hidden",
   },
@@ -585,8 +653,18 @@ const styles = StyleSheet.create({
   actionLabel: { ...text.baseSemi, color: color.ink },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
-  /** `target.gap` between the two links, so neither steals the other's tap. */
-  footer: { marginTop: target.gap, gap: target.gap },
-  alt: { minHeight: target.min, justifyContent: "center" },
-  altLabel: { ...text.baseSemi, color: color.brandText },
+  /**
+   * A figure sitting inside a body-face sentence — the password floor, an HTTP
+   * status, the event codes in a radio label, the LAN address. Non-negotiable
+   * #3 has no prose exemption: if it is a number it is mono and tabular. Colour
+   * is inherited, so one style serves a note, an error line and a label.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
+  /**
+   * The two alternate doors, now a grouped list on the page ground below the
+   * card. `layout.section` is the gap BETWEEN sections, which is what this is
+   * now; the rows are `target.row` tall and separated by the slab's own rule,
+   * so they no longer need `target.gap` to keep their taps apart.
+   */
+  footer: { marginTop: layout.section },
 });

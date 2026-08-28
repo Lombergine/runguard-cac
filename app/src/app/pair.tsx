@@ -14,7 +14,7 @@
  * Storing first and rolling back on failure would put an unproven token in the
  * keychain, so this issues the one request itself instead.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -23,19 +23,20 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 
 import { Card } from "../components/Card";
+import { List, ListRow } from "../components/List";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
-import { backOnlyHeader } from "../theme/header";
+import { useBackOnlyHeader } from "../theme/header";
+import { dim } from "../theme/press";
 import { color } from "../theme/tokens";
-import { font, text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, space, target } from "../theme/space";
 
 /** `dt_` + 20 random bytes as lowercase hex. An exact shape, so check it exactly. */
@@ -75,20 +76,47 @@ type Problem =
   | { kind: "server"; status: number }
   | { kind: "storage" };
 
-function explain(problem: Problem): string {
+/**
+ * A NODE, not a string, for the reason `PanelProps.note` is one: three of these
+ * sentences carry a machine literal — a character count, a base URL, a status
+ * code — and every figure in this app is mono and tabular (non-negotiable #3).
+ * A figure set in the body face is one the athlete has to take on trust; these
+ * are the sentences that exist to be checked character by character against
+ * another screen, so their figures have to read as figures.
+ */
+function explain(problem: Problem): ReactNode {
   switch (problem.kind) {
     case "empty":
       return "Paste the device token from the web app before pairing.";
     case "malformed":
-      return "That is not the shape of a device token. It begins with dt_ and has 40 hexadecimal characters after that. Copy the whole line.";
+      return (
+        <>
+          That is not the shape of a device token. It begins with dt_ and has{" "}
+          <Text style={styles.figure}>40</Text> hexadecimal characters after that.
+          Copy the whole line.
+        </>
+      );
     case "unauthorized":
       return "That token was not recognised. Open Profile → Pair the RunGuard iPhone app on the web app and copy it again.";
     case "network":
       // The base URL is shown deliberately: a wrong EXPO_PUBLIC_API_URL, or
-      // `localhost` on a physical phone, is otherwise invisible from here.
-      return `Could not reach the server at ${BASE_URL}. On a phone that address must be the computer's LAN address, not localhost.`;
+      // `localhost` on a physical phone, is otherwise invisible from here. It
+      // is an address to be proof-read against a browser's URL bar, so it takes
+      // the figure face — the host and port are what is usually wrong.
+      return (
+        <>
+          Could not reach the server at{" "}
+          <Text style={styles.figure}>{BASE_URL}</Text>. On a phone that address
+          must be the computer&apos;s LAN address, not localhost.
+        </>
+      );
     case "server":
-      return `The server answered with ${problem.status}. Nothing was paired.`;
+      return (
+        <>
+          The server answered with{" "}
+          <Text style={styles.figure}>{problem.status}</Text>. Nothing was paired.
+        </>
+      );
     case "storage":
       return "The token could not be saved to this device's keychain. Nothing was paired.";
   }
@@ -170,7 +198,7 @@ export default function PairScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       {/* Back only — these screens carry their own heading in the content. */}
-      <Stack.Screen options={backOnlyHeader()} />
+      <Stack.Screen options={useBackOnlyHeader()} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -246,7 +274,9 @@ export default function PairScreen() {
 
             {DEV_TOKEN ? (
               <Pressable
-                style={styles.dev}
+                // An object, not a surface, so it dims rather than flashing a
+                // fill. See theme/press.
+                style={({ pressed }) => [styles.dev, dim(pressed)]}
                 onPress={() => attempt(DEV_TOKEN)}
                 disabled={checking}
                 accessibilityRole="button"
@@ -255,34 +285,42 @@ export default function PairScreen() {
                 <Text style={styles.devLabel}>Use development token</Text>
               </Pressable>
             ) : null}
-
-            {/* The other two doors. An athlete who arrives here holding an email
-                and a password rather than a token is otherwise stranded: this
-                screen can only accept a token. `replace`, not `push`, because
-                the three entry points are equivalent rather than nested — a back
-                stack of half-filled sign-in forms is not worth preserving. */}
-            <View style={styles.footer}>
-              <Pressable
-                style={styles.alt}
-                onPress={() => router.replace("/login")}
-                disabled={checking}
-                accessibilityRole="link"
-                accessibilityState={{ disabled: checking }}
-              >
-                <Text style={styles.altLabel}>Sign in with email instead</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.alt}
-                onPress={() => router.replace("/signup")}
-                disabled={checking}
-                accessibilityRole="link"
-                accessibilityState={{ disabled: checking }}
-              >
-                <Text style={styles.altLabel}>Create an account</Text>
-              </Pressable>
-            </View>
           </Card>
+
+          {/* The other two doors. An athlete who arrives here holding an email
+              and a password rather than a token is otherwise stranded: this
+              screen can only accept a token. `replace`, not `push`, because the
+              three entry points are equivalent rather than nested — a back
+              stack of half-filled sign-in forms is not worth preserving.
+
+              A grouped list rather than two tinted text links, and OUTSIDE the
+              card: each row goes to another screen, which is the shape
+              `ListRow` exists for, and the chevron is what promises there is a
+              screen underneath. Leaving them inside the card would have made
+              them read as part of the pairing form they are the alternative to.
+
+              The `checking` guard moved inside each handler because `ListRow`
+              takes no `disabled` — a tap mid-verification is ignored either
+              way, and the rows never looked disabled to begin with. */}
+          <List header="Other ways in" style={styles.alternatives}>
+            <ListRow
+              title="Sign in with email instead"
+              chevron
+              onPress={() => {
+                if (checking) return;
+                router.replace("/login");
+              }}
+            />
+            <ListRow
+              title="Create an account"
+              chevron
+              isLast
+              onPress={() => {
+                if (checking) return;
+                router.replace("/signup");
+              }}
+            />
+          </List>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -330,6 +368,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     backgroundColor: color.brandStrong,
     borderRadius: radius.control,
+    // The squircle iOS draws itself — every non-pill corner in the app carries
+    // it, and the gradient clipped inside is where it shows most.
+    borderCurve: "continuous",
     marginTop: space.xl,
     overflow: "hidden",
   },
@@ -343,14 +384,21 @@ const styles = StyleSheet.create({
   actionLabel: { ...text.baseSemi, color: color.ink },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
+  /**
+   * A figure inside one of those sentences. Nested in `problem`, so it inherits
+   * that size and colour and changes only the face — the mono, tabular figures
+   * every numeral in this app is required to have.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
   dev: {
     minHeight: target.min,
     justifyContent: "center",
     marginTop: target.gap,
   },
   devLabel: { ...text.baseSemi, color: color.muted },
-  /** `target.gap` between the two links, so neither steals the other's tap. */
-  footer: { marginTop: target.gap, gap: target.gap },
-  alt: { minHeight: target.min, justifyContent: "center" },
-  altLabel: { ...text.baseSemi, color: color.brandText },
+  /**
+   * The grouped list of other doors, one section below the card. The rows carry
+   * their own 52pt height and their own separator, so nothing here spaces them.
+   */
+  alternatives: { marginTop: layout.section },
 });

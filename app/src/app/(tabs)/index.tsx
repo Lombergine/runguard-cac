@@ -85,6 +85,7 @@ import type {
   ReadinessState,
   RecoverySnapshot,
 } from "../../lib/types";
+import { dim } from "../../theme/press";
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
@@ -427,7 +428,7 @@ export default function CheckInScreen() {
               onPress={() => router.replace("/login")}
               accessibilityRole="button"
               accessibilityLabel="Sign in to RunGuard"
-              style={styles.loadErrorAction}
+              style={({ pressed }) => [styles.loadErrorAction, dim(pressed)]}
             >
               <Text style={styles.loadErrorActionLabel}>Sign in</Text>
             </Pressable>
@@ -438,7 +439,7 @@ export default function CheckInScreen() {
                 setReloadKey((n) => n + 1);
               }}
               accessibilityRole="button"
-              style={styles.loadErrorAction}
+              style={({ pressed }) => [styles.loadErrorAction, dim(pressed)]}
             >
               <Text style={styles.loadErrorActionLabel}>Try again</Text>
             </Pressable>
@@ -476,7 +477,7 @@ export default function CheckInScreen() {
             accessibilityRole="button"
             accessibilityLabel="Ask the RunGuard coach"
             hitSlop={hitSlopFor(styles.headerAction)}
-            style={styles.headerAction}
+            style={({ pressed }) => [styles.headerAction, dim(pressed)]}
           >
             <Text style={styles.headerActionLabel}>Ask RunGuard</Text>
           </Pressable>
@@ -485,7 +486,7 @@ export default function CheckInScreen() {
             accessibilityRole="button"
             accessibilityLabel="Settings"
             hitSlop={hitSlopFor(styles.headerAction)}
-            style={styles.headerAction}
+            style={({ pressed }) => [styles.headerAction, dim(pressed)]}
           >
             <Text style={styles.headerActionLabel}>Settings</Text>
           </Pressable>
@@ -522,7 +523,7 @@ export default function CheckInScreen() {
               first at 7am.
             */}
             <Pressable
-              style={styles.addSoreness}
+              style={({ pressed }) => [styles.addSoreness, dim(pressed)]}
               onPress={() => setReopened(true)}
               accessibilityRole="button"
               accessibilityLabel="Add or change soreness for today"
@@ -908,6 +909,18 @@ const styles = StyleSheet.create({
   },
   wordmark: { ...text.title, color: color.ink },
   headerActions: { flexDirection: "row", gap: space.lg },
+  /**
+   * Every tappable on this screen is an OBJECT — a text link, a filled button,
+   * an outlined door — so all of them take `dim` from theme/press and none
+   * takes `rowPress`. `rowPress` flashes a fill across a SURFACE, and this
+   * screen has no list row to flash: its content is a card, a hero panel and a
+   * bento of tiles. The one place a fill does appear under a thumb is inside
+   * `CheckInCard`, which owns its own controls.
+   *
+   * The check-in card's ember "Done" is not touched here either — an ember
+   * primary drops its gradient to the flat `brandStrong` beneath rather than
+   * dimming, which is a richer signal and already consistent app-wide.
+   */
   headerAction: { paddingVertical: space.xs, paddingHorizontal: space.xs },
   headerActionLabel: { ...text.meta, color: color.brandText },
   page: {
@@ -923,6 +936,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: space.xl,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     backgroundColor: color.brand,
   },
   loadErrorActionLabel: { ...text.baseSemi, color: color.ink },
@@ -944,13 +958,19 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.ruleSoft,
     borderRadius: radius.card,
+    borderCurve: "continuous",
     ...shadow.card,
   },
-  /** Sits inside the panel's rule, so it takes the same top corners. */
+  /**
+   * Sits inside the panel's rule, so it takes the same top corners — and the
+   * same `borderCurve`, or the hairline would trace a circular arc across the
+   * squircle it is capping.
+   */
   emberEdge: {
     height: space.xs,
     borderTopLeftRadius: radius.card,
     borderTopRightRadius: radius.card,
+    borderCurve: "continuous",
   },
   panelBody: { padding: layout.cardPadding },
 
@@ -983,6 +1003,7 @@ const styles = StyleSheet.create({
     width: "70%",
     marginTop: space.md,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     backgroundColor: color.well,
   },
 
@@ -1007,6 +1028,12 @@ const styles = StyleSheet.create({
    * The way back into soreness after the check-in is done. An outlined control,
    * not the ember: the ember is reserved for the card's one system action, and
    * this is a door rather than a commitment.
+   *
+   * `target.min` and not `target.row`, and no slab around it: this is a
+   * standalone control, not a grouped-list row. A one-row `List` here would
+   * put a second white surface directly above the readiness hero and read as a
+   * card competing with it, which is the opposite of what an outline is for.
+   * It dims like the object it is — see `headerAction`.
    */
   addSoreness: {
     minHeight: target.min,
@@ -1015,6 +1042,7 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.rule,
     borderRadius: radius.card,
+    borderCurve: "continuous",
     marginTop: space.md,
   },
   addSorenessLabel: { ...text.base, color: color.ink2 },

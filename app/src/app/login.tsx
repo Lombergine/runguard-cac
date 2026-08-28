@@ -26,7 +26,7 @@
  * rolling back would put an unproven token in the keychain). So this issues both
  * requests itself.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -46,9 +46,10 @@ import { Card } from "../components/Card";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
-import { backOnlyHeader } from "../theme/header";
+import { useBackOnlyHeader } from "../theme/header";
+import { dim } from "../theme/press";
 import { color } from "../theme/tokens";
-import { font, text } from "../theme/type";
+import { font, tabular, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /** Matches lib/api: no health endpoint exists, so a wrong base URL just hangs. */
@@ -115,8 +116,14 @@ type Problem =
  * "wrong shape" mean is not the same for a password and for a 43-character
  * code. Everything else reads identically either way, which is the point of
  * sharing the union.
+ *
+ * Returns a NODE rather than a string because two of these sentences contain a
+ * figure — the code's 40 characters and the server's status — and every numeral
+ * in this app is mono and tabular (visual-spec non-negotiable #3), prose
+ * included. The nested `Text` changes the face and nothing else; the sentence
+ * still renders as one paragraph in one line style.
  */
-function explain(problem: Problem, mode: Mode): string {
+function explain(problem: Problem, mode: Mode): ReactNode {
   switch (problem.kind) {
     case "empty":
       return mode === "password"
@@ -125,7 +132,13 @@ function explain(problem: Problem, mode: Mode): string {
     case "malformed":
       return mode === "password"
         ? "That email doesn't look right. Check it and try again."
-        : "That is not the shape of a pairing code. It begins with dt_ and has 40 hexadecimal characters after that. Copy the whole line.";
+        : (
+            <>
+              That is not the shape of a pairing code. It begins with dt_ and
+              has <Text style={styles.figure}>40</Text> hexadecimal characters
+              after that. Copy the whole line.
+            </>
+          );
     case "unauthorized":
       return "That code was not recognised. Open Profile → Pair the RunGuard iPhone app on the web app and copy it again.";
     case "rejected":
@@ -135,7 +148,13 @@ function explain(problem: Problem, mode: Mode): string {
       // `localhost` on a physical phone, is otherwise invisible from here.
       return `Could not reach the server at ${BASE_URL}. On a phone that address must be the computer's LAN address, not localhost.`;
     case "server":
-      return `The server answered with ${problem.status}. You are not signed in.`;
+      return (
+        <>
+          The server answered with{" "}
+          <Text style={styles.figure}>{problem.status}</Text>. You are not signed
+          in.
+        </>
+      );
     case "noToken":
       return "The server logged you in but sent nothing this app can use to stay logged in. Contact your coach.";
     case "storage":
@@ -334,7 +353,7 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       {/* Back only — these screens carry their own heading in the content. */}
-      <Stack.Screen options={backOnlyHeader()} />
+      <Stack.Screen options={useBackOnlyHeader()} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -360,10 +379,15 @@ export default function LoginScreen() {
                 return (
                   <Pressable
                     key={option.id}
-                    style={[
+                    // `dim`, not `rowPress`: a segment is an OBJECT inside a
+                    // control, not a list surface, and flashing a fill across
+                    // it would fight the fill that already says which half is
+                    // selected. See theme/press.
+                    style={({ pressed }) => [
                       styles.segment,
                       index > 0 && styles.segmentRuled,
                       active && styles.segmentOn,
+                      dim(pressed),
                     ]}
                     onPress={() => switchTo(option.id)}
                     disabled={busy}
@@ -475,7 +499,7 @@ export default function LoginScreen() {
               // Runs the identical verify path. The value is never written into
               // the visible field, so a screenshot of a dev build cannot leak it.
               <Pressable
-                style={styles.quiet}
+                style={({ pressed }) => [styles.quiet, dim(pressed)]}
                 onPress={() => attemptPairing(DEV_TOKEN)}
                 disabled={busy}
                 accessibilityRole="button"
@@ -486,7 +510,7 @@ export default function LoginScreen() {
             ) : null}
 
             <Pressable
-              style={styles.alt}
+              style={({ pressed }) => [styles.alt, dim(pressed)]}
               onPress={() => router.replace("/signup")}
               disabled={busy}
               accessibilityRole="link"
@@ -541,12 +565,21 @@ const styles = StyleSheet.create({
   title: { ...text.title, color: color.ink, marginTop: space.md },
   body: { ...text.base, color: color.ink2, marginTop: space.md },
 
+  /**
+   * The app's only segmented control, and the one place it has to read as a
+   * SYSTEM control rather than a drawn rectangle.
+   *
+   * The iOS system fill, and NO border — the same argument `input` below makes:
+   * a native control is a filled track, not an outlined box, and the outline is
+   * the web convention that gives away a form control dropped into an app. The
+   * track was `well` inside a `rule` box; `fill` is Apple's neutral grey at
+   * 12%, and it is not a brand colour and must never be used as one.
+   */
   segments: {
     flexDirection: "row",
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
+    backgroundColor: color.fill,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     overflow: "hidden",
     marginTop: space.xl,
   },
@@ -560,12 +593,17 @@ const styles = StyleSheet.create({
   /** The rule between the halves, not around them — one control, two choices. */
   segmentRuled: { borderLeftWidth: ruleWidth, borderLeftColor: color.rule },
   /**
-   * The soft ember wash, which is a FILL: `ink` on it is 12.7:1, so the label
-   * stays a normal word rather than needing `brandText`. Colour is never the
-   * only signal — the label also goes semibold and the ground lifts out of the
-   * sunken track.
+   * The selected half is the same neutral grey one step up — `fillStrong` (16%)
+   * over `fill` (12%). It used to be the soft ember wash; the ember now belongs
+   * only to the primary action below, so this stops reading as a branded
+   * control and starts reading as a system one, and the screen keeps exactly
+   * one ember on the thing you tap to commit.
+   *
+   * That step is deliberately small, and colour is never the only signal: the
+   * selected label also goes semibold and from `ink2` up to `ink`. Either
+   * signal alone would carry the state.
    */
-  segmentOn: { backgroundColor: color.accentSoft },
+  segmentOn: { backgroundColor: color.fillStrong },
   segmentLabel: { ...text.base, color: color.ink2 },
   segmentLabelOn: { ...text.baseSemi, color: color.ink },
 
@@ -622,6 +660,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     backgroundColor: color.brandStrong,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     marginTop: space.xl,
     overflow: "hidden",
   },
@@ -633,6 +672,13 @@ const styles = StyleSheet.create({
   actionLabel: { ...text.baseSemi, color: color.ink },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
+  /**
+   * A numeral inside one of those sentences. Nested in the surrounding `Text`,
+   * so it inherits that line's size, leading and colour and changes only the
+   * face — which is the whole rule: if it is a number, it is mono and tabular,
+   * prose included.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
   quiet: {
     minHeight: target.min,
     justifyContent: "center",
