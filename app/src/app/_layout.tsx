@@ -49,7 +49,9 @@ export default function RootLayout() {
   return (
     <SessionProvider>
       <SafeAreaProvider>
-        <StatusBar style="dark" />
+        {/* `auto` follows the appearance: dark glyphs on the cream ground, light
+            glyphs on the dark one. Pinned to "dark" it was unreadable in dark mode. */}
+        <StatusBar style="auto" />
         <Launch fontsReady={fontsLoaded || Boolean(fontError)} />
       </SafeAreaProvider>
     </SessionProvider>

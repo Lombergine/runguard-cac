@@ -61,7 +61,7 @@ import { dayLabel, localDay, parseLocalDay } from "../lib/dates";
 import { formatDistance } from "../lib/units";
 import { ruleWidth, space } from "../theme/space";
 import { Panel } from "./Panel";
-import { color } from "../theme/tokens";
+import { color, staticColor } from "../theme/tokens";
 import { text } from "../theme/type";
 
 /** One day of `calendar`, which rides along outside the `Profile` slice. */
@@ -149,7 +149,7 @@ const RUNGS = 5;
 /** The palest rung — see the header note on why it is not paler than this. */
 const RAMP_LOW = channels(color.brand);
 /** The hottest rung: emberHot carried down into ink. */
-const RAMP_HIGH = mix(channels(color.emberHot), channels(color.ink), 0.55);
+const RAMP_HIGH = mix(channels(color.emberHot), channels(staticColor.ink), 0.55);
 
 /**
  * Five rungs, palest first. EXPORTED for the HR-zone bar on the Stats screen,

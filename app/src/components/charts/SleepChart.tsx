@@ -54,7 +54,7 @@ import { ChartAbsent, Plot } from "../chart/Plot";
 import { SLEEP_TARGET_H, sleepSeries } from "../../lib/chartData";
 import type { SleepDay } from "../../lib/types";
 import { space } from "../../theme/space";
-import { color } from "../../theme/tokens";
+import { color, staticColor } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 export type SleepChartProps = {
@@ -156,7 +156,7 @@ export function SleepChart({ sleep30 }: SleepChartProps) {
               <RefLine
                 frame={frame}
                 value={SLEEP_TARGET_H}
-                stroke={color.muted}
+                stroke={staticColor.muted}
               />
               {/* Real readings only. A null night draws no bar at all — see
                   the header: this is where the website's `hours ?? 0` would

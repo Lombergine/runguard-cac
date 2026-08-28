@@ -1,3 +1,4 @@
+import { DynamicColorIOS, Platform } from "react-native";
 /**
  * Colour tokens — the "sunrise" system, ported from the website.
  *
@@ -35,24 +36,50 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 
+/**
+ * A token that changes with the system appearance.
+ *
+ * ── WHY `DynamicColorIOS` AND NOT A THEME HOOK ─────────────────────────────
+ *
+ * The obvious way to add dark mode is `useColorScheme()` plus dynamic styles.
+ * It is also the wrong way here: every screen in this app builds its styles
+ * with a module-level `StyleSheet.create`, so a hook would mean converting
+ * roughly a hundred static stylesheets into functions of the theme, touching
+ * every file to change no layout at all.
+ *
+ * `DynamicColorIOS` returns ONE opaque value that the OS resolves per
+ * appearance, at draw time. A static stylesheet holding it adapts on its own.
+ * So dark mode lands in this file and nowhere else, and — the part that
+ * matters — a screen written next month gets it without knowing it exists.
+ *
+ * The dark values are the Claude Design "Mobile app discrepancy" study's own
+ * `.dark` block, not invented here.
+ *
+ * NOT applied to: the ember gradient stops, which `LinearGradient` needs as
+ * real strings, and the `…Text` accents, whose whole purpose is a measured
+ * contrast ratio against a known ground. Those are handled explicitly below.
+ */
+const dyn = (light: string, dark: string) =>
+  Platform.OS === "ios" ? DynamicColorIOS({ light, dark }) : light;
+
 export const color = {
   /* Surfaces — warm paper, three elevation steps (globals.css:12-24). */
-  bg: "#FAF7F2",
+  bg: dyn("#FAF7F2", "#141210"),
   /** Top of the page gradient; the website's ground sunrises over 420px. */
-  bgTop: "#FDF3E3",
-  card: "#FFFFFF",
+  bgTop: dyn("#FDF3E3", "#241C11"),
+  card: dyn("#FFFFFF", "#1F1C18"),
   /** Sunken. The old palette called this `well`; kept as the empty-slot fill. */
-  well: "#F4EFE6",
-  surface3: "#ECE5D8",
+  well: dyn("#F4EFE6", "#242019"),
+  surface3: dyn("#ECE5D8", "#2C271F"),
 
   /* Ink. Both clear 4.5:1 on every surface above (ink 14.6+, ink2 6.4+). */
-  ink: "#221D15",
-  ink2: "#55503F",
+  ink: dyn("#221D15", "#F6F2EB"),
+  ink2: dyn("#55503F", "#CDC5B8"),
   /**
    * Darkened from the website's #94897b (3.21:1 → 4.83:1 on bg, 4.51 on well).
    * Same hue and saturation, lower lightness.
    */
-  muted: "#756C5F",
+  muted: dyn("#756C5F", "#A79E8F"),
 
   /*
    * Rules. The website uses translucent ink rather than a grey.
@@ -65,9 +92,9 @@ export const color = {
    * `muted` above and `ruleWidth` in space.ts — a line that has to survive
    * direct sunlight on a track needs more contrast than one read indoors.
    */
-  rule: "rgba(34,29,21,0.14)",
-  ruleSoft: "rgba(34,29,21,0.09)",
-  ruleStrong: "rgba(34,29,21,0.24)",
+  rule: dyn("rgba(34,29,21,0.14)", "rgba(255,255,255,0.14)"),
+  ruleSoft: dyn("rgba(34,29,21,0.09)", "rgba(255,255,255,0.07)"),
+  ruleStrong: dyn("rgba(34,29,21,0.24)", "rgba(255,255,255,0.24)"),
 
   /* ── The ember signature — "the fun" (globals.css:26-31) ───────────── */
   /** FILL only: bars, dots, gradient stops. 2.01:1 — never put a glyph on it. */
@@ -134,9 +161,9 @@ export const color = {
    * ------------------------------------------------------------------ */
 
   /** The ground under a text field or an inert segmented track. */
-  fill: "rgba(120,120,128,0.12)",
+  fill: dyn("rgba(120,120,128,0.12)", "rgba(120,120,128,0.26)"),
   /** The same, one step up — a selected segment. */
-  fillStrong: "rgba(120,120,128,0.16)",
+  fillStrong: dyn("rgba(120,120,128,0.16)", "rgba(120,120,128,0.32)"),
   /**
    * What a row flashes while your thumb is down.
    *
@@ -145,9 +172,9 @@ export const color = {
    * over 120ms linear. A list row has no hover state on a phone, so the
    * press is the only feedback there is.
    */
-  press: "rgba(120,120,128,0.12)",
+  press: dyn("rgba(120,120,128,0.12)", "rgba(255,255,255,0.10)"),
   /** iOS placeholder grey. Not `muted` — placeholders sit lighter than labels. */
-  placeholder: "rgba(60,60,67,0.35)",
+  placeholder: dyn("rgba(60,60,67,0.35)", "rgba(235,235,245,0.35)"),
 } as const;
 
 /**
@@ -174,6 +201,30 @@ export const shadow = {
     boxShadow:
       "0px 1px 2px 0px rgba(34, 29, 21, 0.04), 0px 10px 28px -16px rgba(34, 29, 21, 0.14)",
   },
+} as const;
+
+/**
+ * Raw light-mode strings, for the places a dynamic colour cannot go.
+ *
+ * `react-native-svg` types every paint prop as `string`, and the chart code
+ * does arithmetic on channels (`mix`, `channels`) which needs a parseable hex,
+ * not an opaque OS token. Those call sites read from here.
+ *
+ * The cost is honest and worth naming: **SVG paint does not follow the system
+ * appearance.** Chart strokes and the year-grid ramp stay light-mode values in
+ * dark mode. Fixing that properly means threading `useColorScheme()` into the
+ * chart components, which is a real change to how they are built rather than a
+ * token swap — worth doing, not worth faking.
+ */
+export const staticColor = {
+  ink: "#221D15",
+  ink2: "#55503F",
+  muted: "#756C5F",
+  card: "#FFFFFF",
+  bg: "#FAF7F2",
+  well: "#F4EFE6",
+  rule: "rgba(34,29,21,0.14)",
+  ruleSoft: "rgba(34,29,21,0.09)",
 } as const;
 
 export type ColorToken = keyof typeof color;

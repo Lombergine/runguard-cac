@@ -175,7 +175,7 @@ function Field({
       <Head title={label} note={note} />
       <TextInput
         style={[styles.input, style]}
-        placeholderTextColor={color.muted}
+        placeholderTextColor={color.placeholder}
         accessibilityLabel={label}
         {...input}
       />

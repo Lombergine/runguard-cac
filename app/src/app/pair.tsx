@@ -36,7 +36,7 @@ import { useSession } from "../lib/session";
 import { backOnlyHeader } from "../theme/header";
 import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
-import { layout, radius, ruleWidth, space, target } from "../theme/space";
+import { layout, radius, space, target } from "../theme/space";
 
 /** `dt_` + 20 random bytes as lowercase hex. An exact shape, so check it exactly. */
 const TOKEN_SHAPE = /^dt_[0-9a-f]{40}$/;
@@ -193,7 +193,7 @@ export default function PairScreen() {
               onChangeText={setDraft}
               editable={!checking}
               placeholder="dt_"
-              placeholderTextColor={color.muted}
+              placeholderTextColor={color.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
@@ -307,10 +307,9 @@ const styles = StyleSheet.create({
     fontFamily: font.mono,
     color: color.ink,
     // Sunken against the white card, the way the empty slot is: the field is a
-    // hole to paste into, and on the cream ground `bg` no longer reads as one.
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
+    // hole to paste into. The system fill with no border — the design's `.fld`.
+    backgroundColor: color.fill,
+    borderCurve: "continuous",
     borderRadius: radius.control,
     paddingHorizontal: space.md,
     paddingVertical: space.md,

@@ -59,7 +59,6 @@ import {
   CheckInCardSkeleton,
   SorenessList,
   type LoggedSoreness,
-  type EnergyAnswer,
 } from "../../components/CheckInCard";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
 import { Absent } from "../../components/Nothing";
@@ -92,20 +91,6 @@ import { text } from "../../theme/type";
 
 /** A coach's plan edit should reach the home screen without a manual reload. */
 const LIVE_REFRESH_MS = 25_000;
-
-/**
- * "How's your energy?" maps to `energy`, which is the only self-report field
- * readinessScore() reads (website/src/lib/engine.ts: 6/10 is its neutral
- * point).
- *
- * The question used to ask about sleep and wrote to this same column — there
- * has never been a sleep column on a check-in row — so the wire format and the
- * stored history are unchanged by the rewording. `low` keeps `bad`'s 3 for that
- * reason: a value here is compared against the athlete's own past answers by
- * `detectEnergyDecline` (website/src/lib/risk.ts:432), and re-scaling the low
- * end would have manufactured a decline on the first check-in after the change.
- */
-const ENERGY_BY_ANSWER: Record<EnergyAnswer, number> = { low: 3, ok: 6, good: 9 };
 
 /**
  * The three sides a lateral part can be filed under, and what each one
@@ -358,24 +343,31 @@ export default function CheckInScreen() {
   }
 
   /**
-   * The finishing write: the energy answer, and then the collapse.
+   * The collapse. There is no finishing WRITE any more.
    *
-   * The soreness rows are already on the server by now — each one was written
-   * as it was tapped — so this call carries only `energy`. It is safe for it to
-   * carry only that: `upsertCheckin` merges with `COALESCE`
-   * (website/src/lib/db.ts:420-426), so the soreness-only calls above did not
-   * blank anything and this one does not either.
+   * Every soreness row was already sent the moment it was tapped, and the
+   * energy question that used to be posted here is gone — soreness is the whole
+   * check-in now. So this only records that the athlete finished, locally.
+   *
+   * ── WHAT THIS COSTS, STATED PLAINLY ────────────────────────────────────────
+   * `energy` was the ONLY field this app ever wrote that `checkedInToday()`
+   * (lib/readiness.ts) opens on — it counts `energy`, `rpe` or `motivation`, and
+   * the app sends none of the other two. So readiness now renders `— unknown`
+   * for an athlete who reports soreness and nothing else.
+   *
+   * That is deliberate and it is NOT a bug to paper over. `readinessScore()`
+   * starts at 100 and only decrements on data it has, so an athlete whose only
+   * report is "nothing hurts" would score a perfect 100 computed from nothing —
+   * the exact failure `readiness.ts` documents at length and non-negotiable #6
+   * forbids. Opening the gate on soreness would print "Good to go" over three
+   * "Not recorded" tiles again.
+   *
+   * Restoring a readiness figure needs a self-report the score can actually
+   * stand on. That is a product decision, not something to fake here.
    */
-  async function finish(energy: EnergyAnswer) {
+  async function finish() {
     setSubmitting(true);
     setSubmitFailed(false);
-    try {
-      await postCheckin({ energy: ENERGY_BY_ANSWER[energy] });
-    } catch {
-      setSubmitFailed(true);
-      setSubmitting(false);
-      return;
-    }
     // The receipt is built from the mirror, which holds only rows the server
     // reported holding plus rows whose own write returned — so it cannot name
     // soreness the server does not have, and the uncleared list stops it

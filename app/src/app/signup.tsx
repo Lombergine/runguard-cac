@@ -462,7 +462,7 @@ function Field({
       </View>
       <TextInput
         style={[styles.input, style]}
-        placeholderTextColor={color.muted}
+        placeholderTextColor={color.placeholder}
         accessibilityLabel={label}
         {...input}
       />
@@ -514,10 +514,15 @@ const styles = StyleSheet.create({
   input: {
     ...text.base,
     color: color.ink,
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
+    /*
+     * The system fill, and NO border — the design's `.fld`. A native text field
+     * is a filled well, not an outlined box; the outline is a web convention
+     * that reads as a form control dropped into an app. The fill alone still
+     * says "type here" because it is sunken against the card.
+     */
+    backgroundColor: color.fill,
     borderRadius: radius.control,
+    borderCurve: "continuous",
     paddingHorizontal: space.md,
     // Explicit, because Android's default TextInput padding top-aligns the text
     // in a fixed-height box. 12 + the 24 line box + 12 is exactly target.min,

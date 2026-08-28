@@ -53,6 +53,16 @@ export const radius = {
   chip: 8,
   control: 10,
   card: 12,
+  /**
+   * The inset grouped list — `IOSList` in the design study's `ios-frame.jsx`.
+   *
+   * 26, and deliberately much rounder than `card`. iOS groups rows into a
+   * single soft slab and lets the corner do the grouping, where a web page
+   * would draw a border around each row. It is the one place in this app where
+   * a radius is doing structural work rather than softening an edge, which is
+   * why it does not simply reuse `card`.
+   */
+  group: 26,
   /** Capsules and dots. Clamped to half the shorter side by RN — height-agnostic. */
   pill: 9999,
 } as const;
@@ -69,6 +79,12 @@ export const safetyRuleWidth = 3;
 export const target = {
   /** Minimum tap target, both axes. */
   min: 48,
+  /**
+   * A grouped-list row. 52 is the iOS standard and the design study's
+   * `IOSListRow`; it clears `min` and gives a two-line row room without
+   * growing. Rows use this; standalone controls still use `min`.
+   */
+  row: 52,
   /** Minimum gap between adjacent targets. */
   gap: space.sm,
 } as const;

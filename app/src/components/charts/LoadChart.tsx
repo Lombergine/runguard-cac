@@ -66,7 +66,7 @@ import { DAILY_DAYS, loadSeries } from "../../lib/chartData";
 import type { DailyPoint } from "../../lib/types";
 import { ruleWidth, space } from "../../theme/space";
 import { Panel } from "../Panel";
-import { color } from "../../theme/tokens";
+import { color, staticColor } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /* ------------------------------------------------------------------ *
@@ -97,7 +97,7 @@ const CHRONIC = color.series1;
  * are drawn after the bars and in saturated colour, so they still read as the
  * layer on top.
  */
-const BAR = color.ink2;
+const BAR = staticColor.ink2;
 
 /* ------------------------------------------------------------------ *
  * Panel — the stats screen's information unit (`(tabs)/stats.tsx:107`). Local

@@ -76,21 +76,6 @@ import { color, shadow } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
 import { BodyMap } from "./BodyMap";
 
-/**
- * The energy question's three answers.
- *
- * This question used to ask "How did you sleep?". It no longer asks about sleep
- * at all, but the shape is unchanged and deliberately so: there has never been a
- * sleep column: the answer has always been written to `checkins.energy` (see
- * `ENERGY_BY_ANSWER` in app/(tabs)/index.tsx), so sleep was only ever a proxy
- * for the field this now names directly.
- *
- * It cannot simply be deleted. `checkedInToday` (lib/readiness.ts) opens only on
- * `energy`, `rpe` or `motivation` being non-null, and this is the ONLY one of
- * the three the app ever sends. Dropping the question would leave readiness
- * reading "— unknown" forever and the card unable to collapse to its receipt.
- */
-export type EnergyAnswer = "low" | "ok" | "good";
 
 /**
  * The soreness question's two answers.
@@ -165,11 +150,6 @@ export function SorenessList({
 
 type Option<T extends string> = { value: T; label: string };
 
-const ENERGY_OPTIONS: readonly Option<EnergyAnswer>[] = [
-  { value: "low", label: "Low" },
-  { value: "ok", label: "OK" },
-  { value: "good", label: "Good" },
-];
 
 const SORE_OPTIONS: readonly Option<SoreGate>[] = [
   { value: "no", label: "No" },
@@ -276,8 +256,15 @@ type CheckInCardProps = {
    * follow-ups, and the mirror in `logged`.
    */
   onLogSoreness: (part: string, side: Side | null, severity: number | null) => void;
-  /** Finishes the check-in: the screen posts the energy answer and collapses. */
-  onComplete: (energy: EnergyAnswer) => void;
+  /**
+   * Finishes the check-in and collapses the card.
+   *
+   * Takes NOTHING now. The card used to hand back an energy answer; the
+   * question was removed, and soreness rows are already on the server by the
+   * time this fires — each one is written the moment it is tapped. So this is
+   * purely "the athlete is done", not a payload.
+   */
+  onComplete: () => void;
   /** True while any write is in flight. Targets stay put but go inert. */
   submitting: boolean;
   /** Why the last soreness write did not do what it said. Null when it did. */
@@ -305,7 +292,6 @@ export function CheckInCard({
    * answer or discard the new one. `onComplete` is not reachable in this mode
    * (see the footer), so nothing re-posts `energy`.
    */
-  const [energy, setEnergy] = useState<EnergyAnswer | null>(null);
   const [gate, setGate] = useState<SoreGate | null>(sorenessOnly ? "yes" : null);
   const [part, setPart] = useState<string | null>(null);
   const [side, setSide] = useState<Side | null>(null);
@@ -332,9 +318,10 @@ export function CheckInCard({
    * cannot be stored and a part with no severity is not an answer.
    */
   function pickGate(value: SoreGate) {
-    if (energy === null) return;
     setGate(value);
-    if (value === "no") onComplete(energy);
+    // "No" is a complete answer on its own: nothing to locate, nothing to
+    // score. Still two taps for the majority state.
+    if (value === "no") onComplete();
   }
 
   /** Tapping a part selects it for scoring; tapping it again puts it down. */
@@ -365,8 +352,6 @@ export function CheckInCard({
     onLogSoreness(part, side, currentSeverity === value ? null : value);
   }
 
-  // In `sorenessOnly` the energy question is not asked at all — see the header.
-  const askingSoreness = sorenessOnly || energy !== null;
   const askingWhere = gate === "yes";  // `sorenessOnly` seeds the gate above.
   const ready = entries.length > 0;
 
@@ -382,30 +367,21 @@ export function CheckInCard({
           <Text style={styles.note}>{dateLabel}</Text>
         </View>
 
-        <Text style={styles.prompt}>
-          {askingSoreness ? "Anything sore?" : "How's your energy?"}
-        </Text>
+        <Text style={styles.prompt}>Anything sore?</Text>
 
         {/* Pushes the targets into the bottom third, one-handed reach. */}
         <View style={styles.spacer} />
 
-        {sorenessOnly ? null : askingSoreness ? (
-          // Hidden in `sorenessOnly`: tapping "Add soreness" WAS the yes, and a
-          // "No" here would call onComplete with no energy answer — a dead
-          // control that looks live.
+        {sorenessOnly ? null : (
+          // Hidden when the card was reopened to edit: tapping "Add or change
+          // soreness" WAS the yes, so a "No" here would be a dead control that
+          // looks live.
           <AnswerRow
             options={SORE_OPTIONS}
             selected={gate}
             disabled={submitting}
             expanded={askingWhere}
             onPick={pickGate}
-          />
-        ) : (
-          <AnswerRow
-            options={ENERGY_OPTIONS}
-            selected={energy}
-            disabled={false}
-            onPick={setEnergy}
           />
         )}
 
@@ -498,7 +474,7 @@ export function CheckInCard({
                 // check-in already happened — Done just closes. Every severity
                 // was written the moment it was tapped, so nothing is pending.
                 if (sorenessOnly) onDone?.();
-                else if (energy !== null) onComplete(energy);
+                else onComplete();
               }}
               style={[styles.done, ready && styles.doneReady]}
             >

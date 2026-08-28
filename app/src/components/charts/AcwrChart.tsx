@@ -50,7 +50,7 @@ import { ACWR_BAND, ACWR_DANGER, DAILY_DAYS, acwrSeries } from "../../lib/chartD
 import type { DailyPoint } from "../../lib/types";
 import { space } from "../../theme/space";
 import { Panel } from "../Panel";
-import { color } from "../../theme/tokens";
+import { color, staticColor } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /* ------------------------------------------------------------------ *
@@ -84,7 +84,7 @@ import { text } from "../../theme/type";
  * the data line both stay legible through it, dark enough to read as a shaded
  * region rather than a printing artefact.
  */
-const BAND_FILL = color.ink;
+const BAND_FILL = staticColor.ink;
 const BAND_OPACITY = 0.06;
 
 /**
@@ -92,7 +92,7 @@ const BAND_OPACITY = 0.06;
  * unmistakably a drawn line, and it is quieter than the 2px ember data line —
  * which is the hierarchy `RefLine`'s own docblock asks for.
  */
-const REF_STROKE = color.muted;
+const REF_STROKE = staticColor.muted;
 
 /* ------------------------------------------------------------------ *
  * Panel — the stats screen's information unit (`(tabs)/stats.tsx:107`): title
