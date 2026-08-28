@@ -31,7 +31,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
 
 import { color } from "../theme/tokens";
-import { layout, radius, ruleWidth, space } from "../theme/space";
+import { layout, ruleWidth, space } from "../theme/space";
 import { font, text } from "../theme/type";
 
 /** The website's `--ember` stops and its 135°, as everywhere else. */

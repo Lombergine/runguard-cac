@@ -29,13 +29,12 @@
  *
  * The design agrees — its gauge lives only inside the `didCheckIn` branch.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
 
 import { useReducedMotion } from "../lib/useReducedMotion";
-import { staticColor } from "../theme/tokens";
-import { color } from "../theme/tokens";
+import { color, staticColor } from "../theme/tokens";
 import { duration } from "../theme/space";
 import { font, tabular, text } from "../theme/type";
 
@@ -68,10 +67,16 @@ export type ReadinessRingProps = {
 
 export function ReadinessRing({ value, tint }: ReadinessRingProps) {
   const reduced = useReducedMotion();
-  /* Starts empty and draws in. Under reduced motion the duration collapses to
-     zero, so it arrives complete rather than not arriving — the house pattern
-     from `(tabs)/index.tsx`, kept identical. */
-  const progress = useRef(new Animated.Value(ARC)).current;
+  /*
+     Starts empty and draws in. Under reduced motion the duration collapses to
+     zero, so it arrives complete rather than not arriving.
+
+     `useState` with a lazy initialiser rather than `useRef(...).current`: the
+     latter reads a ref during render, which `react-hooks/refs` flags and which
+     is genuinely unsafe under concurrent rendering. This constructs the value
+     exactly once and never re-reads it during render.
+  */
+  const [progress] = useState(() => new Animated.Value(ARC));
 
   useEffect(() => {
     Animated.timing(progress, {

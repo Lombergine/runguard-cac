@@ -33,7 +33,7 @@
 import { View, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 
 import { color } from "../theme/tokens";
-import { layout, space } from "../theme/space";
+import { space } from "../theme/space";
 import { text } from "../theme/type";
 
 export type SectionProps = {
