@@ -88,6 +88,7 @@ import { readinessState } from "../../lib/readiness";
 import { readinessBand, readinessValue, type ReadinessBand } from "../../lib/readinessVerdict";
 import type { Profile } from "../../lib/types";
 import { layout, radius, space, target } from "../../theme/space";
+import { dim } from "../../theme/press";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
@@ -477,7 +478,7 @@ export default function RecoveryScreen() {
               onPress={() => void refresh()}
               accessibilityRole="button"
               accessibilityLabel="Try loading your recovery data again"
-              style={styles.retry}
+              style={({ pressed }) => [styles.retry, dim(pressed)]}
             >
               <Text style={styles.retryLabel}>Try again</Text>
             </Pressable>

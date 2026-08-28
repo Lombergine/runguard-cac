@@ -38,6 +38,7 @@ import { dayLabel } from "../../lib/dates";
 import { useProfile } from "../../lib/profileStore";
 import type { PlanAdjustment, RecentRun } from "../../lib/types";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
+import { dim } from "../../theme/press";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
@@ -205,7 +206,7 @@ export default function RunsScreen() {
             <Pressable
               onPress={() => void refresh()}
               accessibilityRole="button"
-              style={styles.retry}
+              style={({ pressed }) => [styles.retry, dim(pressed)]}
             >
               <Text style={styles.retryLabel}>Try again</Text>
             </Pressable>

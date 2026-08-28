@@ -73,8 +73,6 @@ import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
 import { useInvalidateProfile } from "../../lib/profileStore";
 import { useLiveRefresh } from "../../lib/useLiveRefresh";
 
-/** A coach's plan edit should reach the home screen without a manual reload. */
-const LIVE_REFRESH_MS = 25_000;
 import {
   readinessBand,
   readinessValue,
@@ -91,6 +89,9 @@ import type {
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
+
+/** A coach's plan edit should reach the home screen without a manual reload. */
+const LIVE_REFRESH_MS = 25_000;
 
 /**
  * "How's your energy?" maps to `energy`, which is the only self-report field

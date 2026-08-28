@@ -50,6 +50,7 @@ import { formatDistance } from "../../lib/units";
 import { layout, radius, space, target } from "../../theme/space";
 import { Card } from "../../components/Card";
 import { Panel } from "../../components/Panel";
+import { dim } from "../../theme/press";
 import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
@@ -242,7 +243,7 @@ export default function StatsScreen() {
               onPress={() => void refresh()}
               accessibilityRole="button"
               accessibilityLabel="Try loading your stats again"
-              style={styles.retry}
+              style={({ pressed }) => [styles.retry, dim(pressed)]}
             >
               <Text style={styles.retryLabel}>Try again</Text>
             </Pressable>

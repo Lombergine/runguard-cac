@@ -46,6 +46,7 @@ import { useProfile } from "../../lib/profileStore";
 import { fitnessKnown } from "../../lib/readiness";
 import type { Profile, RaceHistoryEntry, UpcomingRace } from "../../lib/types";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
+import { dim } from "../../theme/press";
 import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
@@ -408,7 +409,7 @@ export default function RacesScreen() {
               onPress={() => void refresh()}
               accessibilityRole="button"
               accessibilityLabel="Try loading your races again"
-              style={styles.retry}
+              style={({ pressed }) => [styles.retry, dim(pressed)]}
             >
               <Text style={styles.retryLabel}>Try again</Text>
             </Pressable>

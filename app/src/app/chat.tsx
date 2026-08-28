@@ -37,6 +37,7 @@ import { useSession } from "../lib/session";
 import type { ChatMessage } from "../lib/types";
 import { Panel } from "../components/Panel";
 import { screenHeader } from "../theme/header";
+import { dim } from "../theme/press";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
@@ -366,7 +367,7 @@ export default function ChatScreen() {
               accessibilityLabel="Message"
             />
             <Pressable
-              style={styles.send}
+              style={({ pressed }) => [styles.send, dim(pressed)]}
               // Wrapped, not passed by reference: `send` now takes the text,
               // and Pressable would hand it a gesture event.
               onPress={() => send(draft)}

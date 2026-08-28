@@ -120,6 +120,34 @@ export const color = {
   /* Chart furniture (globals.css:23-24). */
   grid: "#ECE6DA",
   baseline: "#D8D0C0",
+
+  /* ------------------------------------------------------------------ *
+   * iOS system fills — from the Claude Design "Mobile app discrepancy"
+   * study, which restated this product as a native app rather than a web
+   * page in a wrapper.
+   *
+   * These are NOT brand colours and must never be used as one. They are
+   * Apple's own neutral fills — a single grey (120,120,128) at different
+   * alphas — and they are what makes a control read as a system control
+   * rather than a drawn rectangle. The brand stays where the brand belongs:
+   * one ember per screen, on the thing you tap to commit something.
+   * ------------------------------------------------------------------ */
+
+  /** The ground under a text field or an inert segmented track. */
+  fill: "rgba(120,120,128,0.12)",
+  /** The same, one step up — a selected segment. */
+  fillStrong: "rgba(120,120,128,0.16)",
+  /**
+   * What a row flashes while your thumb is down.
+   *
+   * The design is explicit that this is a FLASH on the whole row, not a
+   * hover tint and not an opacity fade: `.row:active { background: var(--press) }`
+   * over 120ms linear. A list row has no hover state on a phone, so the
+   * press is the only feedback there is.
+   */
+  press: "rgba(120,120,128,0.12)",
+  /** iOS placeholder grey. Not `muted` — placeholders sit lighter than labels. */
+  placeholder: "rgba(60,60,67,0.35)",
 } as const;
 
 /**

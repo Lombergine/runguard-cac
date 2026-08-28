@@ -431,7 +431,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.cardPadding,
     borderRadius: radius.control,
   },
-  rowPressed: { backgroundColor: color.accentSoft },
+  /**
+   * The system fill, NOT the ember wash it used to be.
+   *
+   * `accentSoft` made every settings row a brand surface for as long as a thumb
+   * was on it, which spends the ember on the most ordinary control in the app
+   * and reads as a highlight rather than a press. iOS flashes a neutral grey
+   * across the row; the brand is reserved for the thing you tap to commit
+   * something. See theme/press.ts.
+   */
+  rowPressed: { backgroundColor: color.press },
   rowBody: { flex: 1, gap: space.xs },
   rowLabel: { ...text.baseSemi, color: color.ink },
   rowNote: { ...text.meta, color: color.muted },
