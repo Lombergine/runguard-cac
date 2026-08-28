@@ -32,12 +32,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 
 import { Card } from "../components/Card";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
+import { backOnlyHeader } from "../theme/header";
 import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
@@ -249,7 +250,9 @@ export default function SignupScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      {/* Back only — these screens carry their own heading in the content. */}
+      <Stack.Screen options={backOnlyHeader()} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -470,9 +473,22 @@ function Field({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
   fill: { flex: 1 },
+  /**
+   * TOP-ALIGNED, unlike `login` and `pair`, which centre.
+   *
+   * Those two fit on one screen, so centring reads as deliberate placement.
+   * This screen does not: six fields and a three-row radio group run to roughly
+   * one and a half viewports. `flexGrow: 1` with `justifyContent: "center"`
+   * centres content that OVERFLOWS its container by pushing equal amounts off
+   * both ends — and the amount pushed off the top is unreachable, because a
+   * ScrollView cannot scroll above its content origin. The eyebrow, the heading
+   * and the first line of the lede were simply gone.
+   *
+   * It was latent before and became visible when the back header took ~96pt out
+   * of the viewport. Top-aligning is the fix at every height.
+   */
   page: {
     flexGrow: 1,
-    justifyContent: "center",
     paddingHorizontal: layout.page,
     paddingVertical: layout.section,
   },
@@ -531,7 +547,7 @@ const styles = StyleSheet.create({
   dot: {
     width: space.lg,
     height: space.lg,
-    borderRadius: space.sm,
+    borderRadius: radius.pill,
     borderWidth: ruleWidth,
     borderColor: color.ruleStrong,
     backgroundColor: color.card,

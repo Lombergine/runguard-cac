@@ -59,7 +59,7 @@ import {
   CheckInCardSkeleton,
   SorenessList,
   type LoggedSoreness,
-  type SleepAnswer,
+  type EnergyAnswer,
 } from "../../components/CheckInCard";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
 import { Absent } from "../../components/Nothing";
@@ -93,11 +93,18 @@ import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /**
- * "How did you sleep?" maps to `energy`, which is the only self-report field
+ * "How's your energy?" maps to `energy`, which is the only self-report field
  * readinessScore() reads (website/src/lib/engine.ts: 6/10 is its neutral
- * point). There is no sleep column on a check-in row.
+ * point).
+ *
+ * The question used to ask about sleep and wrote to this same column — there
+ * has never been a sleep column on a check-in row — so the wire format and the
+ * stored history are unchanged by the rewording. `low` keeps `bad`'s 3 for that
+ * reason: a value here is compared against the athlete's own past answers by
+ * `detectEnergyDecline` (website/src/lib/risk.ts:432), and re-scaling the low
+ * end would have manufactured a decline on the first check-in after the change.
  */
-const ENERGY_BY_SLEEP: Record<SleepAnswer, number> = { bad: 3, ok: 6, good: 9 };
+const ENERGY_BY_ANSWER: Record<EnergyAnswer, number> = { low: 3, ok: 6, good: 9 };
 
 /**
  * The three sides a lateral part can be filed under, and what each one
@@ -350,7 +357,7 @@ export default function CheckInScreen() {
   }
 
   /**
-   * The finishing write: the sleep answer, and then the collapse.
+   * The finishing write: the energy answer, and then the collapse.
    *
    * The soreness rows are already on the server by now — each one was written
    * as it was tapped — so this call carries only `energy`. It is safe for it to
@@ -358,11 +365,11 @@ export default function CheckInScreen() {
    * (website/src/lib/db.ts:420-426), so the soreness-only calls above did not
    * blank anything and this one does not either.
    */
-  async function finish(sleep: SleepAnswer) {
+  async function finish(energy: EnergyAnswer) {
     setSubmitting(true);
     setSubmitFailed(false);
     try {
-      await postCheckin({ energy: ENERGY_BY_SLEEP[sleep] });
+      await postCheckin({ energy: ENERGY_BY_ANSWER[energy] });
     } catch {
       setSubmitFailed(true);
       setSubmitting(false);

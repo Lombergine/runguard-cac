@@ -35,8 +35,10 @@ import { SafetyNotice } from "../components/SafetyNotice";
 import { getChat, isUnauthorized, postChat } from "../lib/api";
 import { useSession } from "../lib/session";
 import type { ChatMessage } from "../lib/types";
-import { color, shadow } from "../theme/tokens";
-import { font, text } from "../theme/type";
+import { Panel } from "../components/Panel";
+import { screenHeader } from "../theme/header";
+import { color } from "../theme/tokens";
+import { text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
@@ -70,36 +72,6 @@ function Row({ message }: { message: ChatMessage }) {
   return (
     <View style={styles.bubbleRow}>
       <ChatBubble role={message.role} text={body} />
-    </View>
-  );
-}
-
-/**
- * The website's Panel hierarchy (`website/src/components/athlete/tabs.tsx:22`):
- * a semibold title on the LEFT, an optional muted note on the RIGHT, then the
- * content. Used for the two things on this screen that are the app talking
- * about the thread rather than in it.
- *
- * Note that neither of these is a message, so neither may look like one — and
- * neither may look like `SafetyNotice` either. A rounded, inset, shadowed card
- * is the correct third shape: it is plainly furniture.
- */
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
     </View>
   );
 }
@@ -277,19 +249,7 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Ask RunGuard",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
-        }}
-      />
+      <Stack.Screen options={screenHeader("Ask RunGuard")} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -308,7 +268,7 @@ export default function ChatScreen() {
         */}
         {signedOut ? (
           <View style={styles.loadFailed}>
-            <Panel title="Ask RunGuard" note="Signed out">
+            <Panel style={styles.panelInset} title="Ask RunGuard" note="Signed out">
               <Text style={styles.plain}>
                 This device is no longer signed in, so nothing can be sent from
                 here. Sign in again to use it.
@@ -317,7 +277,7 @@ export default function ChatScreen() {
           </View>
         ) : loadFailed ? (
           <View style={styles.loadFailed}>
-            <Panel title="Earlier messages" note="Could not load">
+            <Panel style={styles.panelInset} title="Earlier messages" note="Could not load">
               <Text style={styles.plain}>
                 Earlier messages will be back when the connection is. You can
                 still send one now — it stays on screen only if it sends.
@@ -344,7 +304,7 @@ export default function ChatScreen() {
             // about the athlete, and "Nothing sent yet" would assert one.
             messages === null || historyDiscarded ? null : (
               <View style={styles.opener}>
-                <Panel title="Ask RunGuard" note="Nothing sent yet">
+                <Panel style={styles.panelInset} title="Ask RunGuard" note="Nothing sent yet">
                   <Text style={styles.plain}>
                     Ask about a run, a workout, or how you have been feeling.
                   </Text>
@@ -476,26 +436,8 @@ const styles = StyleSheet.create({
   separator: { height: space.md },
   loadFailed: { paddingTop: space.xl },
   /** Panel: title left, note right, content under. */
-  panel: {
-    marginHorizontal: layout.page,
-    backgroundColor: color.card,
-    borderRadius: radius.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    padding: layout.cardPadding,
-    gap: space.sm,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  panelTitle: { ...text.meta, fontFamily: font.bodySemi, color: color.ink },
-  /** The caveat. Always the right-hand side, always muted (5.16:1 on card). */
-  panelNote: { ...text.meta, color: color.muted },
+  /** Layout only: these panels are inset from the page edge. */
+  panelInset: { marginHorizontal: layout.page },
   plain: { ...text.base, color: color.ink2 },
   /** The empty state: the panel, then the openers under it. */
   opener: { gap: space.xl },

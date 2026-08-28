@@ -24,12 +24,11 @@
  */
 import { StyleSheet, Text, View } from "react-native";
 
-import { Card } from "./Card";
 import { Absent } from "./Nothing";
 import { storedPartLabel } from "../lib/bodyParts";
 import { dayLabel } from "../lib/dates";
 import type { Badge, Goal, Injury } from "../lib/types";
-import { ruleWidth, space } from "../theme/space";
+import { radius, ruleWidth, space } from "../theme/space";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
@@ -52,6 +51,19 @@ const APPS = ["Apple Health", "Apple Watch", "Garmin", "COROS", "WHOOP"] as cons
  */
 const APPLE_ALIASES = ["apple watch", "apple health", "healthkit", "apple_export"];
 
+/**
+ * NONE OF THESE DRAW THEIR OWN CARD, and that is a fix rather than an omission.
+ *
+ * Each of them used to open with `<Card>`, and `profile.tsx` wraps every one in
+ * a `<Panel>` — which is itself a `Card`. So each rendered a white surface
+ * inside a white surface: 16pt of padding inside another 16pt, a 1.5px rule
+ * inside a 1.5px rule, and the one elevation shadow cast twice. It was the most
+ * visible defect on the screen.
+ *
+ * The panel owns the surface now; these own only their content. The three that
+ * are divided row lists are given `padded={false}` at the call site so their
+ * rules still run corner to corner.
+ */
 export function ConnectedApps({ sources }: { sources: string[] | undefined }) {
   const on = new Set((sources ?? []).map((s) => s.toLowerCase()));
   const isOn = (name: string) =>
@@ -59,7 +71,7 @@ export function ConnectedApps({ sources }: { sources: string[] | undefined }) {
     (name === "Apple Health" && APPLE_ALIASES.some((a) => on.has(a)));
 
   return (
-    <Card>
+    <>
       <Text style={styles.prose}>
         RunGuard reads what your watch already records. Nothing is typed in by
         hand, and nothing is sent anywhere your coach could not already see.
@@ -78,7 +90,7 @@ export function ConnectedApps({ sources }: { sources: string[] | undefined }) {
         arrives that way rather than through a direct connection. An app that is
         not lit simply has not sent anything.
       </Text>
-    </Card>
+    </>
   );
 }
 
@@ -91,7 +103,7 @@ export function SeasonGoals({ goals }: { goals: Goal[] | undefined }) {
     return <Absent label="No season goals set." />;
   }
   return (
-    <Card padded={false}>
+    <>
       {goals.map((g, i) => (
         <View key={`${g.event}-${i}`} style={[styles.row, i > 0 && styles.divided]}>
           <Text style={styles.rowTitle}>{g.event}</Text>
@@ -125,7 +137,7 @@ export function SeasonGoals({ goals }: { goals: Goal[] | undefined }) {
           </Text>
         </View>
       ))}
-    </Card>
+    </>
   );
 }
 
@@ -155,7 +167,7 @@ export function Achievements({ badges }: { badges: Badge[] | undefined }) {
   }
   const earned = badges.filter((b) => b.earned).length;
   return (
-    <Card padded={false}>
+    <>
       {badges.map((b) => (
         <View key={b.id} style={[styles.row, styles.dividedFirst]}>
           <Text style={b.earned ? styles.rowTitle : styles.rowTitleMuted}>{b.label}</Text>
@@ -167,7 +179,7 @@ export function Achievements({ badges }: { badges: Badge[] | undefined }) {
           {`${earned} of ${badges.length} earned so far. The rest are things that have not happened yet, not things that went wrong.`}
         </Text>
       </View>
-    </Card>
+    </>
   );
 }
 
@@ -195,7 +207,7 @@ export function InjuryHistory({ injuries }: { injuries: Injury[] | undefined }) 
   const ordered = [...open, ...healed];
 
   return (
-    <Card padded={false}>
+    <>
       {ordered.map((inj, i) => {
         // ONE resolver, shared with the Stats body scan — see lib/bodyParts.
         // This used to be `getBodyPart(body_part)` plus `injuryLabel(key, null)`,
@@ -222,7 +234,7 @@ export function InjuryHistory({ injuries }: { injuries: Injury[] | undefined }) 
           </View>
         );
       })}
-    </Card>
+    </>
   );
 }
 
@@ -234,7 +246,7 @@ const styles = StyleSheet.create({
   pill: {
     paddingVertical: space.xs,
     paddingHorizontal: space.md,
-    borderRadius: space.lg,
+    borderRadius: radius.pill,
     borderWidth: ruleWidth,
     borderColor: color.rule,
   },

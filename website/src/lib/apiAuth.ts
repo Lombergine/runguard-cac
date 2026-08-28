@@ -1,4 +1,5 @@
 import { getAthlete, getAthleteByToken, AthleteRow } from "./db";
+import { isDemoAthlete, isWrite } from "./demoAthlete";
 import { athleteTokenFromCookie, currentTeamId } from "./session";
 
 /** Which of the three auth paths matched. */
@@ -27,15 +28,37 @@ export async function resolveAthleteWithPath(
   const scoped = (a: AthleteRow | null | undefined, via: AuthPath) =>
     a && (athleteId == null || athleteId === a.id) ? { athlete: a, via } : null;
 
+  /**
+   * The demo athlete never resolves for a WRITE, on any route, by construction.
+   *
+   * `middleware.ts` already makes the web demo read-only, but it does that by
+   * looking for the `rg_demo` COOKIE — and the phone sends a Bearer token and no
+   * cookies, so none of it applies to `/api/mobile/*`. Middleware cannot cover
+   * this case either: telling whether a token belongs to the demo athlete needs
+   * a database read, and it runs on the edge runtime without one.
+   *
+   * So the check lands here, in the one function every route already calls to
+   * ask who is speaking. A route added later is covered without its author
+   * knowing this exists. Expressed as "does not resolve" rather than as its own
+   * error, so callers take the not-authorised branch they already have.
+   *
+   * See `lib/demoAthlete.ts` for why this is the demo ATHLETE and not the demo
+   * team (freezing the team would freeze the roster local development runs on).
+   */
+  const guard = async (r: { athlete: AthleteRow; via: AuthPath } | null) => {
+    if (!r || !isWrite(request.method)) return r;
+    return (await isDemoAthlete(r.athlete)) ? null : r;
+  };
+
   const auth = request.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
   if (token) {
-    const r = scoped(await getAthleteByToken(token), "bearer");
+    const r = await guard(scoped(await getAthleteByToken(token), "bearer"));
     if (r) return r;
   }
   const cookieToken = await athleteTokenFromCookie();
   if (cookieToken) {
-    const r = scoped(await getAthleteByToken(cookieToken), "athlete");
+    const r = await guard(scoped(await getAthleteByToken(cookieToken), "athlete"));
     if (r) return r;
   }
   if (athleteId != null && Number.isInteger(athleteId)) {

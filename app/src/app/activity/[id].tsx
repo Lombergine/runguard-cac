@@ -43,6 +43,7 @@ import { dayLabel, localDay, timeLabel } from "../../lib/dates";
 import { useSession } from "../../lib/session";
 import type { ActivityDetail, RoutePoint } from "../../lib/types";
 import { fmtDuration, formatPaceFromKmPace, ftNumFromMeters, miNumFromMeters } from "../../lib/units";
+import { screenHeader } from "../../theme/header";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 import { layout, radius, ruleWidth, space } from "../../theme/space";
@@ -314,19 +315,7 @@ export default function ActivityScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Run",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
-        }}
-      />
+      <Stack.Screen options={screenHeader("Run")} />
       <ScrollView contentContainerStyle={styles.page}>
         {load.state === "ready" ? (
           <Detail activity={load.activity} />

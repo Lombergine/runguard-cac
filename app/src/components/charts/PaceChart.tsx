@@ -48,7 +48,6 @@
  * of plot width on a 360pt screen without telling the reader anything the note
  * has not already told them.
  */
-import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Dots, LinePath } from "../chart/marks";
@@ -56,34 +55,8 @@ import { isAbsent } from "../chart/scales";
 import { paceSeries } from "../../lib/chartData";
 import type { Profile } from "../../lib/types";
 import { fmtPaceMiFromKm } from "../../lib/units";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { Panel } from "../Panel";
 
-/**
- * The panel idiom from `app/(tabs)/stats.tsx` — title left, note right, then
- * the content. Local, as it is on every screen and chart that has one; every
- * value comes from a token, so the copies cannot drift apart.
- */
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 /** The caption for the inverted axis. Not optional — see the header. */
 const UP_IS_FASTER = "up = faster";
@@ -172,25 +145,5 @@ export function PaceChart({ paceSeason }: { paceSeason?: Profile["paceSeason"] }
   );
 }
 
-const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  panelNote: { ...text.meta, color: color.muted },
-});
 
 export default PaceChart;

@@ -1,22 +1,28 @@
 <!--
   RunGuard App Store mark — source of truth for assets/icon.png.
 
-  Flat, two colours, no gradient, no shadow, no construction guides: the same
-  printed character as the app itself. Colours are the app's own tokens
-  (src/theme/tokens.ts) — `color.accent` #2C4C8C on `color.bg` #F3F5F4.
+  This is the WEBSITE's mark (website/public/icon.svg), so the app icon and the
+  site favicon are one drawing rather than two that drift. It replaces the blue
+  chevron that shipped here before, which was drawn from the pale-cool palette
+  in docs/visual-spec.md — a palette src/theme/tokens.ts has since overruled, so
+  the chevron was the last thing in the app still wearing it.
 
-  The subject is the placeholder's chevron, redrawn as a single solid peak:
-  mitred at the apex, cut square at the arm ends, 160 units thick measured
-  perpendicular to the arm. Its box is 600x479 on a 1024 canvas, so the mark
-  clears the iOS corner mask with room to spare and still holds together at
-  40px. The apex sits above the box centre because the mass is in the arms —
-  the polygon's centroid, not its bounding box, is what the eye centres on.
+  Flat, three colours, no gradient, no shadow: the same printed character as the
+  app itself. The arch is a shelter — the "guard" half of the name — and the
+  check sits inside it.
 
-  To re-rasterise: the polygon below is the only geometry. Render at 1024x1024
-  RGB with NO alpha channel (App Store validation rejects alpha, and rejects
-  any size other than 1024x1024), then run `node scripts/check-assets.mjs`.
+  ONE DELIBERATE DIFFERENCE FROM THE WEBSITE'S COPY: no rounded corners. The
+  site draws `rx="14"` because it renders the mark unmasked; iOS applies its own
+  corner mask and would round an already-rounded square, leaving a dark rim.
+  So the ground here is full bleed and square. assets/favicon.png keeps the
+  rounded version, because it too is shown unmasked.
+
+  To re-rasterise: the geometry below is the whole drawing. Render at 1024x1024
+  RGB with NO alpha channel (App Store validation rejects alpha, and rejects any
+  size other than 1024x1024), then run `node scripts/check-assets.mjs`.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" fill="#F3F5F4"/>
-  <polygon fill="#2C4C8C" points="512,262 212,642 337.581,741.143 512,520.213 686.419,741.143 812,642"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#0d0d0d"/>
+  <path d="M14 50V26a5 5 0 015-5h26a5 5 0 015 5v24" stroke="#f59e0b" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <path d="M24 34l7 7 11-13" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>

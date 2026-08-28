@@ -295,7 +295,7 @@ const TYPE_SCALE: { role: TextRole; sample: string; use: string }[] = [
   { role: "baseSemi", sample: "Checked in 6:12am", use: "16.5 body 600 — emphasis, controls" },
   { role: "title", sample: "Yesterday's run", use: "19 display — card titles" },
   { role: "stat", sample: "8:51 /mi", use: "22 mono — inline stats" },
-  { role: "prompt", sample: "How did you sleep?", use: "34 display 800 — the check-in prompt" },
+  { role: "prompt", sample: "How's your energy?", use: "34 display 800 — the check-in prompt" },
 ];
 
 /**

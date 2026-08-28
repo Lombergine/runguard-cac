@@ -21,41 +21,14 @@
  * looks identical to every other unknown in the app, and the card does not
  * change size when the athlete's third week lands.
  */
-import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Bars } from "../chart/marks";
 import { isAbsent } from "../chart/scales";
 import { weeklyKmSeries } from "../../lib/chartData";
 import type { Profile } from "../../lib/types";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { Panel } from "../Panel";
 
-/**
- * The panel idiom from `app/(tabs)/stats.tsx` — title left, note right, then
- * the content. Local, as it is on every screen and chart that has one; every
- * value comes from a token, so the copies cannot drift apart.
- */
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 /**
  * `weeks` is optional on `Profile` like every other `/me` leg, and the type is
@@ -112,25 +85,5 @@ export function WeeklyKmChart({ weeks }: { weeks?: Profile["weeks"] }) {
   );
 }
 
-const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  panelNote: { ...text.meta, color: color.muted },
-});
 
 export default WeeklyKmChart;

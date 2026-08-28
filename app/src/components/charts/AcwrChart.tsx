@@ -41,21 +41,16 @@
  * CLAUDE.md forbids outright. So the caveat ships with the chart, in the panel,
  * not in a help screen nobody opens.
  */
-import { ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Band, LinePath, RefLine } from "../chart/marks";
 import { isAbsent } from "../chart/scales";
-import {
-  ACWR_BAND,
-  ACWR_DANGER,
-  DAILY_DAYS,
-  acwrSeries,
-} from "../../lib/chartData";
+import { ACWR_BAND, ACWR_DANGER, DAILY_DAYS, acwrSeries } from "../../lib/chartData";
 import type { DailyPoint } from "../../lib/types";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
+import { space } from "../../theme/space";
+import { Panel } from "../Panel";
+import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /* ------------------------------------------------------------------ *
@@ -108,25 +103,6 @@ const REF_STROKE = color.muted;
  * so the panels cannot drift apart even though the code is not shared.
  * ------------------------------------------------------------------ */
 
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 /**
  * `series` is `profile.risk.series` — the full-width copy that rides inside
@@ -215,24 +191,6 @@ export function AcwrChart({ series }: { series?: DailyPoint[] }) {
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  panelNote: { ...text.meta, color: color.muted },
 
   /** What the picture is, before the picture. `ink2`, 6.4:1 on card. */
   lede: { ...text.meta, color: color.ink2, marginBottom: space.md },

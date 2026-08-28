@@ -26,9 +26,35 @@ export const layout = {
   page: 20,
 } as const;
 
+/**
+ * Corner radii. FOUR steps, because two were not enough.
+ *
+ * With only `card` and `control`, anything smaller than a control or fully
+ * round had nowhere to go, and eight call sites reached into the SPACING scale
+ * for a corner instead — `borderRadius: space.xs`, `space.sm`, `space.lg`.
+ * Those read as token-sourced and pass every lint, but they weld two unrelated
+ * scales together: nudging a padding step would silently reshape a chip's
+ * corners. `chip` and `pill` give those sites somewhere honest to land.
+ *
+ * `pill` is deliberately huge rather than computed from a height. React Native
+ * clamps `borderRadius` to half the smaller side, so one value makes a capsule
+ * of any element without the caller knowing its height — which is what the
+ * website gets from `rounded-full`.
+ *
+ * Pair every radius EXCEPT `pill` with `borderCurve: "continuous"`. That is the
+ * squircle iOS itself draws; on a capsule it is a no-op, and on a card the
+ * difference between it and a circular arc is most of why a screen reads as
+ * native rather than as a web page in a wrapper.
+ */
 export const radius = {
-  card: 12,
+  /** Legend swatches and small square marks — a softened corner, not a round one. */
+  mark: 4,
+  /** Chips and severity buttons. */
+  chip: 8,
   control: 10,
+  card: 12,
+  /** Capsules and dots. Clamped to half the shorter side by RN — height-agnostic. */
+  pill: 9999,
 } as const;
 
 /**

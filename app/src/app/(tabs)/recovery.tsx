@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
   tipMark: {
     width: space.sm,
     height: space.sm,
-    borderRadius: space.xs,
+    borderRadius: radius.pill,
     backgroundColor: color.brand,
   },
   tipText: { ...text.meta, color: color.ink2, flexShrink: 1 },

@@ -60,15 +60,16 @@
  * picture of how often they checked in, and the best available argument for
  * checking in again.
  */
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, Dots, LinePath } from "../chart/marks";
 import { type ChartPoint, isAbsent } from "../chart/scales";
 import { DAILY_DAYS, mentalSeries } from "../../lib/chartData";
 import type { MentalDay } from "../../lib/types";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
+import { ruleWidth, space } from "../../theme/space";
+import { Panel } from "../Panel";
+import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /**
@@ -86,34 +87,6 @@ function days(n: number): string {
   return `${n} ${n === 1 ? "day" : "days"}`;
 }
 
-/**
- * The website's Panel (`athlete/tabs.tsx:22`): a semibold title on the left, a
- * muted note on the right carrying the caveat or the unit, then the content.
- *
- * Spelled out locally from tokens, as it is in `(tabs)/stats.tsx`,
- * `profile.tsx` and `chat.tsx`. No file owns a shared Panel yet; every value
- * here comes from a token, so the copies cannot drift apart on anything that
- * matters.
- */
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 export function MentalChart({ mental30 }: { mental30?: MentalDay[] }) {
   /*
@@ -216,25 +189,6 @@ export function MentalChart({ mental30 }: { mental30?: MentalDay[] }) {
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    // Elevation, never emphasis. Every panel in the app carries the same one.
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  panelNote: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   /**
    * `ink2`, not `muted`: this is the key to the picture, so it has to be read

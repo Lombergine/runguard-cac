@@ -36,6 +36,7 @@ import type {
   WorkoutStatus,
 } from "./types";
 import { getToken } from "./auth";
+import { isDemo, recordWrite } from "./demo";
 
 /**
  * `localhost` is correct for the iOS Simulator, which shares the Mac's loopback.
@@ -86,6 +87,26 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   // Fail closed rather than sending an unauthenticated request and letting the
   // caller interpret whatever comes back.
   if (!token) throw new ApiError(401, "No device token. Pair this device first.");
+
+  /*
+   * In the demo, a write never leaves the phone.
+   *
+   * This is the only place it can be done once: every mutating call in this
+   * module goes through `request()` with a method, so there is no second door
+   * and no route added later that forgets. The write is recorded locally
+   * (lib/demo.ts) and resolves as though the server had accepted it, because
+   * the alternative — a demo where tapping "Good" throws — is a demo of nothing.
+   *
+   * The server refuses these too, independently: `demoAthlete.ts` makes the demo
+   * athlete unresolvable for any non-GET. That is the guarantee; this is the
+   * part that keeps the demo usable. READS still go to the network, so the demo
+   * shows the real seeded athlete rather than a fixture.
+   */
+  const method = opts.method ?? "GET";
+  if (isDemo() && method !== "GET") {
+    recordWrite(path, opts.body);
+    return undefined as T;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? TIMEOUT_MS);
@@ -178,6 +199,48 @@ export async function getProfile(): Promise<Profile> {
  */
 export async function getHome(): Promise<ProfileWithNextRace> {
   return stripDeviceToken(await request<ProfileWithNextRace>("/api/mobile/home"));
+}
+
+/**
+ * GET /api/mobile/demo — the demo runner's pairing code.
+ *
+ * Issues its own fetch rather than going through `request()`, for the same
+ * reason `login.tsx` does: `request()` reads a token out of the Keychain and
+ * refuses without one, and the entire point here is to obtain the first one.
+ *
+ * The token is handed straight to `setToken` by the caller and then dropped. It
+ * is never rendered and never logged, exactly like a pasted pairing code — it
+ * IS one. `name` comes back so the demo can say whose data it is showing, which
+ * matters: this is a real seeded athlete's record, not a fixture.
+ *
+ * 404 means the demo is switched off on this server (`DEMO_TEAM_ID` unset), and
+ * is deliberately indistinguishable from a route that was never built.
+ */
+export async function getDemoPairing(): Promise<{ token: string; name: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/api/mobile/demo`, { signal: controller.signal });
+  } catch {
+    throw new ApiError(0, `Could not reach the RunGuard server at ${BASE_URL}.`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (res.status === 404) {
+    throw new ApiError(404, "The demo is not available on this server.");
+  }
+  if (!res.ok) throw new ApiError(res.status, `The demo could not be opened (${res.status}).`);
+
+  const body = (await res.json().catch(() => null)) as
+    | { token?: unknown; name?: unknown }
+    | null;
+  const token = typeof body?.token === "string" ? body.token : null;
+  if (!token) throw new ApiError(500, "The demo sent nothing this app can use.");
+
+  return { token, name: typeof body?.name === "string" ? body.name : "the demo runner" };
 }
 
 /* ------------------------------------------------------------------ *

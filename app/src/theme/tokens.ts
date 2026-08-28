@@ -54,7 +54,17 @@ export const color = {
    */
   muted: "#756C5F",
 
-  /* Rules. The website uses translucent ink rather than a grey. */
+  /*
+   * Rules. The website uses translucent ink rather than a grey.
+   *
+   * THREE steps where the site has two, and the top step is darker than its
+   * counterpart — `--hairline` 0.09 and `--hairline-strong` 0.18 become
+   * 0.09 / 0.14 / 0.24. Recorded because an audit reads the 0.24 as drift:
+   * it is not. `rule` is the app's default border and has no web twin at all,
+   * so the scale is its own, and its top step follows the same reasoning as
+   * `muted` above and `ruleWidth` in space.ts — a line that has to survive
+   * direct sunlight on a track needs more contrast than one read indoors.
+   */
   rule: "rgba(34,29,21,0.14)",
   ruleSoft: "rgba(34,29,21,0.09)",
   ruleStrong: "rgba(34,29,21,0.24)",
@@ -113,20 +123,28 @@ export const color = {
 } as const;
 
 /**
- * The website's two-layer card shadow (globals.css:77-82), translated to RN.
- * iOS reads shadow*, Android reads elevation, so both are set.
+ * The website's card shadow (globals.css:77-82), as a `boxShadow` string.
  *
  * Nothing floated in the old palette. Under sunrise things do — but a shadow is
  * elevation, never emphasis: it must not be used to make one card louder than
  * another.
+ *
+ * WHY A STRING RATHER THAN `shadowOffset`/`elevation`. This used to be the
+ * legacy prop set, chosen because "iOS reads shadow*, Android reads elevation".
+ * That is the pre-0.76 model; `boxShadow` is now one cross-platform property,
+ * and the old props are on the deprecation path.
+ *
+ * The rewrite is not merely a port. The legacy props could express exactly ONE
+ * shadow with no spread, so the website's two layers had to be flattened into a
+ * single approximation — a wider, softer blur that read as a glow rather than a
+ * lift. `boxShadow` takes a comma-separated list AND a spread distance, so both
+ * of the site's layers survive verbatim: the 1px contact shadow that sits a card
+ * on the page, and the long -16px-spread ambient one that gives it height.
  */
 export const shadow = {
   card: {
-    shadowColor: "#221D15",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 3,
+    boxShadow:
+      "0px 1px 2px 0px rgba(34, 29, 21, 0.04), 0px 10px 28px -16px rgba(34, 29, 21, 0.14)",
   },
 } as const;
 

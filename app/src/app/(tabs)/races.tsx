@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
   splitMark: {
     width: space.sm,
     height: space.sm,
-    borderRadius: space.xs,
+    borderRadius: radius.pill,
     backgroundColor: color.brand,
   },
   splitText: { ...text.meta, color: color.ink2, flexShrink: 1 },

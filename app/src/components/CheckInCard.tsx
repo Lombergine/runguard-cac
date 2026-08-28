@@ -34,7 +34,7 @@
  *
  *     part  →  side (lateral parts only)  →  severity 0–10
  *
- * The fast path is unchanged and still TWO TAPS — sleep, then "No", which
+ * The fast path is unchanged and still TWO TAPS — energy, then "No", which
  * submits on the second tap. Only an athlete who actually is sore pays for the
  * precision, and what they pay for is the difference between "a bit" and
  * "left knee, 6 out of 10". Nothing here reaches the server unasked: a
@@ -76,8 +76,21 @@ import { color, shadow } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
 import { BodyMap } from "./BodyMap";
 
-/** The sleep question's three answers. */
-export type SleepAnswer = "bad" | "ok" | "good";
+/**
+ * The energy question's three answers.
+ *
+ * This question used to ask "How did you sleep?". It no longer asks about sleep
+ * at all, but the shape is unchanged and deliberately so: there has never been a
+ * sleep column: the answer has always been written to `checkins.energy` (see
+ * `ENERGY_BY_ANSWER` in app/(tabs)/index.tsx), so sleep was only ever a proxy
+ * for the field this now names directly.
+ *
+ * It cannot simply be deleted. `checkedInToday` (lib/readiness.ts) opens only on
+ * `energy`, `rpe` or `motivation` being non-null, and this is the ONLY one of
+ * the three the app ever sends. Dropping the question would leave readiness
+ * reading "— unknown" forever and the card unable to collapse to its receipt.
+ */
+export type EnergyAnswer = "low" | "ok" | "good";
 
 /**
  * The soreness question's two answers.
@@ -152,8 +165,8 @@ export function SorenessList({
 
 type Option<T extends string> = { value: T; label: string };
 
-const SLEEP_OPTIONS: readonly Option<SleepAnswer>[] = [
-  { value: "bad", label: "Bad" },
+const ENERGY_OPTIONS: readonly Option<EnergyAnswer>[] = [
+  { value: "low", label: "Low" },
   { value: "ok", label: "OK" },
   { value: "good", label: "Good" },
 ];
@@ -228,7 +241,7 @@ function EmberEdge() {
 
 type CheckInCardProps = {
   /**
-   * Open on the soreness picker, skipping the sleep question.
+   * Open on the soreness picker, skipping the energy question.
    *
    * For an athlete who already checked in today and came back to add a sore
    * spot. Without it, the only screen in the app that writes soreness is
@@ -263,8 +276,8 @@ type CheckInCardProps = {
    * follow-ups, and the mirror in `logged`.
    */
   onLogSoreness: (part: string, side: Side | null, severity: number | null) => void;
-  /** Finishes the check-in: the screen posts the sleep answer and collapses. */
-  onComplete: (sleep: SleepAnswer) => void;
+  /** Finishes the check-in: the screen posts the energy answer and collapses. */
+  onComplete: (energy: EnergyAnswer) => void;
   /** True while any write is in flight. Targets stay put but go inert. */
   submitting: boolean;
   /** Why the last soreness write did not do what it said. Null when it did. */
@@ -287,12 +300,12 @@ export function CheckInCard({
 }: CheckInCardProps) {
   /*
    * `sorenessOnly` opens straight on the picker, for an athlete who already
-   * checked in today and came back to add a sore spot. Sleep is not re-asked —
+   * checked in today and came back to add a sore spot. Energy is not re-asked —
    * it was answered this morning, and asking again would either overwrite that
    * answer or discard the new one. `onComplete` is not reachable in this mode
    * (see the footer), so nothing re-posts `energy`.
    */
-  const [sleep, setSleep] = useState<SleepAnswer | null>(null);
+  const [energy, setEnergy] = useState<EnergyAnswer | null>(null);
   const [gate, setGate] = useState<SoreGate | null>(sorenessOnly ? "yes" : null);
   const [part, setPart] = useState<string | null>(null);
   const [side, setSide] = useState<Side | null>(null);
@@ -319,9 +332,9 @@ export function CheckInCard({
    * cannot be stored and a part with no severity is not an answer.
    */
   function pickGate(value: SoreGate) {
-    if (sleep === null) return;
+    if (energy === null) return;
     setGate(value);
-    if (value === "no") onComplete(sleep);
+    if (value === "no") onComplete(energy);
   }
 
   /** Tapping a part selects it for scoring; tapping it again puts it down. */
@@ -352,8 +365,8 @@ export function CheckInCard({
     onLogSoreness(part, side, currentSeverity === value ? null : value);
   }
 
-  // In `sorenessOnly` the sleep question is not asked at all — see the header.
-  const askingSoreness = sorenessOnly || sleep !== null;
+  // In `sorenessOnly` the energy question is not asked at all — see the header.
+  const askingSoreness = sorenessOnly || energy !== null;
   const askingWhere = gate === "yes";  // `sorenessOnly` seeds the gate above.
   const ready = entries.length > 0;
 
@@ -370,7 +383,7 @@ export function CheckInCard({
         </View>
 
         <Text style={styles.prompt}>
-          {askingSoreness ? "Anything sore?" : "How did you sleep?"}
+          {askingSoreness ? "Anything sore?" : "How's your energy?"}
         </Text>
 
         {/* Pushes the targets into the bottom third, one-handed reach. */}
@@ -378,7 +391,7 @@ export function CheckInCard({
 
         {sorenessOnly ? null : askingSoreness ? (
           // Hidden in `sorenessOnly`: tapping "Add soreness" WAS the yes, and a
-          // "No" here would call onComplete with no sleep answer — a dead
+          // "No" here would call onComplete with no energy answer — a dead
           // control that looks live.
           <AnswerRow
             options={SORE_OPTIONS}
@@ -389,10 +402,10 @@ export function CheckInCard({
           />
         ) : (
           <AnswerRow
-            options={SLEEP_OPTIONS}
-            selected={sleep}
+            options={ENERGY_OPTIONS}
+            selected={energy}
             disabled={false}
-            onPick={setSleep}
+            onPick={setEnergy}
           />
         )}
 
@@ -481,29 +494,41 @@ export function CheckInCard({
               accessibilityState={{ disabled: !ready || submitting }}
               disabled={!ready || submitting}
               onPress={() => {
-                // In `sorenessOnly` there is no sleep answer to submit and the
+                // In `sorenessOnly` there is no energy answer to submit and the
                 // check-in already happened — Done just closes. Every severity
                 // was written the moment it was tapped, so nothing is pending.
                 if (sorenessOnly) onDone?.();
-                else if (sleep !== null) onComplete(sleep);
+                else if (energy !== null) onComplete(energy);
               }}
               style={[styles.done, ready && styles.doneReady]}
             >
-              {/* Ember, because this is the card's one system action. The label
-                  above it stays ink: white on these stops bottoms out at
-                  1.7:1, ink never drops below 5.9:1. */}
-              {ready ? (
-                <LinearGradient
-                  colors={color.ember}
-                  locations={EMBER_STOPS}
-                  start={EMBER_START}
-                  end={EMBER_END}
-                  style={styles.doneFill}
-                />
-              ) : null}
-              <Text style={[styles.doneLabel, !ready && styles.doneLabelIdle]}>
-                Done
-              </Text>
+              {({ pressed }) => (
+                <>
+                  {/* Ember, because this is the card's one system action. The
+                      label above it stays ink: white on these stops bottoms out
+                      at 1.7:1, ink never drops below 5.9:1.
+
+                      Pressing DROPS the gradient to the flat `brandStrong`
+                      ground beneath — the idiom `login.tsx` and `profile.tsx`
+                      already use, and the same ground that shows if the
+                      gradient never draws. This button had no pressed state at
+                      all: it is the card's primary action, sitting among four
+                      radio groups that every one of them animate, so it was the
+                      least responsive control on the most important screen. */}
+                  {ready && !pressed ? (
+                    <LinearGradient
+                      colors={color.ember}
+                      locations={EMBER_STOPS}
+                      start={EMBER_START}
+                      end={EMBER_END}
+                      style={styles.doneFill}
+                    />
+                  ) : null}
+                  <Text style={[styles.doneLabel, !ready && styles.doneLabelIdle]}>
+                    Done
+                  </Text>
+                </>
+              )}
             </Pressable>
           </View>
         ) : null}
@@ -940,7 +965,13 @@ const styles = StyleSheet.create({
     borderColor: color.rule,
     borderRadius: radius.control,
   },
-  doneReady: { borderColor: color.brandStrong },
+  /**
+   * `brandStrong` as the GROUND, not just the border: it is what the press
+   * reveals when the gradient lifts, and the fallback if the gradient never
+   * draws. Without it a press would expose the sunken `well` underneath and the
+   * button would flash as though it had gone inert.
+   */
+  doneReady: { borderColor: color.brandStrong, backgroundColor: color.brandStrong },
   /** Rounded on the fill itself, so the panel needs no clipping layer. */
   doneFill: {
     position: "absolute",

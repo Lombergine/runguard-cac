@@ -7,6 +7,7 @@
  *   1. Server data — the subset of GET /api/mobile/me the app actually uses.
  *   2. Component props — the shared UI vocabulary.
  */
+import type { StyleProp, ViewStyle } from "react-native";
 
 /* ------------------------------------------------------------------ *
  * 1. Server data
@@ -832,6 +833,16 @@ export type CardProps = {
   children: React.ReactNode;
   /** Omits the default 16px padding when false. */
   padded?: boolean;
+  /**
+   * Layout only — margin, flex, width. Merged LAST so a caller can place a card
+   * without editing it.
+   *
+   * Deliberately not a way to restyle one: the ground, the hairline, the corner
+   * and the shadow are what make a card a card, and a screen that overrides them
+   * is describing a component the system is missing. `shadow.card` in particular
+   * is elevation and never emphasis.
+   */
+  style?: StyleProp<ViewStyle>;
 };
 
 export type StatProps = {

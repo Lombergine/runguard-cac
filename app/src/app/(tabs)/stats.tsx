@@ -29,14 +29,7 @@
  *    not anything is ever tapped.
  */
 import { useMemo } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BodyScan } from "../../components/BodyScan";
@@ -54,8 +47,10 @@ import { useProfile } from "../../lib/profileStore";
 import { fitnessKnown } from "../../lib/readiness";
 import type { Badge, Profile, ZoneMinutes } from "../../lib/types";
 import { formatDistance } from "../../lib/units";
-import { layout, radius, ruleWidth, space, target } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
+import { layout, radius, space, target } from "../../theme/space";
+import { Card } from "../../components/Card";
+import { Panel } from "../../components/Panel";
+import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
 /**
@@ -111,25 +106,6 @@ function longestStreak(badges: Badge[] | undefined): string | null {
  * cannot drift apart even though the code is not shared.
  * ------------------------------------------------------------------ */
 
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 /**
  * The screen header. `stale` adds ONE quiet line when a refetch failed over
@@ -258,7 +234,7 @@ export default function StatsScreen() {
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
           <Header />
-          <View style={styles.panel}>
+          <Card>
             <Text style={styles.failed}>
               {"Your stats could not be loaded. The RunGuard server could not be reached."}
             </Text>
@@ -270,7 +246,7 @@ export default function StatsScreen() {
             >
               <Text style={styles.retryLabel}>Try again</Text>
             </Pressable>
-          </View>
+          </Card>
         </View>
       </SafeAreaView>
     );
@@ -496,24 +472,6 @@ const styles = StyleSheet.create({
   heading: { ...text.title, color: color.ink, marginTop: space.xs },
   note: { ...text.meta, color: color.muted, marginTop: space.sm },
 
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  panelNote: { ...text.meta, color: color.muted },
 
   failed: { ...text.base, color: color.ink2 },
   /** Ember FILL with an ink glyph on it — `brand` is 2.01:1 and takes no word. */
@@ -558,7 +516,7 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  swatch: { width: space.md, height: space.md, borderRadius: space.xs },
+  swatch: { width: space.md, height: space.md, borderRadius: radius.mark },
   /** Mono at metadata size: it carries a numeral, and every numeral is mono. */
   legendValue: {
     ...text.meta,

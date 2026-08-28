@@ -58,12 +58,14 @@ import {
   InjuryHistory,
   SeasonGoals,
 } from "../components/ProfilePanels";
+import { Panel } from "../components/Panel";
 import { MentalChart } from "../components/charts/MentalChart";
 import { ApiError, joinTeam, leaveTeam, setHrMax } from "../lib/api";
 import { useProfile } from "../lib/profileStore";
 import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
-import { color, shadow } from "../theme/tokens";
+import { screenHeader } from "../theme/header";
+import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
@@ -91,34 +93,6 @@ function explain(err: unknown, fallback: string): string {
 /* ------------------------------------------------------------------ *
  * Furniture
  * ------------------------------------------------------------------ */
-
-/**
- * The website's Panel (website/src/components/athlete/tabs.tsx:22): a 14px
- * semibold title on the LEFT, a 12px muted note on the RIGHT, then the content.
- * The note is the caveat, the unit, or the instruction — never decoration.
- *
- * Same shape as `chat.tsx`'s local Panel. Neither file owns a shared component,
- * so both spell it out from the same tokens.
- */
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 /**
  * One labelled fact in the identity list.
@@ -549,19 +523,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Profile",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
-        }}
-      />
+      <Stack.Screen options={screenHeader("Profile")} />
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -622,17 +584,17 @@ export default function ProfileScreen() {
                 <ConnectedApps sources={profile.connectedSources} />
               </Panel>
 
-              <Panel title="Season goals" note="Target against today's forecast">
+              <Panel title="Season goals" note="Target against today's forecast" padded={false}>
                 <SeasonGoals goals={profile.goals} />
               </Panel>
 
-              <Panel title="Achievements" note="What you have done so far">
+              <Panel title="Achievements" note="What you have done so far" padded={false}>
                 <Achievements badges={profile.badges} />
               </Panel>
 
               {/* Read-only: writing an injury is a coach action, and
                   POST/PATCH /api/injury are mounted only on the dashboard. */}
-              <Panel title="Injury history" note="Recorded by your coach">
+              <Panel title="Injury history" note="Recorded by your coach" padded={false}>
                 <InjuryHistory injuries={profile.injuries} />
               </Panel>
             </>
@@ -665,26 +627,6 @@ const styles = StyleSheet.create({
   },
 
   /* Panel: title left, note right, content under. */
-  panel: {
-    backgroundColor: color.card,
-    borderRadius: radius.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    padding: layout.cardPadding,
-    gap: space.md,
-    // Elevation, never emphasis. Every panel carries the same one.
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  panelTitle: { ...text.meta, fontFamily: font.bodySemi, color: color.ink },
-  /** The caveat. Always the right-hand side, always muted (5.16:1 on card). */
-  panelNote: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   body: { ...text.base, color: color.ink2 },
   bodyStrong: { ...text.baseSemi, color: color.ink },

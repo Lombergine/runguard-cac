@@ -89,6 +89,37 @@ export const text = {
   } as TextStyle,
 
   /**
+   * 28 mono — the ONE figure a screen is actually about.
+   *
+   * `stat` at 22 was the only figure size, so readiness (the point of the home
+   * screen after a check-in) was 3pt larger than the word "Readiness" printed
+   * beside it at 19 — no size advantage over its own label. This is the step
+   * that lets a hero figure lead. Reach for it once per screen; a second one
+   * makes both ordinary again.
+   */
+  statLarge: {
+    fontFamily: font.mono,
+    fontSize: 28,
+    lineHeight: 34,
+    ...tabular,
+  } as TextStyle,
+
+  /**
+   * 28 display 800 — a screen whose whole job is one sentence.
+   *
+   * Deliberately NOT `prompt`: that role is the check-in question and nothing
+   * else, and spending it on a welcome headline would put the app's loudest
+   * type on the one screen an athlete sees once. Same 28 as `statLarge`, so the
+   * display and figure voices share an optical rank.
+   */
+  display: {
+    fontFamily: font.displayExtra,
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.02 * 28,
+  } as TextStyle,
+
+  /**
    * 30–40 display 800, -0.02em — the check-in prompt, and nothing else.
    * Sized at 34 to sit mid-range and survive Dynamic Type scaling at 360px.
    */

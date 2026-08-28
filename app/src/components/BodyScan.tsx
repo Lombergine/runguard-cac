@@ -42,6 +42,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { BodyMap, MarkSwatch } from "./BodyMap";
+import { Panel } from "./Panel";
 import { parseStoredPart } from "../lib/bodyParts";
 import { BodyMark, Injury, SorenessEntry } from "../lib/types";
 import { space } from "../theme/space";
@@ -162,20 +163,19 @@ export function BodyScan({ injuries, soreness }: BodyScanProps) {
     : `Body scan. ${emptyLine}`;
 
   return (
-    <View style={styles.section}>
-      <View style={styles.head}>
-        <Text style={styles.title}>Body scan</Text>
-        <Text style={styles.note}>
-          {flagged ? (
-            <>
-              <Text style={styles.count}>{flagged}</Text>
-              {` area${flagged === 1 ? "" : "s"} flagged`}
-            </>
-          ) : (
-            "Nothing flagged"
-          )}
-        </Text>
-      </View>
+    <Panel
+      title="Body scan"
+      note={
+        flagged ? (
+          <>
+            <Text style={styles.count}>{flagged}</Text>
+            {` area${flagged === 1 ? "" : "s"} flagged`}
+          </>
+        ) : (
+          "Nothing flagged"
+        )
+      }
+    >
 
       <BodyMap marks={marks} accessibilityLabel={summary} />
 
@@ -229,7 +229,7 @@ export function BodyScan({ injuries, soreness }: BodyScanProps) {
       ) : (
         <Text style={styles.rowMeta}>{emptyLine}</Text>
       )}
-    </View>
+    </Panel>
   );
 }
 

@@ -28,7 +28,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { Card } from "./Card";
+import { Panel } from "./Panel";
 import { Absent } from "./Nothing";
 import { fmtMiles } from "../lib/units";
 import { radius, space } from "../theme/space";
@@ -80,13 +80,13 @@ export function WeekProgress({ weekKm, weeklyTargetKm }: WeekProgressProps) {
   const over = rawPct !== null && rawPct > WATCH_PCT;
 
   return (
-    <Card>
-      <View style={styles.head}>
-        <Text style={styles.title}>Weekly mileage</Text>
-        {/* Both figures carry "mi" in their own node. The website prints the
-            unit once, after the target; here the first numeral would be left
-            bare, which non-negotiable #3 forbids. */}
-        <Text style={styles.note}>
+    <Panel
+      title="Weekly mileage"
+      /* Both figures carry "mi" in their own node. The website prints the unit
+         once, after the target; here the first numeral would be left bare,
+         which non-negotiable #3 forbids. */
+      note={
+        <>
           <Text style={styles.noteFigure}>{fmtMiles(weekKm)}</Text>
           {hasTarget ? (
             <>
@@ -97,15 +97,16 @@ export function WeekProgress({ weekKm, weeklyTargetKm }: WeekProgressProps) {
               {" target"}
             </>
           ) : null}
-        </Text>
-      </View>
+        </>
+      }
+    >
 
       {rawPct === null ? (
-        <View style={styles.body}>
+        <View>
           <Absent label="No weekly target set" />
         </View>
       ) : (
-        <View style={styles.body}>
+        <View>
           <View
             style={styles.track}
             accessibilityElementsHidden
@@ -139,24 +140,14 @@ export function WeekProgress({ weekKm, weeklyTargetKm }: WeekProgressProps) {
           </Text>
         </View>
       )}
-    </Card>
+    </Panel>
   );
 }
 
 const styles = StyleSheet.create({
-  head: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  title: { ...text.title, color: color.ink },
-  note: { ...text.meta, color: color.muted },
   /** Nested in prose: inherits the meta size and colour, contributes the mono
    *  face and tabular figures every numeral in this app is required to have. */
   noteFigure: { fontFamily: font.mono, ...tabular },
-  body: { marginTop: space.md },
   track: {
     height: BAR_HEIGHT,
     backgroundColor: color.surface3,

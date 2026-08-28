@@ -25,6 +25,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Card } from "../components/Card";
 import { dayLabel } from "../lib/dates";
+import { screenHeader } from "../theme/header";
 import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
 import { layout, radius, space } from "../theme/space";
@@ -50,6 +51,25 @@ const EMBER_END = { x: 1, y: 1 } as const;
 /**
  * The website's Panel, in React Native: 14 semibold title on the left, an
  * optional micro note on the right, then the content.
+ */
+/**
+ * DELIBERATELY NOT `components/Panel`, though it looks like it.
+ *
+ * Nine other files spelled that shape out by hand and drifted into three
+ * different title sizes; they have all been migrated to the shared component.
+ * This one stays local, and it is not an oversight:
+ *
+ *  - Its title is ALREADY the shared component's 14px semibold, so it was never
+ *    part of that drift.
+ *  - Its NOTE is the difference. Every note on this screen is authored in caps
+ *    — "HEALTH ONLY IF YOU ALLOW IT", "NEVER FOR ADVERTISING" — because it is a
+ *    `text.micro` uppercase-mono section tag, not a sentence. Rendered through
+ *    the shared note style (14px body) those same strings stop reading as
+ *    micro-labels and start reading as shouting.
+ *
+ * So this is a legal-document section header that happens to share a silhouette
+ * with a Panel, not a copy of one. If the shared component ever grows a note
+ * variant, fold this in then.
  */
 function Panel({
   title,
@@ -78,19 +98,7 @@ function Panel({
 export default function PrivacyScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Privacy",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
-        }}
-      />
+      <Stack.Screen options={screenHeader("Privacy")} />
 
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.panel}>
@@ -309,7 +317,7 @@ const styles = StyleSheet.create({
   mark: {
     width: space.xxxl,
     height: space.xs,
-    borderRadius: space.xs,
+    borderRadius: radius.pill,
     marginBottom: layout.cardPadding,
   },
 

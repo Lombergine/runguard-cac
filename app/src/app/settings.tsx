@@ -19,8 +19,8 @@
  * when the reminder they thought they enabled never arrives.
  *
  * The token rule from lib/auth.ts applies here in full: this file never reads,
- * renders, logs or hints at the device token. "Unpair" deletes it without ever
- * holding it.
+ * renders, logs or hints at the device token. Signing out deletes it without
+ * ever holding it.
  *
  * This screen sits inside the session gate (lib/session.tsx), so it exists only
  * while someone is signed in. It therefore states the signed-in case plainly and
@@ -28,14 +28,7 @@
  * a signed-out phone.
  */
 import { useCallback, useEffect, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import Constants from "expo-constants";
@@ -43,9 +36,12 @@ import Svg, { Path } from "react-native-svg";
 
 import { Absent } from "../components/Nothing";
 import { getHome, isUnauthorized } from "../lib/api";
+import { isDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
-import { color, shadow } from "../theme/tokens";
-import { font, text } from "../theme/type";
+import { screenHeader } from "../theme/header";
+import { Panel } from "../components/Panel";
+import { color } from "../theme/tokens";
+import { text } from "../theme/type";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 
 /**
@@ -73,38 +69,6 @@ type NameState =
   | { kind: "loading" }
   | { kind: "known"; name: string }
   | { kind: "failed" };
-
-/* ------------------------------------------------------------------ *
- * Panel — the website's hierarchy (website/src/components/athlete/tabs.tsx:22):
- * semibold title LEFT, muted note RIGHT, content beneath. The note is the
- * caveat.
- *
- * Copied rather than imported: `Panel` is a local shape in chat.tsx too, and
- * both files are screens rather than the component library. The type ramp is
- * chat.tsx's exactly (`text.meta` for title and note) so the two screens agree —
- * the theme has no 12px body step, and inventing one here to match the web's
- * text-xs would be a bare size, which the token rule forbids.
- * ------------------------------------------------------------------ */
-
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 function Divider() {
   return <View style={styles.divider} />;
@@ -184,6 +148,8 @@ export default function SettingsScreen() {
   const { signOut } = useSession();
   const [name, setName] = useState<NameState>({ kind: "loading" });
   const [unpairing, setUnpairing] = useState(false);
+  // Read once per render: the value only changes on sign-out, which unmounts this.
+  const demo = isDemo();
 
   useEffect(() => {
     let alive = true;
@@ -244,30 +210,24 @@ export default function SettingsScreen() {
   const confirmUnpair = useCallback(() => {
     if (unpairing) return;
     Alert.alert(
-      "Unpair this device?",
-      "RunGuard will sign out of this phone. Your runs and check-ins stay on the server, and you can pair again with the token from the web app.",
+      demo ? "Leave the demo?" : "Sign out?",
+      demo
+        ? "Everything you changed in the demo was kept on this phone, and leaving discards it. Nothing on the server was ever touched."
+        : "RunGuard will sign out of this phone. Your runs and check-ins stay on the server, and you can sign back in with your email and password.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Unpair", style: "destructive", onPress: unpair },
+        {
+          text: demo ? "Leave" : "Sign out",
+          style: "destructive",
+          onPress: unpair,
+        },
       ]
     );
-  }, [unpair, unpairing]);
+  }, [unpair, unpairing, demo]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Settings",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
-        }}
-      />
+      <Stack.Screen options={screenHeader("Settings")} />
 
       <ScrollView contentContainerStyle={styles.page}>
         {/* ---- Account ------------------------------------------------- */}
@@ -385,29 +345,62 @@ export default function SettingsScreen() {
         </Panel>
 
         {/* ---- Danger zone --------------------------------------------- */}
-        <Panel title="Unpair this device" note="Affects this phone only">
-          <Text style={styles.body}>
-            Unpairing removes this phone&apos;s pairing from its keychain and signs
-            the app out. Nothing on the RunGuard server changes — your runs,
-            check-ins and history stay exactly as they are. To use the app again
-            you will need the token from the web app.
-          </Text>
+        {/*
+          "Unpair this device" was the old title, and it asked the athlete to
+          know what pairing is. It is the app's word for its own plumbing — the
+          device token in the keychain — not a thing a 16-year-old came here to
+          do. They came to sign out. The mechanism is still described in the
+          body, where it belongs, because "your data stays on the server" is the
+          reassurance that actually matters before tapping a red button.
 
-          <Pressable
-            onPress={confirmUnpair}
-            disabled={unpairing}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: unpairing }}
-            style={({ pressed }) => [
-              styles.danger,
-              pressed && styles.dangerPressed,
-            ]}
-          >
-            <Text style={styles.dangerLabel}>
-              {unpairing ? "Unpairing…" : "Unpair this device"}
+          In the demo it is a different act entirely: nothing was paired, there
+          is nothing to sign out of, and everything the visitor typed lived on
+          this phone. Saying "sign out" there would imply an account they never
+          made.
+        */}
+        {demo ? (
+          <Panel title="Athlete demo" note="Nothing here is saved">
+            <Text style={styles.body}>
+              You are looking at a real seeded runner&apos;s training as an
+              athlete would see it. Anything you change stays on this phone and
+              is never sent — the roster on the server is untouched. The coach
+              side of the demo lives on the RunGuard website.
             </Text>
-          </Pressable>
-        </Panel>
+
+            <Pressable
+              onPress={confirmUnpair}
+              disabled={unpairing}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: unpairing }}
+              style={({ pressed }) => [styles.danger, pressed && styles.dangerPressed]}
+            >
+              <Text style={styles.dangerLabel}>
+                {unpairing ? "Leaving…" : "Leave the demo"}
+              </Text>
+            </Pressable>
+          </Panel>
+        ) : (
+          <Panel title="Sign out" note="Affects this phone only">
+            <Text style={styles.body}>
+              Signing out removes this phone&apos;s pairing from its keychain.
+              Nothing on the RunGuard server changes — your runs, check-ins and
+              history stay exactly as they are. To use the app again you will
+              need your email and password, or a pairing code from the web app.
+            </Text>
+
+            <Pressable
+              onPress={confirmUnpair}
+              disabled={unpairing}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: unpairing }}
+              style={({ pressed }) => [styles.danger, pressed && styles.dangerPressed]}
+            >
+              <Text style={styles.dangerLabel}>
+                {unpairing ? "Signing out…" : "Sign out"}
+              </Text>
+            </Pressable>
+          </Panel>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -423,25 +416,6 @@ const styles = StyleSheet.create({
 
   /* Panel — same surface as chat.tsx's, minus the horizontal margin, which the
      page inset already supplies here. */
-  panel: {
-    backgroundColor: color.card,
-    borderRadius: radius.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    padding: layout.cardPadding,
-    gap: space.sm,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  panelTitle: { ...text.meta, fontFamily: font.bodySemi, color: color.ink },
-  /** The caveat. Always right, always muted (5.16:1 on card). */
-  panelNote: { ...text.meta, color: color.muted },
 
   /* Rows */
   row: {

@@ -27,6 +27,7 @@ import {
 } from "react";
 
 import { clearAllStoredState, getToken } from "./auth";
+import { exitDemo } from "./demo";
 
 export type SessionStatus = "loading" | "in" | "out";
 
@@ -77,6 +78,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const erased = await clearAllStoredState();
+    /*
+     * The demo overlay goes with everything else. It holds no athlete data —
+     * only the writes the demo pretended to make — but leaving it behind would
+     * let a real pairing inherit a demo check-in, and "signed out clears
+     * everything" is a rule worth having no exceptions to.
+     */
+    exitDemo();
     setStatus("out");
     return { erased };
   }, []);

@@ -57,7 +57,6 @@
  * roughly half the picture, which is why the panel says so in words as well as
  * in shape.
  */
-import { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
@@ -65,8 +64,9 @@ import { AbsentMarks, Bars, LinePath } from "../chart/marks";
 import { isAbsent } from "../chart/scales";
 import { DAILY_DAYS, loadSeries } from "../../lib/chartData";
 import type { DailyPoint } from "../../lib/types";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
+import { ruleWidth, space } from "../../theme/space";
+import { Panel } from "../Panel";
+import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /* ------------------------------------------------------------------ *
@@ -105,25 +105,6 @@ const BAR = color.ink2;
  * drift apart even though the code is not shared.
  * ------------------------------------------------------------------ */
 
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 export function LoadChart({ series }: { series?: DailyPoint[] }) {
   const s = loadSeries(series);
@@ -224,24 +205,6 @@ export function LoadChart({ series }: { series?: DailyPoint[] }) {
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  panelNote: { ...text.meta, color: color.muted },
 
   lede: { ...text.meta, color: color.ink2, marginBottom: space.md },
   read: { ...text.meta, color: color.ink2, marginTop: space.md },

@@ -59,8 +59,9 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Absent, NoRun, Zero } from "./Nothing";
 import { dayLabel, localDay, parseLocalDay } from "../lib/dates";
 import { formatDistance } from "../lib/units";
-import { layout, radius, ruleWidth, space } from "../theme/space";
-import { color, shadow } from "../theme/tokens";
+import { ruleWidth, space } from "../theme/space";
+import { Panel } from "./Panel";
+import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
 /** One day of `calendar`, which rides along outside the `Profile` slice. */
@@ -95,25 +96,6 @@ type Cell = {
  * not made here.
  * ------------------------------------------------------------------ */
 
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 /* ------------------------------------------------------------------ *
  * Grid metrics — every number composed from theme/space.
@@ -473,6 +455,22 @@ export function YearGrid({
                            Without this the cells are the targets and every tap
                            on one resolves to row 0. */
                         pointerEvents="box-only"
+                        /*
+                         * Half the gap on each side, so the 4pt channel between
+                         * columns stops being a dead zone: every x in the grid
+                         * now belongs to exactly one column.
+                         *
+                         * HALF, not more. `target.min` is 48 and a column is 24
+                         * wide on a 28pt pitch, so a target that actually
+                         * reached 48 would have to overlap its neighbours by
+                         * 20pt — and an overlapping hitSlop does not widen a
+                         * target, it makes the winner ambiguous and sends taps
+                         * to the wrong day. 48 is unreachable at this pitch by
+                         * construction; 366 cells in one screen is the reason
+                         * the header calls this a deliberate tradeoff. What is
+                         * fixable is the gap, and this fixes it.
+                         */
+                        hitSlop={{ left: GAP / 2, right: GAP / 2 }}
                         // The row is derived from where in the column the thumb
                         // landed; each row is CELL + GAP tall.
                         onPress={(e) => {
@@ -579,31 +577,6 @@ export function YearGrid({
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  /* muted on `card` is 5.16:1 — the note is small and often the only caveat.
-     `flexShrink` because a Text in a flex row does not shrink by default in
-     React Native: without it a note long enough to overflow squeezes the title
-     off its own baseline at the 360px floor instead of wrapping. Three of the
-     app's twelve copies of this head already carried it and nine did not; this
-     is the behaviour the shared component should keep when they are folded into
-     one. */
-  panelNote: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   gridRow: { flexDirection: "row" },
   gutter: { width: GUTTER },

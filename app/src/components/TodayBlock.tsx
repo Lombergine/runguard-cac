@@ -36,7 +36,7 @@
  */
 import { StyleSheet, Text, View } from "react-native";
 
-import { Card } from "./Card";
+import { Panel } from "./Panel";
 import { Absent, NoRun } from "./Nothing";
 import { Stat } from "./Stat";
 import { formatDistance } from "../lib/units";
@@ -68,16 +68,13 @@ export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
   const blocks = day ? workoutBlocks(day) : [];
 
   return (
-    <Card>
-      <View style={styles.head}>
-        {/* The portal's own title. `type` is already the team's vocabulary
-            ("Easy run", "Workout: 8×400m") and is printed verbatim. */}
-        <Text style={styles.title}>
-          {!day ? "Today" : isRest ? "Today · Rest day" : `Today · ${day.type}`}
-        </Text>
-        {/* Pre-formatted upstream — this block never derives a date. */}
-        <Text style={styles.note}>{dateLabel}</Text>
-      </View>
+    <Panel
+      /* The portal's own title. `type` is already the team's vocabulary
+         ("Easy run", "Workout: 8×400m") and is printed verbatim. */
+      title={!day ? "Today" : isRest ? "Today · Rest day" : `Today · ${day.type}`}
+      /* Pre-formatted upstream — this block never derives a date. */
+      note={dateLabel}
+    >
 
       {/*
         Who decided today.
@@ -160,7 +157,7 @@ export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
       {/* A plain lowercase word, exactly as the server sends it. No badge, no
           fill, no colour: this describes what happened, it does not rate it. */}
       {day?.status ? <Text style={styles.status}>{day.status}</Text> : null}
-    </Card>
+    </Panel>
   );
 }
 
@@ -200,32 +197,19 @@ export function NextRaceBlock({ race }: NextRaceBlockProps) {
   const counting = race.daysUntil > 0;
 
   return (
-    <Card>
-      <View style={styles.head}>
-        <Text style={styles.title}>Next race</Text>
-        <Text style={styles.note}>{race.dateLabel}</Text>
-      </View>
+    <Panel title="Next race" note={race.dateLabel}>
       {/* Mono while it is a count; on the day itself there is no numeral, and a
           word does not belong in the figure voice. */}
       <Text style={counting ? styles.countdown : styles.raceDay}>
         {countdownLabel(race.daysUntil)}
       </Text>
       <Text style={styles.raceName}>{race.name}</Text>
-    </Card>
+    </Panel>
   );
 }
 
 const styles = StyleSheet.create({
   /** The Panel head: title left, note right, both on the same baseline. */
-  head: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  title: { ...text.title, color: color.ink },
-  note: { ...text.meta, color: color.muted },
   body: { marginTop: space.md },
   /** Ember-coloured meta, the same pairing `countdown` uses on this surface. */
   attribution: { ...text.meta, color: color.brandText, marginTop: space.xs },

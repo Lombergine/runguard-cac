@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
   dot: {
     width: space.lg,
     height: space.lg,
-    borderRadius: space.sm,
+    borderRadius: radius.pill,
     borderWidth: ruleWidth,
     borderColor: color.ruleStrong,
     backgroundColor: color.card,

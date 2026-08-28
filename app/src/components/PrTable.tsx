@@ -74,7 +74,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { Absent } from "./Nothing";
-import { Card } from "./Card";
+import { Panel } from "./Panel";
 import { Stat } from "./Stat";
 import { useProfile } from "../lib/profileStore";
 import { fitnessKnown } from "../lib/readiness";
@@ -156,47 +156,33 @@ export function PrTable({ prs, predictions }: PrTableProps) {
   const predictionKnown = profile ? fitnessKnown(profile) : false;
 
   return (
-    <View style={styles.block}>
-      {/* The Panel head, as on the website and in RecoveryTiles: title left,
-          the caveat right. */}
-      <View style={styles.head}>
-        <Text style={styles.title}>PRs & predicted times</Text>
-        <Text style={styles.note}>
-          {predictionKnown
-            ? "Predicted times come from your recent training."
-            : "Predictions need synced runs."}
-        </Text>
-      </View>
-
+    <Panel
+      title="PRs & predicted times"
+      note={
+        predictionKnown
+          ? "Predicted times come from your recent training."
+          : "Predictions need synced runs."
+      }
+      /* The rows draw their own dividers corner to corner. */
+      padded={prs.length === 0}
+    >
       {prs.length === 0 ? (
         <Absent label="No events on record." />
       ) : (
-        <Card padded={false}>
-          {prs.map((pr, i) => (
-            <View key={pr.event} style={i > 0 ? styles.divided : undefined}>
-              <PrRow
-                pr={pr}
-                predicted={predictionKnown ? predictions[pr.event] : undefined}
-              />
-            </View>
-          ))}
-        </Card>
+        prs.map((pr, i) => (
+          <View key={pr.event} style={i > 0 ? styles.divided : undefined}>
+            <PrRow
+              pr={pr}
+              predicted={predictionKnown ? predictions[pr.event] : undefined}
+            />
+          </View>
+        ))
       )}
-    </View>
+    </Panel>
   );
 }
 
 const styles = StyleSheet.create({
-  block: { gap: space.md },
-  head: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  title: { ...text.title, color: color.ink },
-  note: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   row: { padding: layout.cardPadding, gap: space.sm },
   divided: { borderTopWidth: ruleWidth, borderTopColor: color.ruleSoft },

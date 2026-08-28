@@ -22,9 +22,9 @@ import { CardProps } from "../lib/types";
 import { color, shadow } from "../theme/tokens";
 import { layout, radius, ruleWidth } from "../theme/space";
 
-export function Card({ children, padded = true }: CardProps) {
+export function Card({ children, padded = true, style }: CardProps) {
   return (
-    <View style={[styles.card, padded && styles.padded]}>{children}</View>
+    <View style={[styles.card, padded && styles.padded, style]}>{children}</View>
   );
 }
 
@@ -34,7 +34,10 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.ruleSoft,
     borderRadius: radius.card,
-    // iOS reads shadow*, Android reads elevation. Both are in the token.
+    // The squircle iOS draws itself, rather than a circular arc. Free here, and
+    // most of what separates a native surface from a web page in a wrapper.
+    borderCurve: "continuous",
+    // One `boxShadow` string, both of the website's layers. See theme/tokens.ts.
     ...shadow.card,
   },
   padded: { padding: layout.cardPadding },

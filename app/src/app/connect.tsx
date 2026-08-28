@@ -43,7 +43,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { Stack } from "expo-router";
 
+import { screenHeader } from "../theme/header";
 import { Absent } from "../components/Nothing";
 import { Card } from "../components/Card";
 import { Stat } from "../components/Stat";
@@ -249,7 +251,10 @@ export default function ConnectScreen() {
       : null;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      {/* Pushed from Settings, so without this the only way back was the iOS
+          edge-swipe — invisible, untappable, and absent on Android. */}
+      <Stack.Screen options={screenHeader("Connect")} />
       <ScrollView
         contentContainerStyle={styles.page}
         refreshControl={
