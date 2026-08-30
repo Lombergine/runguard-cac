@@ -34,6 +34,15 @@ npm run dev
 
 Then open **http://localhost:3000**.
 
+**You need no accounts to do this** — not Vercel, not Supabase, no database
+password. With `DB_DRIVER` unset the app runs against the local SQLite file,
+which is exactly what that default is for. Ask for credentials only if you
+specifically need the shared deployment database; see [DEPLOY.md](DEPLOY.md).
+
+One trap: do not copy someone else's `website/.env.local` to get started. Theirs
+may set `DB_DRIVER=supabase`, which points at a shared database, demands a
+password you have not been given, and disables the demo login below.
+
 > The database file lives at `website/data/` and is git-ignored, so a fresh clone
 > starts empty — run `npm run seed` once from `website/` to generate the demo team.
 > Be aware that `npm run seed` **wipes and rebuilds** the roster; it refuses to run
