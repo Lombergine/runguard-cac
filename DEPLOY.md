@@ -212,7 +212,7 @@ and a bad migration on a branch corrupts live data.
 |---|---|---|---|
 | Production | `supabase` | the PROD project | its own |
 | Preview | `supabase` | the DEV project | its own, **different** |
-| Development | *unset* | the DEV project | its own |
+| Development | `supabase` | the DEV project | **shared with Preview** |
 
 The two Supabase projects, both in the RealRunGuard org (project refs are not
 secrets — the password in the connection string is):
@@ -228,26 +228,38 @@ name a project this deployment no longer uses. A forgotten `DB_HOST` would then
 connect somewhere unintended and succeed silently. A full `DATABASE_URL` names
 its project and cannot resolve elsewhere.
 
-**Development leaves `DB_DRIVER` unset**, so a plain `vercel env pull` still
-gives a developer the SQLite default and needs no credentials. Opting in to the
-shared DEV database is a local choice — either for one command:
+**Development mirrors Preview.** `vercel env pull` returns
+`DB_DRIVER=supabase` and the DEV `DATABASE_URL`, so `npm run dev` and
+`vercel dev` both serve `http://localhost:3000` against the shared DEV project
+rather than the local SQLite file. Preview and Development are written from one
+source so the two are provably the same target — Vercel will not read Preview
+values back (`vercel env pull` yields the literal `[SENSITIVE]`), so "I set both
+the same" is not verifiable after the fact; rewriting both together is.
 
-```bash
-DB_DRIVER=supabase npm run dev
-```
+Development also carries `COACH_PASSWORD`, `DEMO_TEAM_ID`, `DEMO_ATHLETE_ID` and
+the `OLLAMA_*` pair, purely so `vercel env pull` returns a working file. That
+command **overwrites** `website/.env.local`; before those five were mirrored, a
+pull silently destroyed the local demo setup.
 
-or permanently, by setting `DB_DRIVER`, `DATABASE_URL` and `SESSION_SECRET` in
-`website/.env.local`. Either way the server is still `http://localhost:3000`;
-only the database moves.
+`SESSION_SECRET` is shared between Preview and Development on purpose — both
+reach the same DEV database, so a session valid on one is valid on the other and
+crosses no boundary. **Production keeps its own**, which is the split that
+matters: a shared secret there would make a session minted on any preview URL
+valid against production.
 
-Two things follow from that, both deliberate:
+To go back to the local SQLite file, comment out `DB_DRIVER` in
+`website/.env.local`. Nothing else needs changing.
+
+Two things follow from running on Supabase locally, both deliberate:
 
 - **`SESSION_SECRET` becomes required.** `secret()` fails closed the moment
   `DB_DRIVER=supabase`, even on localhost, because cookies minted against a
   shared database must not be signed with the default published in `session.ts`.
-- **The "Explore the demo team" button stops working.** `api/login/route.ts`
-  refuses the shared `COACH_PASSWORD` unless the driver is sqlite. Sign in with
-  real team credentials instead. Do not widen that gate.
+- **The password login on `/login` stops working.** `api/login/route.ts`
+  refuses the shared `COACH_PASSWORD` unless the driver is sqlite. Do not widen
+  that gate. The demo itself is unaffected: the landing page's "See the coach
+  dashboard" link goes through `/api/demo/coach` → `demoLogIn()`, which has no
+  driver gate.
 
 Cookie `secure` is **not** tied to `DB_DRIVER` — it follows `NODE_ENV`, which is
 the transport question rather than the database question. It was tied to
