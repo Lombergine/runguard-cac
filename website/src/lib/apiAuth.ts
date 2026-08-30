@@ -23,7 +23,7 @@ export async function resolveAthleteWithPath(
   // it and return the token's own athlete no matter which id the caller asked
   // for, so `resolveAthlete(request, victimId)` answered truthily for any device
   // token — an IDOR wherever the route then trusted the client's id (it did, in
-  // the old strava/connect and strava/sync). Applying it by construction here means a
+  // two now-deleted sync routes). Applying it by construction here means a
   // fourth auth path cannot reintroduce the hole by forgetting the comparison.
   const scoped = (a: AthleteRow | null | undefined, via: AuthPath) =>
     a && (athleteId == null || athleteId === a.id) ? { athlete: a, via } : null;

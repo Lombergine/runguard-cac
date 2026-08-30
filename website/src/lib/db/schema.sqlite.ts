@@ -30,10 +30,6 @@ export function applySqliteSchema(db: Database.Database): void {
       event_group TEXT,               -- 'distance' | 'mid' | 'sprint'
       avatar_hue INTEGER DEFAULT 210,
       device_token TEXT UNIQUE,       -- iOS app auth token
-      strava_athlete_id TEXT,
-      strava_access_token TEXT,
-      strava_refresh_token TEXT,
-      strava_expires_at INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -203,24 +199,6 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
       ON risk_snapshots(athlete_id, date);
-
-    -- DEPRECATED. Strava was removed from the product; nothing reads or writes
-    -- this table or the four strava_* columns on the athletes table any more.
-    -- They are
-    -- left in place because dropping columns is a migration that has to run
-    -- against the live Supabase database, and empty columns cost nothing.
-    --
-    -- Historical note, for whoever does eventually drop them:
-    -- One row per outstanding Strava OAuth handshake. The row WAS the permission
-    -- to write tokens onto an athlete: /api/strava/connect created it after
-    -- authenticating the caller, and the callback deletes it as it redeems it.
-    -- A replayed callback URL therefore finds nothing and is refused. See the
-    -- state notes in src/lib/strava.ts.
-    CREATE TABLE IF NOT EXISTS strava_oauth_states (
-      nonce TEXT PRIMARY KEY,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      expires_at INTEGER NOT NULL     -- unix seconds
-    );
   `);
 
   db.exec(`
@@ -282,6 +260,14 @@ export function applySqliteSchema(db: Database.Database): void {
   addColumn("activities", "calories REAL");            // active kcal
   addColumn("activities", "cadence REAL");             // steps/min
   addColumn("activities", "route TEXT");               // encoded polyline, for the detail map
+  // Per-run detail as JSON text, read by the activity detail screens. These
+  // three existed in Supabase and were read by src/app/athlete/activity/[id]
+  // but were never added here, so on SQLite the reads came back undefined
+  // rather than null — the columns did not exist to be null. Both targets carry
+  // them now; see supabase/migrations/0000_base_schema.sql.
+  addColumn("activities", "splits TEXT");              // JSON array of mile splits
+  addColumn("activities", "hr_series TEXT");           // JSON array of {t, v} samples
+  addColumn("activities", "elev_series TEXT");
   // real-account columns on athletes
   addColumn("athletes", "team_id INTEGER");
   addColumn("athletes", "email TEXT");

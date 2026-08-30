@@ -126,10 +126,9 @@ export type CoreProfile = {
 /**
  * What is actually feeding this athlete's data.
  *
- * Strava used to be listed here, both from the link column and from any
- * activity carrying `source === "strava"`. Both are gone with the integration:
- * everything now arrives through Apple Health, either live from the iPhone app
- * (`healthkit`) or from a one-off export backfill (`apple_export`).
+ * Everything arrives through Apple Health, either live from the iPhone app
+ * (`healthkit`) or from a one-off export backfill (`apple_export`). There is no
+ * third-party sync and no link column to read.
  *
  * `a` is still taken so callers do not have to change and so the athlete row is
  * at hand if a future source is stored as a column again.

@@ -145,8 +145,8 @@ function routePath(points: RoutePoint[]): string | null {
 /**
  * The trace, or the honest absence of one.
  *
- * NOTHING WRITES THE `route` COLUMN TODAY — not the Strava importer, not the
- * Apple export path — so every row in the database has `route IS NULL` and this
+ * NOTHING WRITES THE `route` COLUMN TODAY — not the live sync, not the Apple
+ * export path — so every row in the database has `route IS NULL` and this
  * renders its fallback for every run the app can currently open, exactly as the
  * website's own page does. The drawing above is not dead code: it is what runs
  * the day an ingest path starts storing points.

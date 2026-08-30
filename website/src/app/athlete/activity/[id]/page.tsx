@@ -118,7 +118,7 @@ function splitPace(sp: Split): number {
 }
 
 /**
- * Strava-style split table. The bar is scaled against the FASTEST mile, not
+ * Split table. The bar is scaled against the FASTEST mile, not
  * against a fixed maximum, so the shape of the run is legible whether it was
  * an even 8:00 grind or a progression run.
  */

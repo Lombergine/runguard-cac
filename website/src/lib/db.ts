@@ -77,12 +77,6 @@ export type AthleteRow = {
   event_group: string | null;
   avatar_hue: number;
   device_token: string | null;
-  // DEPRECATED — Strava is gone from the product. Kept so `SELECT *` keeps
-  // type-checking against databases that still have the columns.
-  strava_athlete_id: string | null;
-  strava_access_token: string | null;
-  strava_refresh_token: string | null;
-  strava_expires_at: number | null;
   team_id: number | null;
   email: string | null;
   password_hash: string | null;
@@ -145,10 +139,10 @@ export async function athletesForTeam(teamId: number): Promise<AthleteRow[]> {
  * Most recent activity per athlete on a team, as `athlete_id -> start_time`.
  *
  * The Data sources page needs one fact per athlete — "is anything actually
- * arriving?" — and used to answer it with `strava_athlete_id IS NOT NULL`,
- * which was a link state, not a sync state: an athlete could be linked and
- * sending nothing. Reading the real last activity is one grouped query for the
- * whole roster rather than N per-athlete lookups.
+ * arriving?" — and used to answer it from a stored link column, which was a
+ * link state, not a sync state: an athlete could be linked and sending
+ * nothing. Reading the real last activity is one grouped query for the whole
+ * roster rather than N per-athlete lookups.
  */
 export async function lastSyncForTeam(teamId: number): Promise<Map<number, string>> {
   const rows = await all<{ athlete_id: number; last_at: string | null }>(

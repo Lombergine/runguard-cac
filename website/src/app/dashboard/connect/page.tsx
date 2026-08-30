@@ -12,10 +12,10 @@ export const dynamic = "force-dynamic";
  * through the RunGuard iPhone app authenticated by the athlete's device token,
  * or as a one-off backfill from an Apple Health export.
  *
- * Strava used to sit here as a third path. It is gone — the whole OAuth surface
- * with it — because it was the only thing on this page that could show a coach
- * a red "not configured" banner, and because it duplicated data the phone
- * already sends. Android arrives through Health Connect after the iOS launch.
+ * There is deliberately no third-party OAuth path here. The one this page used
+ * to carry was the only thing on it that could show a coach a red
+ * "not configured" banner, and it duplicated data the phone already sends.
+ * Android arrives through Health Connect after the iOS launch.
  */
 export default async function ConnectPage() {
   const teamId = await currentTeamId();

@@ -48,9 +48,15 @@ Required for `DB_DRIVER=supabase`:
 | Name | Value |
 |---|---|
 | `DB_DRIVER` | `supabase` |
-| `DB_PASSWORD` | the database password from Supabase → *Project Settings → Database*. Preferred over `DATABASE_URL`: the app fills in host/user/db itself, so a password containing `@ # : /` needs no URL-encoding. |
-| `DATABASE_URL` | full connection string, as an alternative to `DB_PASSWORD` |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_NAME` | optional overrides; defaults target the Supabase pooler on 6543 |
+| `DATABASE_URL` | the full pooler URI, from Supabase → **Connect**. Preferred: it names the project it connects to, so it cannot silently resolve to a different one. |
+| `DB_PASSWORD` | the database password, as an alternative to `DATABASE_URL`. Avoids URL-encoding a password containing `@ # : /` — but see the warning below. |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_NAME` | overrides for the `DB_PASSWORD` form; the defaults target one specific project's pooler on 6543 |
+
+> **`DB_PASSWORD` alone is only safe when there is one project.** The host and
+> username fall back to defaults hardcoded in `src/lib/db/driver.ts`, so setting
+> the password for a *second* project and forgetting `DB_HOST`/`DB_USER`
+> connects to the first one — with no error, because those credentials are
+> valid. Once more than one database exists, use `DATABASE_URL`.
 
 Required for SQLite hosts (Options B–D):
 
@@ -64,7 +70,6 @@ Optional:
 |---|---|
 | `COACH_PASSWORD` | demo-team unlock password (defaults to `milemarker` — change it) |
 | `OLLAMA_MODEL`, `OLLAMA_BASE_URL` | the local AI coach. Unset means the rule engine answers everything; there is no hosted-model path. |
-| `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_VERIFY_TOKEN` | Strava sync |
 
 None of these carry the `NEXT_PUBLIC_` prefix, so they stay server-side and never
 reach the browser bundle.
@@ -76,7 +81,7 @@ reach the browser bundle.
 
 ## Credentials
 
-These six things are credentials. Handling is the same for all of them.
+These five things are credentials. Handling is the same for all of them.
 
 | Credential | What it opens |
 |---|---|
@@ -85,7 +90,6 @@ These six things are credentials. Handling is the same for all of them.
 | `SESSION_SECRET` | signs coach sessions; whoever holds it can mint one for any team |
 | `DB_PASSWORD` / `DATABASE_URL` | the database, and every athlete in it |
 | `COACH_PASSWORD` | the demo team's roster |
-| `STRAVA_CLIENT_SECRET` | the Strava integration |
 
 **The rules: never logged, never rendered, never in an error message, never in a
 commit.** Two of those get broken by accident rather than by decision. *Never in
@@ -146,16 +150,26 @@ rotating it, once per token exposed.
 
 1. Push this repo to GitHub. `.gitignore` covers `.env*`, so no secret is
    committed — keep it that way.
-2. Apply the schema once: run
-   `website/supabase/migrations/0001_risk_snapshots_and_chat_engine.sql` in the
-   Supabase SQL editor (or via the Supabase MCP `apply_migration`).
+2. Apply the schema once: run `website/supabase/migrations/0000_base_schema.sql`
+   in the Supabase SQL editor (or via the Supabase MCP `apply_migration`). That
+   one file builds the whole database — the numbered migrations after it are
+   deltas already folded into it, needed only by projects that predate it.
 3. https://vercel.com → **Add New → Project** → import the repo.
    Then **Settings → Build & Deployment → Root Directory** → `website`.
-4. **Settings → Environment Variables** (Production, and Preview if you use it):
-   set `DB_DRIVER=supabase`, `DB_PASSWORD`, `SESSION_SECRET`, `COACH_PASSWORD`.
-   `cd website && vercel env pull .env.local` copies them to your machine, into
-   the already-ignored `website/.env.local` — Next only reads `.env.local` from
-   its own project root.
+4. **Settings → Environment Variables**: set `DB_DRIVER=supabase`,
+   `DATABASE_URL` and `SESSION_SECRET`. See *Environments* below for which value
+   each target gets — they are not the same.
+
+   Prefer `DATABASE_URL` (the pooler URI from Supabase → **Connect**) over
+   `DB_PASSWORD`. Both work, but `DB_PASSWORD` leans on the default host and
+   username baked into `db/driver.ts`, so a target that sets the password and
+   forgets `DB_HOST` connects to whichever project those defaults name — quietly,
+   and successfully. A full URI cannot point somewhere you did not write down.
+
+   `cd website && vercel env pull .env.local` copies the **Development** values
+   to your machine, into the already-ignored `website/.env.local` — Next only
+   reads `.env.local` from its own project root. It OVERWRITES that file, so
+   anything you keep there and have not also set in Vercel is lost.
 5. Deploy. Coaches go to `/signup`, athletes to `/athlete/signup`.
 
 The connection uses Supabase's **transaction pooler on port 6543** with
@@ -169,6 +183,90 @@ To copy an existing local database up (this **replaces** the target):
 cd website
 DB_DRIVER=supabase DB_PASSWORD=... npx tsx scripts/migrate-to-pg.ts --yes
 ```
+
+To copy one deployed database into another — moving accounts, or filling a new
+project — use `scripts/copy-pg-to-pg.ts` instead. It intersects the columns of
+the two schemas, so a target that has deliberately dropped a column still takes
+the copy, which `pg_dump --data-only` cannot do. Do not route a Postgres-to-
+Postgres move through the local SQLite file: the two drift independently, and
+whichever table the file is behind on is silently overwritten with the older
+copy.
+
+```bash
+cd website
+export SRC_DB_URL='…'   # export, not inline: an inline password enters shell history
+export DST_DB_URL='…'
+npx tsx scripts/copy-pg-to-pg.ts          # dry run — reports both sides
+npx tsx scripts/copy-pg-to-pg.ts --yes
+```
+
+## Environments
+
+Vercel decides the target from the branch: the production branch deploys to
+**Production**, every other branch to **Preview**, and **Development** is what
+`vercel env pull` and `vercel dev` read. Point them at different databases —
+a preview branch sharing production's database writes real athletes' check-ins,
+and a bad migration on a branch corrupts live data.
+
+| | `DB_DRIVER` | `DATABASE_URL` | `SESSION_SECRET` |
+|---|---|---|---|
+| Production | `supabase` | the PROD project | its own |
+| Preview | `supabase` | the DEV project | its own, **different** |
+| Development | *unset* | the DEV project | its own |
+
+The two Supabase projects, both in the RealRunGuard org (project refs are not
+secrets — the password in the connection string is):
+
+| | project ref | region |
+|---|---|---|
+| PROD | `xgcxfvsezsfxdujzjexd` | `us-east-1` |
+| DEV | `mwwhgnrdownzbnwmbsgi` | `us-east-1` |
+
+**Set `DATABASE_URL`, not `DB_PASSWORD`.** `db/driver.ts` falls back to a
+hardcoded host and username when only a password is given, and those defaults
+name a project this deployment no longer uses. A forgotten `DB_HOST` would then
+connect somewhere unintended and succeed silently. A full `DATABASE_URL` names
+its project and cannot resolve elsewhere.
+
+**Development leaves `DB_DRIVER` unset**, so a plain `vercel env pull` still
+gives a developer the SQLite default and needs no credentials. Opting in to the
+shared DEV database is a local choice — either for one command:
+
+```bash
+DB_DRIVER=supabase npm run dev
+```
+
+or permanently, by setting `DB_DRIVER`, `DATABASE_URL` and `SESSION_SECRET` in
+`website/.env.local`. Either way the server is still `http://localhost:3000`;
+only the database moves.
+
+Two things follow from that, both deliberate:
+
+- **`SESSION_SECRET` becomes required.** `secret()` fails closed the moment
+  `DB_DRIVER=supabase`, even on localhost, because cookies minted against a
+  shared database must not be signed with the default published in `session.ts`.
+- **The "Explore the demo team" button stops working.** `api/login/route.ts`
+  refuses the shared `COACH_PASSWORD` unless the driver is sqlite. Sign in with
+  real team credentials instead. Do not widen that gate.
+
+Cookie `secure` is **not** tied to `DB_DRIVER` — it follows `NODE_ENV`, which is
+the transport question rather than the database question. It was tied to
+`DB_DRIVER` once, and that made `DB_DRIVER=supabase npm run dev` mark cookies
+`secure` over plain HTTP; browsers disagree about localhost in that case
+(Chrome and Firefox allow it, Safari does not), so sign-in broke on some
+machines and not others.
+
+**A different `SESSION_SECRET` per target, not one shared value.** It signs coach
+sessions, so a single secret makes a session minted on any preview URL valid on
+production. `SESSION_SECRET` is required on Preview too: Vercel builds set
+`NODE_ENV=production`, so `secret()` throws rather than falling back.
+
+**Never set `OLLAMA_MODEL` or `OLLAMA_BASE_URL` on a deployment** — see the table
+above and the note in `.env.example`. **Never point `DEMO_TEAM_ID` at a team with
+real athletes**: it is read at build time and makes that roster public.
+
+Environment variables apply to *new* deployments. Changing one does not affect
+what is already running — redeploy.
 
 ## Option B — Railway (SQLite, persistent volume)
 
@@ -217,20 +315,21 @@ DB_DRIVER=supabase DB_PASSWORD=... npx tsx scripts/migrate-to-pg.ts --yes
 The app lives in [`app/`](app/README.md) and talks to this deployment over
 `/api/mobile/*` with `Authorization: Bearer <device_token>`.
 
-> **Status:** the sync described here is the target design. `app/` is currently
-> an empty scaffold — the HealthKit read and its background-delivery entitlement
-> still have to be built.
+**The backend URL is compiled in, not entered.** `src/lib/api.ts` reads
+`EXPO_PUBLIC_API_URL` once at bundle time and there is no field anywhere in the
+app to change it, so the build for TestFlight must carry the production URL and a
+build for testing must carry the preview one. Unset, it falls back to
+`http://localhost:3000` — which on a phone is the phone, and fails on every
+screen. See `app/.env.example`.
 
 To put it on real phones you will need an Apple Developer account and
-TestFlight. Each athlete enters your deployed URL and pastes the pairing token
-from their web **Profile → Pair the RunGuard iPhone app**, then grants Apple
-Health access once.
+TestFlight. Each athlete pastes the pairing token from their web **Profile → Pair
+the RunGuard iPhone app**, then grants Apple Health access once.
 
 ## Custom domain
 
 All four hosts let you add a custom domain (e.g. `runguard.run`) in their
-dashboard — add the domain, set the DNS record they show you, done. Then set
-your Strava callback domain to match if you use Strava.
+dashboard — add the domain, set the DNS record they show you, done.
 
 ## Before a real deployment
 

@@ -5,15 +5,31 @@ import { DEMO_COOKIE, demoTeamId } from "./demo";
 const COOKIE = "mm_session";
 
 /**
- * True where the app is reachable as a deployment rather than as local dev.
- * The same signal `secret()` fails closed on, reused so the two cannot drift:
- * where a public dev secret would be unsafe, plain HTTP is unsafe too.
+ * True where a published default would become reachable: the app is built for
+ * production, or it is pointed at a shared database. Gates `secret()` only.
  *
- * It gates `secure` rather than hardcoding `true` because a `secure` cookie is
- * simply not stored over http://localhost, which would break local dev sign-in.
+ * Deliberately still true for `DB_DRIVER=supabase` on localhost. Running a dev
+ * server against the shared DEV project means the cookies it mints are valid
+ * against rows other people can read, so the public dev secret must not stand
+ * there — that is the whole point of failing closed.
  */
 function deployed(): boolean {
   return process.env.DB_DRIVER === "supabase" || process.env.NODE_ENV === "production";
+}
+
+/**
+ * Whether to mark cookies `secure`. A question about TRANSPORT, and nothing to
+ * do with which database is in play — `npm run dev` against the shared DEV
+ * project is still plain HTTP on localhost.
+ *
+ * This used to be `deployed()`, which meant `DB_DRIVER=supabase npm run dev`
+ * marked every cookie `secure` over http and broke sign-in. Browsers disagree
+ * about that case (Chrome and Firefox grant localhost an exception, Safari does
+ * not), so it failed on one machine and not the next. `next dev` never sets
+ * NODE_ENV=production and every deployment does, which is the line wanted.
+ */
+function secureCookies(): boolean {
+  return process.env.NODE_ENV === "production";
 }
 
 /**
@@ -99,7 +115,7 @@ export async function logIn(teamId: number): Promise<void> {
   const store = await cookies();
   store.set(COOKIE, signTeam(teamId), {
     httpOnly: true,
-    secure: deployed(),
+    secure: secureCookies(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
@@ -141,7 +157,7 @@ export async function demoLogIn(): Promise<number | null> {
   const store = await cookies();
   store.set(COOKIE, signTeam(teamId), {
     httpOnly: true,
-    secure: deployed(),
+    secure: secureCookies(),
     sameSite: "lax",
     path: "/",
     // Deliberately short. A demo is a visit, not an account, and a coach who
@@ -154,7 +170,7 @@ export async function demoLogIn(): Promise<number | null> {
     // should render. It carries no secret — its whole content is the word "1",
     // and it can only ever cause more refusal, never less.
     httpOnly: false,
-    secure: deployed(),
+    secure: secureCookies(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 12,
@@ -196,7 +212,7 @@ export async function athleteLogIn(token: string): Promise<void> {
   const store = await cookies();
   store.set(ATHLETE_COOKIE, token, {
     httpOnly: true,
-    secure: deployed(),
+    secure: secureCookies(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 180,

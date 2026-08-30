@@ -745,7 +745,7 @@ export type Profile = {
    */
   calendar?: { date: string; load: number; km: number }[];
   /**
-   * Every source that has ever written data for this athlete, e.g. "strava".
+   * Every source that has ever written data for this athlete, e.g. "healthkit".
    *
    * NEVER EMPTY, AND THAT IS THE TRAP. `profile.ts:131` substitutes the
    * one-element array `["No data yet"]` when the real set is empty, so an

@@ -15,8 +15,8 @@
  *  - `imported.workouts === 0` means nothing was NEW (the server inserts with
  *    ON CONFLICT DO NOTHING). On the second sync of an unchanged week that is
  *    the correct answer, and it must not be styled as a failure.
- *  - Apple Health is the only source. Strava was removed from the product, so
- *    this screen no longer reports a link state it could not verify anyway.
+ *  - Apple Health is the only source, so this screen reports no link state it
+ *    could not verify anyway.
  *  - Anything unknown renders through <Absent/>. A source list that failed to
  *    load must never look like an empty one.
  *
