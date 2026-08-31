@@ -84,33 +84,6 @@ export function TeamMembership({ teamName }: { teamName: string | null }) {
   );
 }
 
-/* ---------- pair the iPhone app (copy device token) ---------- */
-
-export function CopyToken({ token }: { token: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard blocked */
-    }
-  }
-  return (
-    <button
-      onClick={copy}
-      className="w-full flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left cursor-pointer"
-      style={{ borderColor: "var(--hairline)", background: "var(--surface-2)" }}
-    >
-      <code className="flex-1 text-sm truncate" style={{ color: "var(--ink-2)" }}>{token}</code>
-      <span className="text-xs font-semibold shrink-0" style={{ color: "var(--brand-strong)" }}>
-        {copied ? "Copied!" : "Copy"}
-      </span>
-    </button>
-  );
-}
-
 /* ---------- quick soreness check-in (1-10 tap) ---------- */
 
 const SIDES = ["left", "right", "both"] as const satisfies readonly Side[];

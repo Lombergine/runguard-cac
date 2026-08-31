@@ -85,7 +85,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // The token's own athlete is the only correct answer here, so no client-supplied
   // athleteId is passed — there is nothing to scope this to but the bearer itself.
   const athlete = await resolveAthlete(request);
-  if (!athlete) return Response.json({ error: "Invalid device token" }, { status: 401 });
+  if (!athlete) return Response.json({ error: "Invalid session token" }, { status: 401 });
 
   const { id } = await params;
   const activityId = Number(id);

@@ -2,8 +2,8 @@
  * Data sources — where the athlete's numbers come from.
  *
  * Mirrors the content of `website/src/app/dashboard/connect/page.tsx`, not its
- * layout: that page is COACH-facing and renders every athlete's device token in
- * a table. Nothing here links to it, and nothing here shows a token.
+ * layout: that page is COACH-facing and tabulates the whole roster. Nothing here
+ * links to it, and nothing here shows a credential of any kind.
  *
  * The honesty rules this screen exists to obey:
  *
@@ -85,7 +85,7 @@ type ProfileWithSources = Profile & { connectedSources?: string[] };
  */
 const NO_SOURCES = "No data yet";
 
-/** The website's `--ember` stops and its 135°, as in app/pair.tsx. */
+/** The website's `--ember` stops and its 135°, as in app/login.tsx. */
 const EMBER_STOPS = [0, 0.45, 1] as const;
 const EMBER_START = { x: 0, y: 0 } as const;
 const EMBER_END = { x: 1, y: 1 } as const;
@@ -131,7 +131,7 @@ function explainFailure(err: unknown): string {
     case "read":
       return "Apple Health did not return your data. Nothing was sent.";
     case "unauthorized":
-      return "This device is no longer paired with RunGuard. Pair it again, then sync.";
+      return "This device is no longer signed in to RunGuard. Sign in again, then sync.";
     case "network":
       return "Could not reach the RunGuard server. Your data stayed on this phone.";
     case "server":
@@ -357,7 +357,7 @@ export default function ConnectScreen() {
                     {({ pressed }) => (
                       <>
                         {/* Pressing drops the gradient to the flat `brandStrong`
-                            ground beneath it, exactly as app/pair.tsx does. */}
+                            ground beneath it, exactly as app/login.tsx does. */}
                         {pressed ? null : (
                           <LinearGradient
                             colors={color.ember}
@@ -382,7 +382,7 @@ export default function ConnectScreen() {
             )}
 
             {/* OUTSIDE the availability branch, deliberately. The 401 wording
-                ("no longer paired") is set by a call to the server, which this
+                ("no longer signed in") is set by a call to the server, which this
                 screen makes on every device — including the ones where Apple
                 Health is unavailable. Nested inside `avail.ok` it was
                 unreachable on Android, in Expo Go and on the Simulator: the
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
   body: { ...text.base, color: color.ink2 },
 
   /**
-   * The ember signature, on the one thing you tap. See app/pair.tsx.
+   * The ember signature, on the one thing you tap. See app/login.tsx.
    *
    * No `dim` and no `rowPress`: an ember button drops its GRADIENT to the flat
    * `brandStrong` ground beneath, which is the richer signal and the one the

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getAthleteByToken, getActivityById, getAthlete, parseStream } from "@/lib/db";
+import { getActivityById, getAthlete, parseStream } from "@/lib/db";
 import type { Split, SeriesSample } from "@/lib/db";
 import { ActivityHrChart, ActivityElevChart } from "@/components/charts";
-import { athleteTokenFromCookie, isDemoSession } from "@/lib/session";
+import { athleteTokenFromCookie, isDemoSession, verifyAthleteToken } from "@/lib/session";
 import { demoTeamId } from "@/lib/demo";
 import { fmtTime } from "@/lib/engine";
 import { miNum, fmtMilesFromMeters } from "@/lib/units";
@@ -168,8 +168,8 @@ function Splits({ splits }: { splits: Split[] }) {
 }
 
 export default async function ActivityDetail({ params }: { params: Promise<{ id: string }> }) {
-  const token = await athleteTokenFromCookie();
-  const athlete = token ? await getAthleteByToken(token) : undefined;
+  const viewerId = verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
+  const athlete = viewerId !== null ? await getAthlete(viewerId) : undefined;
 
   const { id } = await params;
   const activityId = Number(id);

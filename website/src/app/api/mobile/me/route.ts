@@ -1,24 +1,21 @@
-import { getAthleteByToken } from "@/lib/db";
 import { buildProfile } from "@/lib/profile";
+import { verifyAthleteToken } from "@/lib/session";
 
 /** The iOS app fetches the athlete's complete RunGuard profile here. */
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  const athlete = token ? await getAthleteByToken(token) : undefined;
-  if (!athlete) {
-    return Response.json({ error: "Invalid device token" }, { status: 401 });
+  const athleteId = auth.startsWith("Bearer ") ? verifyAthleteToken(auth.slice(7)) : null;
+  if (athleteId === null) {
+    return Response.json({ error: "Invalid session token" }, { status: 401 });
   }
-  const profile = await buildProfile(athlete.id);
+  const profile = await buildProfile(athleteId);
   if (!profile) return Response.json({ error: "Not found" }, { status: 404 });
 
-  // The athlete, WITHOUT `deviceToken`. `buildProfile` puts it on the object
-  // because the coach dashboard renders it as a pairing code, and this route
-  // used to spread the profile wholesale — so the app's own bearer credential
-  // came back inside every profile response it made. Self-authenticated, so it
-  // was never a cross-athlete leak, but `CLAUDE.md` is unconditional: a token is
-  // never rendered and never logged, and a payload is a thing that gets logged.
-  const { deviceToken: _token, ...athleteFields } = profile.athlete;
+  // `profile.athlete` no longer carries a `deviceToken` at all — `buildProfile`
+  // stopped selecting it when athletes moved to signed sessions, so there is no
+  // key left here to strip. The reason it had to be stripped is still the rule:
+  // `CLAUDE.md` is unconditional that a token is never rendered and never
+  // logged, and a payload is a thing that gets logged.
 
   /*
    * An EXPLICIT allow-list, not `...rest`.
@@ -38,7 +35,7 @@ export async function GET(request: Request) {
    * against when changing this.
    */
   return Response.json({
-    athlete: athleteFields,
+    athlete: profile.athlete,
     readiness: profile.readiness,
     aiInsight: profile.aiInsight,
     risk: profile.risk,

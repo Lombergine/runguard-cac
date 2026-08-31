@@ -16,7 +16,7 @@
  *
  * NO "HAS SEEN INTRO" FLAG, deliberately. `auth.ts` holds a contract that
  * `signOut()` clears every key this app stores, and any flag added there would
- * be wiped on unpair — so the intro would replay anyway, and the contract would
+ * be wiped on sign-out — so the intro would replay anyway, and the contract would
  * have grown an exception for a cosmetic value. Signed out IS the condition:
  * this screen exists exactly when there is no session, which is the same
  * question the gate already answers.

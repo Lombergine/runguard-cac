@@ -162,38 +162,6 @@ export async function getAthleteByEmail(email: string): Promise<AthleteRow | und
   return one<AthleteRow>("SELECT * FROM athletes WHERE lower(email) = lower(?)", [email.trim()]);
 }
 
-// The one credential compared non-constant-time, and deliberately so. Making it
-// constant-time means splitting the token into a non-secret lookup prefix and a
-// timingSafeEqual'd remainder — a schema change plus a backfill on both drivers.
-// Against 160 bits of CSPRNG (newDeviceToken) the channel is a B-tree descent
-// under pooler and network jitter, not a byte-at-a-time string compare, so it
-// buys nothing measurable. Revisit if tokens ever get shorter or structured.
-export async function getAthleteByToken(token: string): Promise<AthleteRow | undefined> {
-  return one<AthleteRow>("SELECT * FROM athletes WHERE device_token = ?", [token]);
-}
-
-/**
- * Mint a fresh device token for one athlete and return it.
- *
- * Because `getAthleteByToken` is a plain equality lookup on this column, the
- * overwrite IS the revocation: every previously issued copy of the old token —
- * phone, athlete web cookie, anything leaked into a log — stops resolving to any
- * row the moment this returns. There is no separate revocation list to keep in
- * step, and no window where both values work.
- *
- * Throws if no such athlete, rather than returning a token that authenticates
- * nothing: a caller storing that string would believe it had rotated.
- */
-export async function rotateDeviceToken(athleteId: number): Promise<string> {
-  const token = newDeviceToken();
-  const row = await one<{ device_token: string }>(
-    "UPDATE athletes SET device_token = ? WHERE id = ? RETURNING device_token",
-    [token, athleteId]
-  );
-  if (!row) throw new Error(`rotateDeviceToken: no athlete ${athleteId}`);
-  return row.device_token;
-}
-
 export async function setAthleteTeam(athleteId: number, teamId: number | null): Promise<void> {
   await run("UPDATE athletes SET team_id = ? WHERE id = ?", [teamId, athleteId]);
 }

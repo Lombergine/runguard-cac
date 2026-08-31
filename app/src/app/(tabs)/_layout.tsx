@@ -12,6 +12,11 @@
  * it — so this is four of the spec's items plus one, not four plus two.
  * Recorded as a decision, on instruction, rather than left to read as drift.
  *
+ * A COACH SEES THREE — Roster, Calendar, Sources — and none of the five. The
+ * two sets are mutually exclusive, gated on `useSession().role`, because the
+ * device holds one credential at a time and a tab an athlete cannot fetch is
+ * worse than a tab that is not there.
+ *
  * Three things this file is careful about:
  *
  *  1. White bar over the cream page, held up by the website's hairline
@@ -35,6 +40,7 @@ import { ColorValue, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
+import { useSession } from "../../lib/session";
 import { ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
@@ -70,6 +76,32 @@ const RECOVERY = "M14.6 3.8 A8.6 8.6 0 1 0 14.6 20.2 A10.6 10.6 0 0 1 14.6 3.8 Z
 const STATS = "M3.5 20.5 H20.5 M6.5 20.5 V13 M12 20.5 V6.5 M17.5 20.5 V10";
 /** Races — a course flag. */
 const RACES = "M6 3.5 V20.5 M6 5.5 H19 L16 9.5 L19 13.5 H6";
+
+/**
+ * The three coach glyphs, drawn on the same 24-unit grid at the same
+ * `ruleWidth`, because a coach tab bar and an athlete tab bar are one interface
+ * seen by two people and must not read as two products.
+ */
+/**
+ * Roster — a table: a short left column of marks and a long right column of
+ * names, three rows deep. Deliberately a TABLE rather than three stacked lines,
+ * which would be a hamburger, and rather than a person, which would be an
+ * avatar for a screen that lists fourteen of them. See visual-spec § "Coach
+ * dashboard": the roster is a table, not a feed.
+ */
+const ROSTER = "M4 6.5 H6.5 M9.5 6.5 H20 M4 12 H6.5 M9.5 12 H20 M4 17.5 H6.5 M9.5 17.5 H20";
+/**
+ * Calendar — the month grid: a box, the header rule, and two hangers crossing
+ * the top edge. The plainest possible reading of "the team calendar", and it
+ * shares no shape with Stats' bars or Training's line.
+ */
+const CALENDAR = "M4.5 6 H19.5 V20.5 H4.5 Z M4.5 10.5 H19.5 M8.5 3.5 V8 M15.5 3.5 V8";
+/**
+ * Sources — an arrow arriving in a tray. Runs come IN from the athletes' phones;
+ * the direction is the whole meaning, so the arrowhead points down into an open
+ * box rather than out of one.
+ */
+const SOURCES = "M12 3.5 V13.8 M8.2 10 L12 13.8 L15.8 10 M4.5 16.5 V20.5 H19.5 V16.5";
 
 /**
  * `size` is handed down by the navigator (25 in its uikit variant). Dividing
@@ -119,8 +151,27 @@ function tabIcon(d: string) {
   };
 }
 
+/**
+ * Two tab bars, one navigator.
+ *
+ * `Tabs.Protected` is the same idiom as the `Stack.Protected` guards in the root
+ * layout, and it carries the same warning: it is a DENY-LIST. A route file under
+ * `(tabs)/` that is not named inside one of these groups is appended to the
+ * navigator anyway (expo-router 57, `build/useScreens.js`), so it would appear
+ * in BOTH tab bars. Every file must be declared below.
+ *
+ * The coach's three screens are declared here rather than in the root layout
+ * because they are children of THIS navigator; the root gates the whole `(tabs)`
+ * group, and this decides which five or three of it exist. Until the files
+ * `roster.tsx`, `calendar.tsx` and `sources.tsx` land (a concurrent agent owns
+ * them), expo-router logs `No route named "roster"` in dev and drops the entry —
+ * a warning, not a crash, and the declaration is what makes them gated the
+ * moment they arrive rather than visible to everyone.
+ */
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { role } = useSession();
+  const coach = role === "coach";
 
   return (
     <Tabs
@@ -138,46 +189,79 @@ export default function TabsLayout() {
         tabBarItemStyle: styles.item,
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          // "Home" does not say what is there, and this is the tab that
-          // matters. The rest are named after what they show.
-          tabBarAccessibilityLabel: "Home, the daily check-in",
-          tabBarIcon: tabIcon(HOME),
-        }}
-      />
-      <Tabs.Screen
-        name="runs"
-        options={{
-          // The route stays `runs`; the tab is Training, because it now carries
-          // the week's plan as well as the runs already done.
-          title: "Training",
-          tabBarIcon: tabIcon(RUNS),
-        }}
-      />
-      <Tabs.Screen
-        name="recovery"
-        options={{
-          title: "Recovery",
-          tabBarIcon: tabIcon(RECOVERY),
-        }}
-      />
-      <Tabs.Screen
-        name="stats"
-        options={{
-          title: "Stats",
-          tabBarIcon: tabIcon(STATS),
-        }}
-      />
-      <Tabs.Screen
-        name="races"
-        options={{
-          title: "Races",
-          tabBarIcon: tabIcon(RACES),
-        }}
-      />
+      <Tabs.Protected guard={!coach}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Home",
+            // "Home" does not say what is there, and this is the tab that
+            // matters. The rest are named after what they show.
+            tabBarAccessibilityLabel: "Home, the daily check-in",
+            tabBarIcon: tabIcon(HOME),
+          }}
+        />
+        <Tabs.Screen
+          name="runs"
+          options={{
+            // The route stays `runs`; the tab is Training, because it now carries
+            // the week's plan as well as the runs already done.
+            title: "Training",
+            tabBarIcon: tabIcon(RUNS),
+          }}
+        />
+        <Tabs.Screen
+          name="recovery"
+          options={{
+            title: "Recovery",
+            tabBarIcon: tabIcon(RECOVERY),
+          }}
+        />
+        <Tabs.Screen
+          name="stats"
+          options={{
+            title: "Stats",
+            tabBarIcon: tabIcon(STATS),
+          }}
+        />
+        <Tabs.Screen
+          name="races"
+          options={{
+            title: "Races",
+            tabBarIcon: tabIcon(RACES),
+          }}
+        />
+      </Tabs.Protected>
+
+      {/* Three, not five. A coach is triaging a squad, not checking in — none
+          of the athlete tabs has an equivalent here, and the order is the order
+          of the web dashboard's own nav. Roster is first and therefore the
+          default: signed in as a coach, `index` is not in the navigator's
+          `routeNames` at all, so "/" resolves to whichever screen is declared
+          first below. */}
+      <Tabs.Protected guard={coach}>
+        <Tabs.Screen
+          name="roster"
+          options={{
+            title: "Roster",
+            tabBarAccessibilityLabel: "Roster, every athlete on the team",
+            tabBarIcon: tabIcon(ROSTER),
+          }}
+        />
+        <Tabs.Screen
+          name="calendar"
+          options={{
+            title: "Calendar",
+            tabBarIcon: tabIcon(CALENDAR),
+          }}
+        />
+        <Tabs.Screen
+          name="sources"
+          options={{
+            title: "Sources",
+            tabBarIcon: tabIcon(SOURCES),
+          }}
+        />
+      </Tabs.Protected>
     </Tabs>
   );
 }

@@ -113,12 +113,13 @@ function Launch({ fontsReady }: { fontsReady: boolean }) {
  * frame is exactly how a signed-out phone flashes someone else's readiness.
  */
 function Gate() {
-  const { status } = useSession();
+  const { status, role } = useSession();
   const reducedMotion = useReducedMotion();
 
   if (status === "loading") return null;
 
   const signedIn = status === "in";
+  const coach = signedIn && role === "coach";
 
   return (
     /*
@@ -130,8 +131,15 @@ function Gate() {
      * There is no clear-on-sign-out function for anyone to forget to call, no
      * effect that has to win a race against the next render, and no way to add
      * a field to the store that survives sign-out by accident.
+     *
+     * THE ROLE IS PART OF THE KEY for exactly the same reason. A role switch is
+     * "in" → "in": the status alone does not change, so keying on it would have
+     * left the previous session's subtree — and whatever a coach screen was
+     * holding about fourteen athletes — mounted underneath the new one. Signing
+     * in as an athlete after signing in as a coach is a change of person on the
+     * device, and it throws the tree away like every other one.
      */
-    <ProfileProvider key={status}>
+    <ProfileProvider key={`${status}:${role ?? "none"}`}>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -171,6 +179,24 @@ function Gate() {
         </Stack.Protected>
 
         {/*
+          The coach's three tab screens are NOT named here: they are children of
+          the `(tabs)` navigator above, and `(tabs)/_layout.tsx` decides which
+          five or three of them exist. Naming `(tabs)/roster` at this level would
+          match nothing — the root's children are `(tabs)`, `chat`, `profile`…
+
+          This one is a root screen, so it is declared, and it is guarded on the
+          ROLE rather than merely on being signed in. It shows one athlete's
+          training data to somebody who is not that athlete, which is a coach's
+          job and nobody else's: in an athlete session the route does not exist,
+          so a deep link to /coach/athlete/12 has nothing to resolve to. The file
+          belongs to a concurrent agent; until it lands, expo-router logs
+          `No route named "coach/athlete/[id]"` in dev and drops the entry.
+        */}
+        <Stack.Protected guard={coach}>
+          <Stack.Screen name="coach/athlete/[id]" />
+        </Stack.Protected>
+
+        {/*
           ORDER IS LOAD-BEARING HERE, and it did not used to be stated.
 
           Signed out, `Stack.Protected` removes the authed screens from the
@@ -188,7 +214,6 @@ function Gate() {
           <Stack.Screen name="welcome" />
           <Stack.Screen name="login" />
           <Stack.Screen name="signup" />
-          <Stack.Screen name="pair" />
         </Stack.Protected>
 
         {/* Reachable either way: required by App Review, and contains nothing

@@ -1,15 +1,25 @@
-import { getAthlete, getAthleteByToken, AthleteRow } from "./db";
+import { getAthlete, AthleteRow } from "./db";
 import { isDemoAthlete, isWrite } from "./demoAthlete";
-import { athleteTokenFromCookie, currentTeamId } from "./session";
+import {
+  athleteTokenFromCookie,
+  currentTeamId,
+  verifyAthleteToken,
+  verifyCoachToken,
+} from "./session";
 
 /** Which of the three auth paths matched. */
 export type AuthPath = "bearer" | "athlete" | "coach";
 
 /**
  * Resolve which athlete a request acts for, and say HOW it resolved. Three paths:
- *  - iOS app: Authorization: Bearer <device_token> → that athlete
+ *  - iOS app: Authorization: Bearer <athlete session token> → that athlete
  *  - Athlete web portal: athlete session cookie → that athlete (themselves only)
  *  - Coach web session: coach cookie + explicit athleteId, scoped to their team
+ *
+ * The first two carry the SAME value — `signAthleteToken(id)` from lib/session.ts
+ * — so both resolve the same way: verify the HMAC, then load the athlete the
+ * signature names. Neither reads `athletes.device_token`; that column authenticates
+ * nothing any more.
  *
  * Callers need the path, not just the row: a coach reading an athlete's chat is
  * a different thing from the athlete reading their own, and only one of them
@@ -50,15 +60,19 @@ export async function resolveAthleteWithPath(
     return (await isDemoAthlete(r.athlete)) ? null : r;
   };
 
+  // The token names the athlete and the HMAC proves it, so the lookup is by id.
+  // There is no secret in the database to compare against and nothing to leak by
+  // comparing it — a forged or expired-by-secret-rotation token fails before any
+  // query runs.
   const auth = request.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (token) {
-    const r = await guard(scoped(await getAthleteByToken(token), "bearer"));
+  const bearerId = auth.startsWith("Bearer ") ? verifyAthleteToken(auth.slice(7)) : null;
+  if (bearerId !== null) {
+    const r = await guard(scoped(await getAthlete(bearerId), "bearer"));
     if (r) return r;
   }
-  const cookieToken = await athleteTokenFromCookie();
-  if (cookieToken) {
-    const r = await guard(scoped(await getAthleteByToken(cookieToken), "athlete"));
+  const cookieId = verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
+  if (cookieId !== null) {
+    const r = await guard(scoped(await getAthlete(cookieId), "athlete"));
     if (r) return r;
   }
   if (athleteId != null && Number.isInteger(athleteId)) {
@@ -72,6 +86,35 @@ export async function resolveAthleteWithPath(
     if (a && a.team_id === teamId) return scoped(a, "coach");
   }
   return null;
+}
+
+/**
+ * Which TEAM a request acts for, for the coach-on-a-phone routes.
+ *
+ * A SEPARATE function from `resolveAthleteWithPath` on purpose, and the comment
+ * inside that one says why: it is a scope gate whose whole value is that every
+ * path through it is compared against the requested athlete id by construction.
+ * A coach branch bolted in there would resolve to a TEAM, which has no athlete
+ * id to compare against, so it would have to sidestep the gate — reintroducing
+ * exactly the IDOR the gate exists to make impossible. Two questions, two
+ * functions: "may this act for athlete N" and "which team is this".
+ *
+ * The credential is the same signed value the web coach session carries
+ * (`signTeam` in lib/session.ts), sent as `Authorization: Bearer` because the
+ * phone has no cookie jar. It is self-describing and HMAC-verified, so this
+ * needs no database read and cannot be pointed at another team by editing it.
+ *
+ * Returns null for anything that is not a valid coach token — including a valid
+ * ATHLETE session token. Those are `a.<athleteId>.<sig>`, so `Number("a.<id>")`
+ * is NaN and this bails before verifying; and even if the parse were looser, the
+ * two kinds sign different strings (`coach:<id>` vs `athlete:<id>`), so an
+ * athlete's signature can never match a team's. Domain separation is in the
+ * signed message, not in the parsing.
+ */
+export async function resolveCoachTeam(request: Request): Promise<number | null> {
+  const auth = request.headers.get("authorization") || "";
+  if (!auth.startsWith("Bearer ")) return null;
+  return verifyCoachToken(auth.slice(7));
 }
 
 export async function resolveAthlete(

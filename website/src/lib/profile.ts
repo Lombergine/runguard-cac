@@ -71,7 +71,11 @@ const DAY_MS = 86400000;
 export type PRRecord = { event: EventName; timeS: number; label: string } | { event: EventName; timeS: null; label: string };
 
 export type CoreProfile = {
-  athlete: { id: number; name: string; grade: number | null; school: string; events: string[]; hue: number; deviceToken: string | null; teamName: string | null };
+  // No credential field, deliberately. This object is spread into the coach
+  // dashboard, the athlete portal and two mobile payloads, so anything on it is
+  // published to all four. It used to carry `deviceToken`, and two routes had to
+  // remember to delete the key on the way out.
+  athlete: { id: number; name: string; grade: number | null; school: string; events: string[]; hue: number; teamName: string | null };
   risk: RiskSnapshot;
   series: DailyPoint[];
   yearDays: { date: string; load: number; km: number }[];
@@ -386,7 +390,6 @@ export async function buildProfile(
       school: team?.name ?? "Independent",
       events: ["800m", "Mile", "5K", "XC 5K"],
       hue: athlete.avatar_hue,
-      deviceToken: athlete.device_token,
       teamName: team?.name ?? null,
     },
     risk,

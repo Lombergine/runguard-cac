@@ -46,7 +46,7 @@
  * currently drawing rather than offering a choice it does not have.
  *
  * The token rule from lib/auth.ts applies here in full: this file never reads,
- * renders, logs or hints at the device token. Signing out deletes it without
+ * renders, logs or hints at the session token. Signing out deletes it without
  * ever holding it.
  *
  * This screen sits inside the session gate (lib/session.tsx), so it exists only
@@ -152,7 +152,7 @@ const DEMO_NOTE =
  * two: "still loading" is not "we asked and there is nothing", and neither of
  * them may render as an empty line that reads as fine.
  *
- * There is no "unpaired" state any more. It used to be inferred from a caught
+ * There is no "signed out" state any more. It used to be inferred from a caught
  * 401, which made this screen a second, weaker auth gate that disagreed with the
  * real one; a 401 now ends the session instead, and this screen goes with it.
  */
@@ -165,7 +165,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { signOut } = useSession();
   const [name, setName] = useState<NameState>({ kind: "loading" });
-  const [unpairing, setUnpairing] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   // Read once per render: the value only changes on sign-out, which unmounts this.
   const demo = isDemo();
   /*
@@ -213,20 +213,20 @@ export default function SettingsScreen() {
    * An Alert is presented by the OS above whatever is on screen, so it survives
    * that and the athlete reads it wherever they land.
    *
-   * The wording had to move with it. "Nothing changed — the device is still
-   * paired" was true when this screen stayed put; it is a lie now, because the
-   * app really is signed out. What did not change is the keychain, and the part
-   * the athlete needs is the consequence: the pairing is still on the phone, so
-   * it can sign them back in.
+   * The wording had to move with it. "Nothing changed — you are still signed
+   * in" was true when this screen stayed put; it is a lie now, because the app
+   * really is signed out. What did not change is the keychain, and the part the
+   * athlete needs is the consequence: the session is still on the phone, so it
+   * can sign them back in.
    */
-  const unpair = useCallback(() => {
-    setUnpairing(true);
+  const leave = useCallback(() => {
+    setSigningOut(true);
     void (async () => {
       const { erased } = await signOut();
       if (erased) return;
       Alert.alert(
-        "Signed out, but the pairing is still on this phone",
-        "This phone's keychain would not release it, so RunGuard may sign itself back in the next time you open the app. Try unpairing again, or restart the phone."
+        "Signed out, but the session is still on this phone",
+        "This phone's keychain would not release it, so RunGuard may sign itself back in the next time you open the app. Try signing out again, or restart the phone."
       );
     })();
   }, [signOut]);
@@ -252,8 +252,8 @@ export default function SettingsScreen() {
     );
   }, [router]);
 
-  const confirmUnpair = useCallback(() => {
-    if (unpairing) return;
+  const confirmSignOut = useCallback(() => {
+    if (signingOut) return;
     Alert.alert(
       demo ? "Leave the demo?" : "Sign out?",
       demo
@@ -264,11 +264,11 @@ export default function SettingsScreen() {
         {
           text: demo ? "Leave" : "Sign out",
           style: "destructive",
-          onPress: unpair,
+          onPress: leave,
         },
       ]
     );
-  }, [unpair, unpairing, demo]);
+  }, [leave, signingOut, demo]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -480,19 +480,19 @@ export default function SettingsScreen() {
           The design's destructive card: centred rows, a full-bleed hairline
           between them, and one footnote underneath.
 
-          In the demo it is a different act entirely: nothing was paired, there
-          is nothing to sign out of, and everything the visitor typed lived on
-          this phone. Saying "sign out" there would imply an account they never
-          made — and there is no account to delete either, so that row is not
-          drawn at all.
+          In the demo it is a different act entirely: no account was ever
+          opened, there is nothing to sign out of, and everything the visitor
+          typed lived on this phone. Saying "sign out" there would imply an
+          account they never made — and there is no account to delete either, so
+          that row is not drawn at all.
         */}
         <View style={styles.group}>
           <List>
             <Pressable
-              onPress={confirmUnpair}
-              disabled={unpairing}
+              onPress={confirmSignOut}
+              disabled={signingOut}
               accessibilityRole="button"
-              accessibilityState={{ disabled: unpairing }}
+              accessibilityState={{ disabled: signingOut }}
               /*
                 `rowPress`, not `dim`: this is a row in a slab, so it flashes a
                 fill across its full width like every other row in the app.
@@ -502,10 +502,10 @@ export default function SettingsScreen() {
             >
               <Text style={styles.dangerLabel}>
                 {demo
-                  ? unpairing
+                  ? signingOut
                     ? "Leaving…"
                     : "Leave the demo"
-                  : unpairing
+                  : signingOut
                     ? "Signing out…"
                     : "Sign out"}
               </Text>

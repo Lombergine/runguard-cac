@@ -1,8 +1,8 @@
 import { chatTabLabel } from "@/lib/ai";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getAthleteByToken } from "@/lib/db";
-import { athleteTokenFromCookie, isDemoSession } from "@/lib/session";
+import { getAthlete } from "@/lib/db";
+import { athleteTokenFromCookie, isDemoSession, verifyAthleteToken } from "@/lib/session";
 import DemoBanner from "@/components/DemoBanner";
 import { buildProfile } from "@/lib/profile";
 import Avatar from "@/components/Avatar";
@@ -37,8 +37,8 @@ export default async function AthletePortal({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const token = await athleteTokenFromCookie();
-  const athlete = token ? await getAthleteByToken(token) : undefined;
+  const athleteId = verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
+  const athlete = athleteId !== null ? await getAthlete(athleteId) : undefined;
   if (!athlete) redirect("/athlete/login");
 
   const { tab } = await searchParams;

@@ -174,7 +174,7 @@ export default function CheckInScreen() {
    */
   const invalidateProfile = useInvalidateProfile();
   const [profile, setProfile] = useState<ProfileWithNextRace | null>(null);
-  const [loadError, setLoadError] = useState<"none" | "unpaired" | "failed">("none");
+  const [loadError, setLoadError] = useState<"none" | "signedOut" | "failed">("none");
   /** Set only when this session submitted the check-in — the one time we know. */
   const [submittedAt, setSubmittedAt] = useState<Date | null>(null);
   /**
@@ -262,7 +262,7 @@ export default function CheckInScreen() {
         );
       })
       .catch((err: unknown) => {
-        if (alive) setLoadError(isUnauthorized(err) ? "unpaired" : "failed");
+        if (alive) setLoadError(isUnauthorized(err) ? "signedOut" : "failed");
       });
     AccessibilityInfo.isReduceMotionEnabled()
       .then((on) => {
@@ -278,7 +278,7 @@ export default function CheckInScreen() {
    * Quietly re-reads `/home` on a timer once the first load has landed, so a
    * coach's plan edit shows up here without a pull-to-refresh. Skipped while
    * `profile` is still null (the effect above owns the first load and its own
-   * `unpaired`/`failed` branches) and while a check-in write is in flight
+   * `signedOut`/`failed` branches) and while a check-in write is in flight
    * (`submitting`) or the soreness card is reopened — a background refetch
    * landing mid-write could hand `setProfile` a `todaySoreness` that has not
    * caught up with what this screen just posted, and this tab already refetches
@@ -439,19 +439,19 @@ export default function CheckInScreen() {
   }
 
   if (loadError !== "none") {
-    // An unpaired device is not an error state, it is a first run — and until
+    // A signed-out device is not an error state, it is a first run — and until
     // this button existed it was a dead end: the copy explained the problem and
     // offered nothing to do about it, on the one screen a fresh install opens.
-    const unpaired = loadError === "unpaired";
+    const signedOut = loadError === "signedOut";
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
           <Text style={styles.loadError}>
-            {unpaired
+            {signedOut
               ? "This device isn't signed in yet, so there is nothing to show."
               : "Your check-in couldn't be loaded."}
           </Text>
-          {unpaired ? (
+          {signedOut ? (
             <Pressable
               onPress={() => router.replace("/login")}
               accessibilityRole="button"

@@ -110,7 +110,7 @@ export default function PrivacyScreen() {
             <Text style={styles.p}>
               <Text style={styles.lead}>Your account. </Text>
               Name, email, password (kept only as a hash), team or school, class year, the
-              events you run, and the pairing token that links this phone to your account.
+              events you run, and the sign-in session that links this phone to your account.
             </Text>
             <Text style={styles.p}>
               <Text style={styles.lead}>Apple Health, only with your permission. </Text>
@@ -226,10 +226,10 @@ export default function PrivacyScreen() {
               RunGuard is built for school and club teams, and many of its athletes are
               minors. It is meant to be used with a coach or school involved and, for
               athletes under <Text style={styles.figure}>18</Text>, with a parent or
-              guardian's permission. Coaches and schools who invite athletes are
+              guardian’s permission. Coaches and schools who invite athletes are
               responsible for getting whatever consent their
-              institution and the law require before an athlete's data is collected. Parents
-              and guardians can contact us to review, correct or delete their child's
+              institution and the law require before an athlete’s data is collected. Parents
+              and guardians can contact us to review, correct or delete their child’s
               information, or to withdraw consent.
             </Text>
             <Text style={styles.p}>
@@ -250,8 +250,8 @@ export default function PrivacyScreen() {
           <Card style={styles.body}>
             <Text style={styles.p}>
               Data is encrypted in transit over HTTPS. Passwords are stored only as salted
-              hashes. Each athlete's phone has its own pairing token, sessions use signed
-              cookies, and an athlete's data is limited to that athlete and their coach. The
+              hashes. Each athlete’s phone holds its own signed session, the web uses signed
+              cookies, and an athlete’s data is limited to that athlete and their coach. The
               infrastructure underneath is run by established providers.
             </Text>
             <Text style={styles.p}>
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   /**
    * A numeral inside a sentence — "under 18", "under 13".
    *
-   * Same name and same shape as `chat.tsx`, `login.tsx` and `pair.tsx`: it sets
+   * Same name and same shape as `chat.tsx` and `login.tsx`: it sets
    * only the FACE, inheriting size and colour from the paragraph around it, so
    * an age stays mono and tabular a word deep in prose. On a policy the ages
    * are the operative numbers in the whole section, and reading them as words

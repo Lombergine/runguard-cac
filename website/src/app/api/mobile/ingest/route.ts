@@ -1,15 +1,16 @@
-import { getAthleteByToken, insertActivity, upsertMetric, AthleteRow } from "@/lib/db";
+import { getAthlete, insertActivity, upsertMetric, AthleteRow } from "@/lib/db";
+import { verifyAthleteToken } from "@/lib/session";
 
 /**
  * The RunGuard iOS app posts HealthKit data here:
  *   { workouts?: [...], metrics?: [{ date, restingHr, hrv, sleepHours, vo2max, respRate }] }
- * Auth: Authorization: Bearer <device_token> (each athlete has one).
+ * Auth: Authorization: Bearer <athlete session token> (see lib/session.ts).
  */
 async function athleteFromRequest(request: Request): Promise<AthleteRow | null> {
   const auth = request.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return null;
-  return (await getAthleteByToken(token)) ?? null;
+  const id = auth.startsWith("Bearer ") ? verifyAthleteToken(auth.slice(7)) : null;
+  if (id === null) return null;
+  return (await getAthlete(id)) ?? null;
 }
 
 /** A usable number, or null meaning NOT RECORDED. A string, a null, NaN and
@@ -37,7 +38,7 @@ function nonNeg(v: unknown): number | null {
 export async function POST(request: Request) {
   const athlete = await athleteFromRequest(request);
   if (!athlete) {
-    return Response.json({ error: "Invalid device token" }, { status: 401 });
+    return Response.json({ error: "Invalid session token" }, { status: 401 });
   }
   const body = await request.json().catch(() => null);
   const workouts = Array.isArray(body?.workouts) ? body.workouts : [];

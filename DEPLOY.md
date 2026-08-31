@@ -81,13 +81,13 @@ reach the browser bundle.
 
 ## Credentials
 
-These five things are credentials. Handling is the same for all of them.
+These four things are credentials. Handling is the same for all of them.
 
 | Credential | What it opens |
 |---|---|
-| `athletes.device_token` | a minor's whole account — reads their profile, writes HealthKit data on their behalf. Never expires; rotation (below) is the only thing that invalidates one. |
-| the athlete session cookie (`core_athlete`) | the raw `device_token`, not a signed reference to one — a second copy of the same secret. `website/src/lib/session.ts` explains that choice. |
-| `SESSION_SECRET` | signs coach sessions; whoever holds it can mint one for any team |
+| the athlete session token | one athlete's whole account — reads their profile, writes HealthKit data on their behalf. `a.<athleteId>.<hmac>`, minted by `signAthleteToken()` at login. It is the same value in the `core_athlete` cookie on the web and in `Authorization: Bearer` from the phone. |
+| the coach session token | one team — its roster, every athlete's profile, the training calendar. `<teamId>.<hmac>`, minted by `signTeam()`. Same value in the `mm_session` cookie and in the app's Bearer header. |
+| `SESSION_SECRET` | signs **both** of the above; whoever holds it can mint one for any athlete or any team |
 | `DB_PASSWORD` / `DATABASE_URL` | the database, and every athlete in it |
 | `COACH_PASSWORD` | the demo team's roster |
 
@@ -98,53 +98,64 @@ an error message* dies to a caught exception printed whole, or a
 screen still showing athlete data is a screen still holding the token that
 fetched it, so signing out has to clear the store, not just navigate away.
 
-### Why the app deletes the token rather than declaring it absent
+### Sessions are derived, not stored
 
-`/api/mobile/me` and `/api/mobile/home` both return the server's `athlete`
-object wholesale, `deviceToken` included — they share a builder with the coach
-dashboard, which legitimately needs the field. `stripDeviceToken()` in
-`app/src/lib/api.ts` `delete`s the key from the parsed JSON before any caller
-sees it.
+Neither token exists in the database. Each one is an HMAC-SHA256 over a domain
+string — `athlete:<id>` or `coach:<id>` — under `SESSION_SECRET`, and verifying
+one is recomputing that HMAC and comparing with `timingSafeEqual`. Nothing is
+looked up, so there is nothing to leak from a row and nothing to keep in step.
 
-Omitting `deviceToken` from the `Profile` type would not do that. A type is a
-compile-time claim, not a fence: the runtime object still carries every key the
-server sent, so an undeclared field survives any cast and is still there for a
-log line to serialise, for a `{...athlete}` spread to copy into a debug view,
-and for a later `<Text>` to render. Deleting the field is the version a future
-edit cannot quietly undo — a component cannot render what the object does not
-have. Use the same move anywhere a secret would otherwise cross a boundary
-protected only by a type.
+The two kinds cannot be confused for each other, because the domain is inside
+the signed message: the same id under the same key produces different signatures
+for a coach and for an athlete, so `verifyCoachToken` can never accept an
+athlete's value and `verifyAthleteToken` can never accept a coach's.
 
-### Demo tokens
+**Rotating `SESSION_SECRET` is the revocation.** Set a new one and every athlete
+session and every coach session in existence stops verifying, everywhere, at
+once — old phones, web cookies, a token pasted into a support thread, tokens in
+a log. That is a blunt instrument by design; it cannot revoke one device and
+spare another, and everyone signs in again afterwards. Anything that spills a
+token is handled by rotating the secret, and then by the athlete or coach
+signing in again with their password.
 
-Seeded athletes get random device tokens by default, and `npm run seed` prints
-them once — that print is the only copy, since the next seed issues different
-ones. `npm run seed -- --demo-tokens` brings back the guessable `demo_<name>`
-form that the athlete demo button expects; the seed refuses to run against
-anything but local SQLite, with no override, so a guessable token cannot reach a
-deployment.
+There is no per-athlete revocation and no expiry beyond the cookie's `maxAge`.
+If one is ever needed, it is a stored `token_version` column folded into the
+signed string — not a return to a permanent secret in a row.
 
-If you lost the print, read the token from the running app rather than the
-database: the athlete sees their own under **Profile → Pair the RunGuard iPhone
-app**, a coach sees the roster's at `/dashboard/connect`. Both are UI built to
-hand one token to one person — not a licence to paste it anywhere else.
+### `athletes.device_token` is vestigial
 
-### Rotation
+The column is still there and `scripts/seed.ts` still writes it, because
+dropping it is a migration. **Nothing reads it for authentication.** It used to
+be the entire credential for a minor's health data — 40 hex characters that
+never expired and could not be revoked — handed to a coach to copy off a laptop
+screen at a meet. There is no code path left that turns that string into a
+session, and no payload that carries it.
 
-`POST /api/athlete/rotate-token`, authenticated as the athlete themself
-(`Authorization: Bearer` or their own session cookie — the coach path is
-rejected). It overwrites `athletes.device_token` and returns the new value.
+### Do not let a secret cross a boundary protected only by a type
 
-**Rotation is revocation.** Auth is an equality lookup on that one column, so
-the moment it returns, every previously issued copy of the old token is dead:
-old phone, web cookie, a token pasted into a support thread, tokens in a log.
-There is no per-device record and no grace period — which is also its limit, as
-it cannot revoke one device and spare another. After rotating, the athlete
-re-pairs their phone; a rotation done from the web portal re-issues that tab's
-cookie so they are not signed out mid-click.
+No mobile payload carries a credential now: `buildProfile()` does not select one,
+and every `/api/mobile/*` response allow-lists its fields rather than spreading a
+row. Keep it that way — an allow-list makes a new field invisible until someone
+chooses to publish it, while a spread publishes it the moment it exists.
 
-Anything that spills a token — a log, a screenshot, a commit — is handled by
-rotating it, once per token exposed.
+If a secret ever does have to cross into a client, `delete` the key rather than
+omitting it from the type. A type is a compile-time claim, not a fence: the
+runtime object still carries every key the server sent, so an undeclared field
+survives any cast and is still there for a log line to serialise, for a
+`{...athlete}` spread to copy into a debug view, and for a later `<Text>` to
+render.
+
+### Signing in
+
+An athlete signs in at `/athlete/login` or in the app with the email and password
+they signed up with (`/api/athlete-login`, `/api/athlete-signup`). A coach signs
+in at `/login` or in the app (`/api/mobile/coach-login`). Pairing the phone is
+just signing in on the phone — there is no pairing code, and no screen anywhere
+renders a token.
+
+Athletes join a team with the team's **join code**, which the coach sees on the
+dashboard and on `/dashboard/connect`. That code adds an account to a roster; it
+is not a credential and it opens nothing on its own.
 
 ## Option A — Vercel + Supabase (recommended)
 
@@ -325,7 +336,8 @@ what is already running — redeploy.
 ## Point the mobile app at it
 
 The app lives in [`app/`](app/README.md) and talks to this deployment over
-`/api/mobile/*` with `Authorization: Bearer <device_token>`.
+`/api/mobile/*` with `Authorization: Bearer <session token>` — the athlete or
+coach session it received when the person signed in.
 
 **The backend URL is compiled in, not entered.** `src/lib/api.ts` reads
 `EXPO_PUBLIC_API_URL` once at bundle time and there is no field anywhere in the

@@ -10,8 +10,8 @@ import { demoAthleteId, demoTeamId } from "./demo";
  * `middleware.ts` makes the web demo read-only by refusing every non-GET for a
  * request carrying the `rg_demo` cookie. That is the right shape for a browser
  * and it does nothing at all for the app, which authenticates with
- * `Authorization: Bearer <device_token>` and sends no cookies. Handing the app a
- * demo token without this file would mean a visitor tapping "Explore the demo"
+ * `Authorization: Bearer <athlete session token>` and sends no cookies. Handing
+ * the app a demo session without this file would mean a visitor tapping "Explore the demo"
  * could check in, log a race and edit an HRmax straight into the roster every
  * coach is being shown.
  *

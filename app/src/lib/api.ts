@@ -30,12 +30,14 @@
 import type {
   ActivityDetail,
   ChatMessage,
+  PrePractice,
   Profile,
   ProfileWithNextRace,
   RaceFeel,
+  ServerFlag,
   WorkoutStatus,
 } from "./types";
-import { getToken } from "./auth";
+import { getCredential, type Role } from "./auth";
 import { isDemo, recordWrite } from "./demo";
 
 /**
@@ -55,7 +57,7 @@ const CHAT_TIMEOUT_MS = 60_000;
  * Every failure this module raises. `status` is the HTTP status, or 0 for a
  * transport failure (server down, wrong LAN address, timeout).
  *
- * Never carries the device token, in the message or anywhere else.
+ * Never carries the session token, in the message or anywhere else.
  */
 export class ApiError extends Error {
   readonly status: number;
@@ -67,10 +69,10 @@ export class ApiError extends Error {
 }
 
 /**
- * 401 is distinct from every other failure: the device token is missing, wrong,
- * or belongs to a deleted athlete. It is not retryable and it is not a network
- * blip — the athlete has to pair again. Surfaces must FAIL CLOSED on it, showing
- * what is unavailable rather than partial data.
+ * 401 is distinct from every other failure: the session token is missing, wrong,
+ * expired, or belongs to a deleted athlete. It is not retryable and it is not a
+ * network blip — the athlete has to sign in again. Surfaces must FAIL CLOSED on
+ * it, showing what is unavailable rather than partial data.
  */
 export function isUnauthorized(err: unknown): boolean {
   return err instanceof ApiError && err.status === 401;
@@ -80,13 +82,34 @@ type RequestOptions = {
   method?: "GET" | "POST" | "DELETE";
   body?: unknown;
   timeoutMs?: number;
+  /**
+   * Which credential authenticates this route. Defaults to the athlete's
+   * session token, which is what every route above the coach section takes.
+   *
+   * It is declared per route rather than inferred from whatever is in the
+   * keychain, so this module never GUESSES which Bearer to send. Only one
+   * credential exists at a time (`lib/auth.ts`), so a mismatch means a screen
+   * outlived its session — a coach tab still mounted a frame after an athlete
+   * signed in, say. That is a 401 here rather than a request, because sending
+   * the wrong role's token is how a stale screen ends up authenticating as
+   * whoever is holding the phone now.
+   */
+  as?: Role;
 };
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const token = await getToken();
+  const role: Role = opts.as ?? "athlete";
+  const credential = await getCredential();
   // Fail closed rather than sending an unauthenticated request and letting the
   // caller interpret whatever comes back.
-  if (!token) throw new ApiError(401, "No device token. Pair this device first.");
+  if (!credential || credential.role !== role) {
+    throw new ApiError(
+      401,
+      role === "coach"
+        ? "This device is not signed in as a coach."
+        : "This device is not signed in. Sign in first."
+    );
+  }
 
   /*
    * In the demo, a write never leaves the phone.
@@ -116,7 +139,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     res = await fetch(`${BASE_URL}${path}`, {
       method: opts.method ?? "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${credential.token}`,
         ...(opts.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
@@ -151,11 +174,20 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 /**
  * Deletes `athlete.deviceToken` from a parsed profile response.
  *
- * Both /api/mobile/me and /api/mobile/home send it, because they return
- * `buildProfile()`'s `athlete` object wholesale and the coach dashboard — which
- * shares that builder — has a legitimate use for the field. The app does not:
- * the token is the athlete's PERMANENT, non-revocable credential (lib/auth.ts),
- * for a minor, and the only place it may live is the Keychain.
+ * ── IT STAYS, THOUGH THE SERVER NO LONGER SENDS ONE ─────────────────────────
+ *
+ * `athletes.device_token` has been removed: the athlete now authenticates with a
+ * session token from a password sign-in, and /api/mobile/me and /api/mobile/home
+ * have nothing of the kind left to put in the payload. Deleting this function
+ * would therefore be safe — as long as that stays true of every response, on
+ * every deployment, forever. That is trusting a payload SHAPE, which is the one
+ * thing this module has always refused to do; a `delete` on a key that is not
+ * there costs a property lookup and cannot fail.
+ *
+ * So it is a belt-and-braces guard now rather than a live strip. It keeps
+ * working if an older server is still answering this build, if the column comes
+ * back under its old name, or if `buildProfile()` — which the coach dashboard
+ * shares — ever hands the phone a credential field again.
  *
  * It is deleted HERE rather than merely being left out of `Profile`, because a
  * type is not a fence. The runtime object holds every key the server sent
@@ -195,23 +227,25 @@ export async function getProfile(): Promise<Profile> {
  * 366-day calendar and the two long series the home screen never renders.
  *
  * Same `request()` as everything else, so it gets the same fail-closed 401, the
- * same timeout, the same token-free errors — and the same device-token strip.
+ * same timeout, the same token-free errors — and the same belt-and-braces strip.
  */
 export async function getHome(): Promise<ProfileWithNextRace> {
   return stripDeviceToken(await request<ProfileWithNextRace>("/api/mobile/home"));
 }
 
 /**
- * GET /api/mobile/demo — the demo runner's pairing code.
+ * GET /api/mobile/demo — a session token for the demo runner.
  *
  * Issues its own fetch rather than going through `request()`, for the same
  * reason `login.tsx` does: `request()` reads a token out of the Keychain and
  * refuses without one, and the entire point here is to obtain the first one.
  *
  * The token is handed straight to `setToken` by the caller and then dropped. It
- * is never rendered and never logged, exactly like a pasted pairing code — it
- * IS one. `name` comes back so the demo can say whose data it is showing, which
- * matters: this is a real seeded athlete's record, not a fixture.
+ * is never rendered and never logged, exactly like the one a password sign-in
+ * returns — it is the same kind of value, for a seeded athlete rather than for
+ * the person holding the phone. `name` comes back so the demo can say whose data
+ * it is showing, which matters: this is a real seeded athlete's record, not a
+ * fixture.
  *
  * 404 means the demo is switched off on this server (`DEMO_TEAM_ID` unset), and
  * is deliberately indistinguishable from a route that was never built.
@@ -648,4 +682,385 @@ export async function postChat(q: string): Promise<ChatMessage> {
     { method: "POST", body: { message: q }, timeoutMs: CHAT_TIMEOUT_MS }
   );
   return { role: "assistant", text: reply, safety: safetyOf({ safety }) };
+}
+
+/* ------------------------------------------------------------------ *
+ * Coach
+ * ------------------------------------------------------------------ */
+
+/**
+ * The coach half of the client. Four reads and one sign-in, all authenticated
+ * by the coach token (`<teamId>.<hmac>`, `lib/auth.ts`) rather than a device
+ * token, which is what `as: "coach"` on every call below selects.
+ *
+ * THE ROUTE HANDLERS ARE THE CONTRACT, exactly as they are for the athlete
+ * calls at the top of this file:
+ *   website/src/app/api/mobile/coach-login/route.ts
+ *   website/src/app/api/mobile/coach/roster/route.ts
+ *   website/src/app/api/mobile/coach/plan/route.ts
+ *   website/src/app/api/mobile/coach/sources/route.ts
+ *   website/src/app/api/mobile/coach/athlete/[id]/route.ts
+ * They are being written concurrently with this module, so the types below are
+ * the slice the app consumes and expects — read the handlers rather than
+ * trusting these if the two ever disagree, and reconcile HERE rather than
+ * casting at a call site.
+ *
+ * TWO THINGS THAT ARE ABSENT ON PURPOSE.
+ *
+ *  1. No chat, in any shape — not a message, not a placeholder, not a count.
+ *     Safety-tagged exchanges must never reach a coach surface (visual-spec
+ *     non-negotiable #1 and § "Coach dashboard"), and the cheapest way to
+ *     guarantee it on this side is for the coach types to have nowhere to put
+ *     one.
+ *  2. No athlete credential of any kind. `athletes.device_token` is gone from
+ *     the product, but if a roster route ever hands the phone a token field it
+ *     is stripped below before any caller sees it, for the same reason
+ *     `stripDeviceToken` exists — a type is not a fence.
+ *
+ * There is also no composite score and no risk ranking here, because there is
+ * none in the product. The roster is sorted by what is MISSING, never by risk.
+ */
+
+/**
+ * The team a coach token is signed for.
+ *
+ * `name` is nullable because the roster route sends `team?.name ?? null` — a
+ * token whose team row has since been deleted still resolves, and the screen
+ * has to render that as unknown rather than as a team called "undefined".
+ */
+export type CoachTeam = { id: number; name: string | null };
+
+/**
+ * The eight self-report scalars, exactly as `website/src/lib/risk.ts` defines
+ * them. Sent whole because each roster flag needs several together — a part
+ * with no day count says nothing about whether it matters.
+ */
+export type CoachSelfReport = {
+  hasData: boolean;
+  /** Worst severity reported today; 0 when nothing was reported. */
+  todayMax: number;
+  todayPart: string | null;
+  persistentPart: string | null;
+  /** Distinct days that part was reported sore, last 7. */
+  persistentDays: number;
+  persistentPeak: number;
+  escalating: boolean;
+  /** Days since ANY check-in. `null` is never, which is not the same as 0. */
+  daysSinceReport: number | null;
+};
+
+/** A run well past the athlete's own recent longest. Null when unremarkable. */
+export type CoachSpike = {
+  /** KILOMETRES. Convert through lib/units before display. */
+  km: number;
+  longestKm: number;
+  pctAbove: number;
+  level: "notable" | "large";
+};
+
+/**
+ * One roster row.
+ *
+ * NOTE there is deliberately no `risk.score` here, and adding one would be a
+ * regression rather than a feature: the coach dashboard records that a ranked
+ * injury number taught athletes to inflate their check-ins. `zone` is the
+ * coarse state a coach acts on; `readiness` is the athlete's own number, which
+ * they can already see on their own phone.
+ */
+export type CoachRosterAthlete = {
+  id: number;
+  name: string;
+  grade: number | null;
+  /** Avatar hue, 0-360. Colour only ever decorates here, never informs. */
+  hue: number | null;
+  readiness: number;
+  fitnessTier: string;
+  /**
+   * The coach-facing wording only. The server withholds `athleteReason` — the
+   * same observation phrased for the athlete's own screen — because sending it
+   * here invites it to be read out as if it were addressed to the coach.
+   */
+  prePractice: { flag: ServerFlag; reason: string };
+  risk: {
+    zone: "ready" | "caution" | "high";
+    zoneLabel: string;
+    /** False means no runs at all. Everything below is then unknown, not zero. */
+    hasActivityHistory: boolean;
+    /** KILOMETRES, last 7 days. */
+    weekKm: number;
+    prevWeekKm: number;
+    /** Null until there is enough history — "we don't know", never a zero. */
+    acwr: number | null;
+    lastActivity: string | null;
+  };
+  selfReport: CoachSelfReport;
+  spike: CoachSpike | null;
+};
+
+export type CoachRoster = {
+  /**
+   * Always present — the route builds it from the token's own team id, so it
+   * cannot be missing. Only its `name` can be unknown.
+   */
+  team: CoachTeam;
+  athletes: CoachRosterAthlete[];
+};
+
+/**
+ * One WRITTEN day of the team calendar.
+ *
+ * Only days the coach actually planned are in `CoachPlan.days`; the route
+ * filters the rest out. So a date absent from the array is UNPLANNED — which is
+ * not a rest day, and non-negotiable #4 makes them different objects. The grid
+ * has to fill its own empties dashed.
+ *
+ * ── UNITS: THIS ONE ROUTE IS NOT KILOMETRES ────────────────────────────────
+ *
+ * Everywhere else the API ships kilometres. Here the wire carries METRES on the
+ * way out (`distanceM`) and MILES on the way in (`CoachPlanWrite.distanceMi`) —
+ * the column is metres, and the web form has always posted the miles an American
+ * high-school coach says out loud. Both directions convert in
+ * `website/src/lib/teamPlan.ts`, deliberately server-side so a second client
+ * cannot get it wrong. Do not hand either number to `lib/units.ts` as if it were
+ * a kilometre value.
+ */
+export type CoachPlanDay = {
+  /** YYYY-MM-DD, the team's local day. */
+  date: string;
+  type: string;
+  /** METRES — see the units note above. Null on Rest, and on race day. */
+  distanceM: number | null;
+  targetPace: string | null;
+  details: string | null;
+  why: string | null;
+  /** ISO instant. Absent from the POST echo, which sends the day back bare. */
+  updatedAt?: string | null;
+  /** The coach's name at the time of writing, or null. */
+  updatedBy?: string | null;
+};
+
+/**
+ * A week window of the calendar. No `team` — only the roster route sends one.
+ *
+ * `from`/`to` bound the whole window INCLUDING its unplanned days, so they are
+ * what the grid iterates; `days` is the sparse set of written ones.
+ */
+export type CoachPlan = {
+  /** How many weeks wide the window is. */
+  weeks: number;
+  /** First day of the window, YYYY-MM-DD. */
+  from: string;
+  to: string;
+  days: CoachPlanDay[];
+};
+
+/**
+ * The body of a calendar write.
+ *
+ * MILES, not kilometres and not metres — see `CoachPlanDay`. Omit or send
+ * empty for a day that prescribes no distance: the server turns 0 into null
+ * rather than storing a distance nobody planned.
+ */
+export type CoachPlanWrite = {
+  date: string;
+  /** Required and non-empty; the server rejects a blank with a 400. */
+  type: string;
+  distanceMi?: number | string | null;
+  targetPace?: string | null;
+  details?: string | null;
+  why?: string | null;
+};
+
+/** One athlete's inbound data, for the sources screen. */
+export type CoachSource = {
+  id: number;
+  name: string;
+  grade: number | null;
+  /** Avatar hue, 0-360. Decoration; it never carries state. */
+  hue: number | null;
+  /**
+   * ISO instant of the most recent sync, or null.
+   *
+   * Null and `hasSynced: false` mean the same thing and the server sends both;
+   * either way this is "we have never heard from this phone", which renders
+   * dashed. It is NOT a zero, and it is NOT "synced a long time ago".
+   */
+  lastSyncAt: string | null;
+  hasSynced: boolean;
+};
+
+export type CoachSources = { athletes: CoachSource[] };
+
+/**
+ * One athlete, opened from the roster.
+ *
+ * DERIVED FROM `Profile` on purpose. The route builds this from the same
+ * `buildProfile()` the athlete's own `/api/mobile/me` uses and allow-lists the
+ * fields, and the set it emits is an exact subset of `/me`'s — verified field by
+ * field against the two handlers. Restating those thirty-odd fields by hand
+ * meant they drifted the first time the server changed, which is what produced
+ * the invented `checkedInToday` and flat `weekKm` this type used to carry.
+ *
+ * The eight names below are the ones a coach does not get: personal badges, the
+ * athlete's own calendar and chat summary, their notification settings, and the
+ * four PR/prediction/stats blocks. If the server ever starts sending one, delete
+ * it from this list — do not add a parallel field.
+ */
+export type CoachAthleteDetail = Omit<
+  Profile,
+  | "badges"
+  | "calendar"
+  | "chatSummary"
+  | "notifications"
+  | "paceSeason"
+  | "predictions"
+  | "prs"
+  | "stats"
+  | "prePractice"
+> & {
+  /**
+   * Coach wording ONLY. The route drops `athleteReason` — the same observation
+   * phrased for the athlete's own screen — so it is narrowed away here rather
+   * than left optional, where a screen could read it, get `undefined`, and fall
+   * back to the third-person `reason`.
+   */
+  prePractice: Omit<PrePractice, "athleteReason">;
+};
+
+/**
+ * Deletes any athlete token from a parsed coach response.
+ *
+ * Same argument as `stripDeviceToken` above, pointed at a list, and it stays for
+ * the same reason: the column it was written against is gone, and a guard that
+ * costs one property lookup per row is cheaper than trusting the shape of every
+ * roster payload every deployment will ever send. Both spellings are removed —
+ * the mobile routes camel-case their output, a raw row does not, and this runs
+ * before any caller can hold either one.
+ */
+function stripRosterTokens<T>(parsed: T): T {
+  const rows = (parsed as { athletes?: unknown } | null)?.athletes;
+  if (Array.isArray(rows)) {
+    for (const row of rows) {
+      if (row && typeof row === "object") {
+        delete (row as Record<string, unknown>).deviceToken;
+        delete (row as Record<string, unknown>).device_token;
+      }
+    }
+  }
+  return parsed;
+}
+
+/**
+ * POST /api/mobile/coach-login — email and password for `{ token }`.
+ *
+ * Issues its own fetch rather than going through `request()`, for the two
+ * reasons `getDemoPairing` does and one more: `request()` refuses without a
+ * credential and the point here is to obtain the first one, and in demo mode it
+ * would swallow this POST as a pretend write and resolve with nothing.
+ *
+ * The token is handed to `setCoachToken` by the caller and then dropped. It is
+ * never rendered, never logged, and never put in an error message — and neither
+ * is the password, which is why the thrown fetch value is discarded rather than
+ * reused: it can echo the request body.
+ *
+ * The server's own 4xx sentence reaches the coach through `ApiError.message`,
+ * exactly as it does for the athlete login. There is NO dev-token equivalent of
+ * `EXPO_PUBLIC_DEV_TOKEN` for this credential and there must not be one: it
+ * opens a whole roster of minors' health data.
+ */
+export async function coachLogin(
+  email: string,
+  password: string
+): Promise<{ token: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/api/mobile/coach-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
+    });
+  } catch {
+    throw new ApiError(0, `Could not reach the RunGuard server at ${BASE_URL}.`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const body = (await res.json().catch(() => null)) as
+    | { token?: unknown; error?: unknown }
+    | null;
+
+  if (!res.ok) {
+    const detail = typeof body?.error === "string" ? body.error : null;
+    throw new ApiError(res.status, detail ?? `Request failed (${res.status}).`);
+  }
+
+  const token = typeof body?.token === "string" ? body.token : null;
+  if (!token) throw new ApiError(500, "The server sent nothing this app can use.");
+  return { token };
+}
+
+/** GET /api/mobile/coach/roster — every athlete on the coach's team. */
+export async function getCoachRoster(): Promise<CoachRoster> {
+  const roster = await request<CoachRoster>("/api/mobile/coach/roster", { as: "coach" });
+  return stripRosterTokens(roster);
+}
+
+/** GET /api/mobile/coach/plan — the team calendar. */
+export async function getCoachPlan(): Promise<CoachPlan> {
+  return request<CoachPlan>("/api/mobile/coach/plan", { as: "coach" });
+}
+
+/** GET /api/mobile/coach/sources — what has arrived from whom, and when. */
+export async function getCoachSources(): Promise<CoachSources> {
+  const sources = await request<CoachSources>("/api/mobile/coach/sources", { as: "coach" });
+  return stripRosterTokens(sources);
+}
+
+/**
+ * GET /api/mobile/coach/athlete/{id} — one athlete in full.
+ *
+ * Ownership is the ROUTE's to enforce, as it is for `getActivity`: ids are
+ * sequential, so the handler must confirm the athlete is on the team the coach
+ * token is signed for. Nothing the app can do substitutes for that check.
+ */
+export async function getCoachAthlete(id: number): Promise<CoachAthleteDetail> {
+  return request<CoachAthleteDetail>(`/api/mobile/coach/athlete/${id}`, {
+    as: "coach",
+  });
+}
+
+/**
+ * POST /api/mobile/coach/plan — write one day of the team calendar.
+ *
+ * THE TEAM IS NOT AN ARGUMENT, and there is no field for it in `CoachPlanWrite`.
+ * The route takes the team from the HMAC in the coach token and ignores the
+ * body, exactly as `lib/teamPlan.ts` says both writers must: "taking a team id
+ * as a parameter would invite one of them to take it from the request body".
+ *
+ * MILES ON THE WAY IN, METRES ON THE WAY BACK — see `CoachPlanDay`. The echoed
+ * day is the stored row, so a unit mistake shows up here rather than a fortnight
+ * later on an athlete's screen; the caller should render what comes back rather
+ * than the values it just typed.
+ *
+ * ONE DAY PER CALL, matching the web writer. A bulk version would need a
+ * partial-failure story, and "some of your week saved" is the shape of bug that
+ * leaves a coach believing they planned a session they did not.
+ *
+ * Goes through `request()` rather than its own fetch, which is what makes the
+ * coach demo work: `request()` records a write locally and resolves without
+ * touching the network, so tapping Save in the demo does not throw. It returns
+ * `undefined` there — hence the nullable echo.
+ */
+export async function saveCoachPlanDay(
+  day: CoachPlanWrite
+): Promise<{ ok: true; day: CoachPlanDay } | undefined> {
+  return request<{ ok: true; day: CoachPlanDay } | undefined>("/api/mobile/coach/plan", {
+    method: "POST",
+    body: day,
+    as: "coach",
+  });
 }

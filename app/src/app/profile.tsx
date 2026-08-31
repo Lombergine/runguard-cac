@@ -1,7 +1,6 @@
 /**
  * Profile — who the athlete is, what team they are on, what HRmax their
- * training is scored against, and the fact that this phone is the paired
- * device.
+ * training is scored against, and the fact that this phone is signed in.
  *
  * A STACK route, not a tab. The bar's five items are the daily surfaces and this
  * is not one of them; `chat.tsx` is the precedent for a pushed route with its
@@ -36,25 +35,23 @@
  *    keep their own labels rather than folding into "Training": one carries a
  *    group-level action and the server's provenance sentence, the other is
  *    three states per goal. See the "Training" group at the call site.
- *  - No "Edit" pill, no "Export my data", no "Pair another device", no "Last
+ *  - No "Edit" pill, no "Export my data", no "Add another device", no "Last
  *    sync", no second "Sign out". Each is a control for something this app
  *    cannot do; see docs/design-port.md rows 22, 25 and 26.
  *
  * ── THREE DEPARTURES FROM THE WEBSITE'S `ProfileTab` ────────────────────────
  * (website/src/components/athlete/tabs.tsx ~:760)
  *
- *  1. THE PAIRING GROUP DOES NOT CROSS. The web shows the device token with a
- *     copy button, because the browser is not the paired device and the token
- *     has to get to the phone somehow. Here the phone IS the paired device, so
- *     there is nothing to copy and everything to lose: the token never expires
- *     and cannot be revoked (lib/auth.ts), so rendering it would put a
- *     permanent credential for a minor's health data on a screen that can be
- *     shoulder-read or screenshotted. This file therefore never reads the
- *     Keychain for display — the token is read only to sign a request, and
- *     `signOut()` erases it without ever holding it — and `lib/api` has already
- *     stripped `athlete.deviceToken` from the payload before it arrives. What
- *     replaces it is a statement of fact (paired, or not) and a way out
- *     (Unpair).
+ *  1. THE PAIRING GROUP DOES NOT CROSS — and there is no longer anything on the
+ *     web side for it to cross from. That panel existed to hand a device token
+ *     to the phone with a copy button; the token has been removed from the
+ *     product, and an athlete gets in by signing in. No credential is rendered
+ *     here for the reason no credential is rendered anywhere: this file never
+ *     reads the Keychain for display — the session token is read only to sign a
+ *     request, and `signOut()` erases it without ever holding it — and `lib/api`
+ *     strips any `athlete.deviceToken` an older server might still send before
+ *     the payload arrives. What the group carries instead is a statement of fact
+ *     (signed in, or not) and a way out (Sign out).
  *
  *  2. The school name is shown in full. The web renders
  *     `p.athlete.school.split(" ")[0]` with the full name as a sub-line, which
@@ -301,14 +298,15 @@ function EmberButton({
 }
 
 /**
- * A bordered, unfilled control. Leaving, clearing, unpairing.
+ * A bordered, unfilled control. Leaving, clearing, signing out.
  *
  * It sits UNDER its group's card rather than inside it, which is where the
  * design puts an action that belongs to a group rather than to one of its rows.
  *
  * `dim` and not `rowPress`: this is an OBJECT, not a surface, so it dims as a
  * whole rather than flashing a fill behind its own label (see theme/press). It
- * had no pressed state at all, which on "Leave team" and "Unpair this device"
+ * had no pressed state at all, which on "Leave team" and "Sign out of this
+ * device"
  * is the worst place for one to be missing — both post, both take a moment, and
  * a control that does not acknowledge the tap gets tapped twice.
  *
@@ -592,21 +590,24 @@ function HrMaxSection({
  *
  * The statement is CONDITIONAL on `useSession()`, which is the only thing in the
  * app that knows. It used to read "Paired" unconditionally, so a phone with no
- * token was told it was paired directly beneath the group that had just said it
- * was not. Note that "in" means the keychain holds a pairing, not that the
- * server accepts it — a rejected token is still a token, and a device holding
- * one is exactly the device that needs the control below, so this renders
- * whether or not the profile loaded.
+ * token was told it was connected directly beneath the group that had just said
+ * it was not. Note that "in" means the keychain holds a session, not that the
+ * server still accepts it — a rejected token is still a token, and a device
+ * holding one is exactly the device that needs the control below, so this
+ * renders whether or not the profile loaded.
  *
- * Unpairing is confirmed because it is not reversible from here — the token
- * cannot be re-derived on the device, so getting back in means fetching it from
- * the web app again, which an athlete standing on a track at 6am cannot do.
+ * THE ROW SAYS "SIGNED IN", NOT "PAIRED". Pairing described a permanent device
+ * token that outlived every session; what is on the phone now ends when the
+ * athlete signs out, and calling that a pairing would describe a durable link
+ * that no longer exists.
+ *
+ * Signing out is confirmed because getting back in means the email and password,
+ * which an athlete standing on a track at 6am may not have to hand.
  *
  * It goes through `signOut()` rather than deleting the key itself: that clears
  * every stored key rather than the token alone, and it FAILS CLOSED — the gate
  * shuts even when the keychain refuses, so nobody is left looking at athlete
- * data after asking to leave. The old path did the opposite, swallowing the
- * rejection and routing to `/pair` with the token still on the device.
+ * data after asking to leave.
  *
  * `erased: false` is surfaced in an Alert rather than inline: closing the gate
  * unmounts this entire screen on the very next render, so a message rendered
@@ -617,20 +618,20 @@ function DeviceSection() {
 
   function confirm() {
     Alert.alert(
-      "Unpair this device?",
-      "RunGuard will stop showing your training here until you pair it again with the token from the web app.",
+      "Sign out of this device?",
+      "RunGuard will stop showing your training here until you sign in again with your email and password.",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Unpair",
+          text: "Sign out",
           style: "destructive",
           onPress: () => {
             void (async () => {
               const { erased } = await signOut();
               if (erased) return;
               Alert.alert(
-                "This device is still paired",
-                "This phone's keychain would not release the pairing, so nothing changed — this device is still paired, and it will sign back in the next time the app starts. Try again once the phone is unlocked."
+                "The sign-in is still on this phone",
+                "This phone's keychain would not release it, so nothing changed on disk — RunGuard may sign itself back in the next time the app starts. Try again once the phone is unlocked."
               );
             })();
           },
@@ -644,12 +645,12 @@ function DeviceSection() {
       <Section label="This device">
         <Card padded={false} style={styles.group}>
           <ListRow
-            title="Pairing"
-            detail={status === "out" ? "Not paired" : "Checking"}
+            title="Session"
+            detail={status === "out" ? "Signed out" : "Checking"}
             sub={
               status === "out"
-                ? "This phone isn't paired to a RunGuard account, so nothing is syncing from it and there is no pairing here to remove."
-                : "Checking whether this phone is paired."
+                ? "This phone isn't signed in to a RunGuard account, so nothing is syncing from it and there is nothing here to end."
+                : "Checking whether this phone is signed in."
             }
             isLast
           />
@@ -663,13 +664,13 @@ function DeviceSection() {
       <Card padded={false} style={styles.group}>
         {/* A STATEMENT, never the token itself. See the file header. */}
         <ListRow
-          title="Pairing"
-          detail="Paired"
-          sub="This phone is paired to your RunGuard account and syncs on its own. The pairing token is held in this device's keychain and is never shown."
+          title="Session"
+          detail="Signed in"
+          sub="This phone is signed in to your RunGuard account and syncs on its own. The session is held in this device's keychain and is never shown."
           isLast
         />
       </Card>
-      <QuietButton label="Unpair this device" onPress={confirm} />
+      <QuietButton label="Sign out of this device" onPress={confirm} />
     </Section>
   );
 }
@@ -725,7 +726,7 @@ export default function ProfileScreen() {
    * finishes with `invalidate()`, which refetches it in place: the groups keep
    * their old values until the server says what the new ones are.
    *
-   * There is no "unpaired" branch any more. A 401 signs out from inside the
+   * There is no "signed out" branch any more. A 401 signs out from inside the
    * store and the gate unmounts this screen, so the only failure that can reach
    * the render below is a transport one.
    */
@@ -754,7 +755,7 @@ export default function ProfileScreen() {
             labelled group — putting the word "Profile" here as well would give
             the screen two titles.
           */}
-          <Text style={styles.subtitle}>Goals, zones and pairing</Text>
+          <Text style={styles.subtitle}>Goals, zones and this device</Text>
 
           {/* One quiet line, and nothing else changes: the groups below are
               still showing what the server last said, which is still true. */}

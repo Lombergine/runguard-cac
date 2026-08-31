@@ -58,13 +58,27 @@ export function secret(): string {
 
 /* ---- coach session: signed, carries the team id ---- */
 
-function signTeam(teamId: number): string {
+/**
+ * The coach credential itself: `<teamId>.<HMAC(secret, "coach:<teamId>")>`.
+ *
+ * Exported because the phone carries this exact value as a Bearer token
+ * (`/api/mobile/coach-login` mints it, `resolveCoachTeam` in lib/apiAuth.ts
+ * checks it). One scheme, one signing key, one verifier — a second coach
+ * credential invented for the app would be a second thing to get wrong, and the
+ * one that nobody looks at is the one that rots.
+ */
+export function signTeam(teamId: number): string {
   const sig = crypto.createHmac("sha256", secret()).update(`coach:${teamId}`).digest("hex");
   return `${teamId}.${sig}`;
 }
 
 /**
- * Returns the team id if the cookie value is a valid coach session, else null.
+ * Returns the team id if `value` is a valid coach session, else null.
+ *
+ * Named for the VALUE, not the transport: the same string is read from the
+ * `mm_session` cookie on the web and from `Authorization: Bearer` on the phone,
+ * and both must be judged by exactly these lines. `crypto.timingSafeEqual` is
+ * not optional — the comparison is against a signature an attacker can iterate.
  *
  * A legacy branch used to live here: a cookie equal to `HMAC(secret(), "coach")`
  * was accepted as a session for team 1, from before teams had accounts. It was
@@ -86,7 +100,7 @@ function signTeam(teamId: number): string {
  *
  * Do not reinstate it. There is no cookie in circulation that needs it.
  */
-function verifyCoachCookie(value: string | undefined): number | null {
+export function verifyCoachToken(value: string | undefined): number | null {
   if (!value) return null;
   const dot = value.lastIndexOf(".");
   if (dot < 0) return null;
@@ -101,14 +115,65 @@ function verifyCoachCookie(value: string | undefined): number | null {
   return null;
 }
 
+/* ---- athlete session: signed, carries the athlete id ---- */
+
+/**
+ * The athlete credential: `a.<athleteId>.<HMAC(secret, "athlete:<athleteId>")>`.
+ *
+ * A deliberate mirror of `signTeam` above, and it replaces `athletes.device_token`
+ * — a permanent, unrevocable 40-hex string that was the entire credential for one
+ * minor's health data. Nothing is persisted here: the signature IS the grant, so
+ * rotating `SESSION_SECRET` invalidates every athlete session at once. That is
+ * the revocation the stored token never had.
+ *
+ * DOMAIN SEPARATION from the coach token is the signed string, not the shape.
+ * A coach token signs `coach:<teamId>` and an athlete token signs
+ * `athlete:<athleteId>`, so the same id under the same key produces different
+ * signatures and neither verifier can ever accept the other's value. The `a.`
+ * prefix is belt and braces on top of that: it makes the two forms
+ * distinguishable to a reader and to `verifyCoachToken`'s `Number()` parse.
+ */
+export function signAthleteToken(athleteId: number): string {
+  const sig = crypto.createHmac("sha256", secret()).update(`athlete:${athleteId}`).digest("hex");
+  return `a.${athleteId}.${sig}`;
+}
+
+/**
+ * Returns the athlete id if `value` is a valid athlete session, else null.
+ *
+ * Same shape and same rules as `verifyCoachToken`: named for the VALUE rather
+ * than the transport, because the identical string arrives in the `core_athlete`
+ * cookie on the web and in `Authorization: Bearer` from the phone, and both must
+ * be judged by exactly these lines. `crypto.timingSafeEqual` is not optional.
+ *
+ * Anything malformed is null — no prefix, no dot, a non-integer id, a length
+ * mismatch (which makes `timingSafeEqual` throw). Re-signing the parsed id and
+ * comparing the WHOLE string is what makes `Number()`'s tolerance harmless:
+ * "a. 7 .<sig>" parses to 7 but can never equal `signAthleteToken(7)`.
+ */
+export function verifyAthleteToken(value: string | undefined): number | null {
+  if (!value || !value.startsWith("a.")) return null;
+  const dot = value.lastIndexOf(".");
+  if (dot <= 1) return null;
+  const athleteId = Number(value.slice(2, dot));
+  if (!Number.isInteger(athleteId)) return null;
+  const expected = signAthleteToken(athleteId);
+  try {
+    if (crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected))) return athleteId;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function isLoggedIn(): Promise<boolean> {
   const store = await cookies();
-  return verifyCoachCookie(store.get(COOKIE)?.value) !== null;
+  return verifyCoachToken(store.get(COOKIE)?.value) !== null;
 }
 
 export async function currentTeamId(): Promise<number | null> {
   const store = await cookies();
-  return verifyCoachCookie(store.get(COOKIE)?.value);
+  return verifyCoachToken(store.get(COOKIE)?.value);
 }
 
 export async function logIn(teamId: number): Promise<void> {
@@ -191,26 +256,29 @@ export async function isDemoSession(): Promise<boolean> {
   if (teamId === null) return false;
   const store = await cookies();
   if (store.get(DEMO_COOKIE)?.value !== "1") return false;
-  return verifyCoachCookie(store.get(COOKIE)?.value) === teamId;
+  return verifyCoachToken(store.get(COOKIE)?.value) === teamId;
 }
 
-/* ---- athlete web session (their device/app token in an httpOnly cookie) ---- */
+/* ---- athlete web session (the same signed token, in an httpOnly cookie) ---- */
 
 const ATHLETE_COOKIE = "core_athlete";
 
 /**
- * The value is the raw device_token, deliberately. Unlike the coach cookie —
- * whose payload is a guessable integer team id and so must be signed to stop
- * anyone editing it into another team's — this cookie carries a secret that is
- * checked against the database by `getAthleteByToken`. A signature would add
- * nothing an attacker could not already bypass: forging the cookie still
- * requires knowing a real device token, and knowing one already authenticates
- * via `Authorization: Bearer`. What actually protects it is httpOnly (no JS
- * read) plus `secure` (no plaintext transmission), both set here.
+ * The cookie carries exactly what the phone carries: `signAthleteToken(id)`.
+ *
+ * It used to hold the raw `device_token` — a second copy of a permanent secret
+ * that was checked against the database on every request. It now holds a signed,
+ * self-describing value that is verified by `verifyAthleteToken` with no database
+ * read, so there is one athlete credential in the world instead of two places the
+ * same secret could leak from. httpOnly (no JS read) and `secure` (no plaintext
+ * transmission) still apply, and rotating `SESSION_SECRET` kills this cookie too.
+ *
+ * Takes the athlete ID, not a token string, so no caller can put a value in this
+ * cookie that this file did not sign.
  */
-export async function athleteLogIn(token: string): Promise<void> {
+export async function athleteLogIn(athleteId: number): Promise<void> {
   const store = await cookies();
-  store.set(ATHLETE_COOKIE, token, {
+  store.set(ATHLETE_COOKIE, signAthleteToken(athleteId), {
     httpOnly: true,
     secure: secureCookies(),
     sameSite: "lax",

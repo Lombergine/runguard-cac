@@ -1,30 +1,36 @@
 /**
- * The front door. One screen, two ways in.
+ * The front door. One screen, two people, two ways in.
  *
  * There used to be three doors — this one, `/pair` (paste a device token) and
  * `/signup` — and nothing told a new athlete which was theirs. `/signup` is
  * genuinely a different act, so it stays a separate screen with a link both
- * ways. Logging in is not: email+password and a pairing code are two ways to
- * obtain the SAME credential, so they belong under one header with a switch.
+ * ways. `/pair` IS GONE: `athletes.device_token` has been removed from the
+ * product, so there is no permanent code to paste, no screen to paste it into,
+ * and no way to hold a credential without having signed in for it. An athlete
+ * signs in exactly the way a coach does.
  *
- *   Password       POST /api/athlete-login  → { ok, name, token }
- *   Pairing code   GET  /api/mobile/me      with the pasted token, status only
+ *   Athlete   POST /api/athlete-login       → { ok, name, token }
+ *   Coach     POST /api/mobile/coach-login  → { token }
  *
- * `/pair` still exists and is untouched; this screen carries a port of its
- * verification path, not a call into it.
+ * Both tokens are SESSION tokens — `a.<athleteId>.<hmac>` and
+ * `<teamId>.<hmac>`, signed server-side, obtainable only here or at `/signup`.
+ * The coach is a DOOR, not a mode: it asks WHO is signing in rather than how,
+ * and it swaps the card in place from a grouped row underneath. The two forms
+ * are otherwise the same form, which is why the screen no longer carries a
+ * segmented control — there is only one way in per person.
  *
- * Both paths end at the same permanent, non-revocable credential `lib/auth.ts`
- * describes. It is written to the Keychain and then dropped: never logged, never
+ * The coach credential opens a whole roster rather than one athlete, which is
+ * why there is no dev-token shortcut for it anywhere in this file.
+ *
+ * Either token is written to the Keychain and then dropped: never logged, never
  * put in an error message, never rendered — not even as a success confirmation.
- * Neither is the password. The one exception to "don't show it" is the pairing
- * field itself, which the athlete is proof-reading against another screen and
- * has not yet stored anywhere.
+ * Neither is the password.
  *
- * `lib/api` can do neither call: `request()` reads a token out of SecureStore
- * and refuses without one, and the entire point here is to obtain the first one
- * (or to check one that is deliberately NOT stored yet — storing first and
- * rolling back would put an unproven token in the keychain). So this issues both
- * requests itself.
+ * `lib/api` cannot do the athlete call: `request()` reads a token out of
+ * SecureStore and refuses without one, and the entire point here is to obtain
+ * the first one. So this issues that request itself. `coachLogin` lives in
+ * `lib/api` because it is the only door to a set of endpoints that module owns,
+ * and it issues its own fetch there for exactly the same reason.
  */
 import { useState, type ReactNode } from "react";
 import {
@@ -45,14 +51,13 @@ import { Stack, useRouter } from "expo-router";
 import { Card } from "../components/Card";
 import { List, ListRow } from "../components/List";
 import { Section } from "../components/Section";
-import { BASE_URL } from "../lib/api";
-import { setToken } from "../lib/auth";
+import { ApiError, BASE_URL, coachLogin } from "../lib/api";
+import { setCoachToken, setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
 import { useBackOnlyHeader } from "../theme/header";
-import { dim } from "../theme/press";
 import { color } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
-import { layout, radius, ruleWidth, space, target } from "../theme/space";
+import { layout, radius, space, target } from "../theme/space";
 
 /** Matches lib/api: no health endpoint exists, so a wrong base URL just hangs. */
 const TIMEOUT_MS = 15_000;
@@ -60,53 +65,33 @@ const TIMEOUT_MS = 15_000;
 /** The route's own check, so an obvious typo costs no round trip. */
 const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-/** `dt_` + 20 random bytes as lowercase hex. An exact shape, so check it exactly. */
-const TOKEN_SHAPE = /^dt_[0-9a-f]{40}$/;
-
 /** The website's `--ember` stops and its 135°, which points down-and-right. */
 const EMBER_STOPS = [0, 0.45, 1] as const;
 const EMBER_START = { x: 0, y: 0 } as const;
 const EMBER_END = { x: 1, y: 1 } as const;
 
 /**
- * Static dot path — Expo inlines `EXPO_PUBLIC_*` by textual substitution at
- * build time, so a computed lookup comes back undefined. Same read as
- * `lib/auth.ts`, `__DEV__` guard included.
- *
- * That guard is the whole point: `__DEV__` is a compile-time constant, so in a
- * release bundle this expression folds to `null` and neither the token nor the
- * button that spends it reaches the shipped JavaScript. Without it, a release
- * build produced on a machine with the variable set would bake a live,
- * non-expiring device token for a real athlete into a bundle anyone can read.
+ * Which sign-in the card is showing. The two doors are the same form asked of
+ * two different people; neither has a mode of its own.
  */
-const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
-
-type Mode = "password" | "pairing";
-
-const MODES = [
-  { id: "password", label: "Password" },
-  { id: "pairing", label: "Pairing code" },
-] as const;
+type Door = "athlete" | "coach";
 
 /**
- * The outcomes worth telling apart, in the shape `pair.tsx` uses, widened to
- * cover both doors. Each kind has a different fix, and collapsing any two of
- * them leaves the athlete guessing:
+ * The outcomes worth telling apart, covering both doors. Each kind has a
+ * different fix, and collapsing any two of them leaves the athlete guessing:
  *
- *   unauthorized  the server refused a pairing code — pairing only
- *   rejected      the server refused a login and SAID WHY — password only.
- *                 It carries the server's own sentence rather than a rewrite:
- *                 401 "Email or password is incorrect." and 400 "This account
- *                 can't be opened yet — contact your coach." look identical from
- *                 here, and only the second is a dead end retyping cannot fix.
- *                 Those strings are fixed copy from the handler; they never
- *                 contain the password or the token.
- *   noToken       login succeeded but sent nothing usable — password only
+ *   rejected      the server refused the sign-in and SAID WHY. It carries the
+ *                 server's own sentence rather than a rewrite: 401 "Email or
+ *                 password is incorrect." and 400 "This account can't be opened
+ *                 yet — contact your coach." look identical from here, and only
+ *                 the second is a dead end retyping cannot fix. Those strings
+ *                 are fixed copy from the handler; they never contain the
+ *                 password or the token.
+ *   noToken       the sign-in succeeded but sent nothing usable back
  */
 type Problem =
   | { kind: "empty" }
   | { kind: "malformed" }
-  | { kind: "unauthorized" }
   | { kind: "rejected"; message: string }
   | { kind: "network" }
   | { kind: "server"; status: number }
@@ -114,35 +99,18 @@ type Problem =
   | { kind: "storage" };
 
 /**
- * `mode` is only read by the two kinds whose remedy differs — what "blank" and
- * "wrong shape" mean is not the same for a password and for a 43-character
- * code. Everything else reads identically either way, which is the point of
- * sharing the union.
- *
- * Returns a NODE rather than a string because two of these sentences contain a
- * figure — the code's 40 characters and the server's status — and every numeral
- * in this app is mono and tabular (visual-spec non-negotiable #3), prose
- * included. The nested `Text` changes the face and nothing else; the sentence
- * still renders as one paragraph in one line style.
+ * Returns a NODE rather than a string because one of these sentences contains a
+ * figure — the server's status — and every numeral in this app is mono and
+ * tabular (visual-spec non-negotiable #3), prose included. The nested `Text`
+ * changes the face and nothing else; the sentence still renders as one paragraph
+ * in one line style.
  */
-function explain(problem: Problem, mode: Mode): ReactNode {
+function explain(problem: Problem): ReactNode {
   switch (problem.kind) {
     case "empty":
-      return mode === "password"
-        ? "Enter your email and password."
-        : "Paste the pairing code from the web app before pairing.";
+      return "Enter your email and password.";
     case "malformed":
-      return mode === "password"
-        ? "That email doesn't look right. Check it and try again."
-        : (
-            <>
-              That is not the shape of a pairing code. It begins with dt_ and
-              has <Text style={styles.figure}>40</Text> hexadecimal characters
-              after that. Copy the whole line.
-            </>
-          );
-    case "unauthorized":
-      return "That code was not recognised. Open Profile → Pair the RunGuard iPhone app on the web app and copy it again.";
+      return "That email doesn't look right. Check it and try again.";
     case "rejected":
       return problem.message;
     case "network":
@@ -223,63 +191,58 @@ async function login(
 }
 
 /**
- * GET /api/mobile/me with the candidate token. Returns the problem, or null
- * when the server accepted it. The body is NOT read: a valid response is the
- * athlete's whole profile, and pairing only needs the status.
+ * `coachLogin` throws `ApiError`; this screen speaks `Problem`. One translation,
+ * so the coach path shows the same sentences in the same place as the athlete
+ * one.
+ *
+ * 4xx carries the server's own sentence — the handler writes the one that is
+ * actually useful, and it never contains the password or the token. Everything
+ * else is either the transport (status 0) or a server fault worth naming by its
+ * number.
  */
-async function verify(token: string): Promise<Problem | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}/api/mobile/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    });
-  } catch {
-    // The thrown value can echo the request, Authorization header included.
-    // It is discarded rather than surfaced or logged.
-    return { kind: "network" };
-  } finally {
-    clearTimeout(timer);
+function problemOf(err: unknown): Problem {
+  if (!(err instanceof ApiError)) return { kind: "network" };
+  if (err.status === 0) return { kind: "network" };
+  if (err.status >= 400 && err.status < 500) {
+    return { kind: "rejected", message: err.message };
   }
-
-  if (res.status === 401) return { kind: "unauthorized" };
-  if (!res.ok) return { kind: "server", status: res.status };
-  return null;
+  return { kind: "server", status: err.status };
 }
 
 export default function LoginScreen() {
   const router = useRouter();
   const { refresh } = useSession();
-  const [mode, setMode] = useState<Mode>("password");
+  const [door, setDoor] = useState<Door>("athlete");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<Problem | null>(null);
   const [busy, setBusy] = useState(false);
 
   /**
-   * Switching wipes every field and the error line, not just the ones the
-   * outgoing mode owns. Two reasons: an "email doesn't look right" left standing
-   * under the pairing field would describe a field that is no longer on screen,
-   * and a typed password has no business surviving in component state once the
-   * athlete has said they are pairing instead.
+   * Changing door wipes every field and the error line. An "email doesn't look
+   * right" left standing under a form the athlete has just left describes a
+   * field they are no longer looking at — and a typed password has no business
+   * surviving into a coach form, or the other way round.
    */
-  function switchTo(next: Mode) {
-    if (busy || next === mode) return;
+  function switchDoor(next: Door) {
+    if (busy || next === door) return;
     setEmail("");
     setPassword("");
-    setDraft("");
     setProblem(null);
-    setMode(next);
+    setDoor(next);
   }
 
-  /** Common tail: store, then leave. The token is dropped either way. */
-  async function adopt(token: string) {
+  /**
+   * Common tail: store, then leave. The token is dropped either way.
+   *
+   * `store` is the WRITER rather than a role flag, so the two credentials keep
+   * separate functions all the way down to the keychain — `setToken` and
+   * `setCoachToken` each delete the other key before writing their own, and
+   * neither this screen nor anything below it can end up holding both.
+   */
+  async function adopt(token: string, store: (value: string) => Promise<void>) {
     try {
-      await setToken(token);
+      await store(token);
     } catch {
       // SecureStore rejects on web and on a locked keychain. The error object
       // can carry the value, so it is swallowed like it is in lib/auth.
@@ -287,10 +250,9 @@ export default function LoginScreen() {
       setBusy(false);
       return;
     }
-    // Clear the secrets out of component state on the way out, so no render
-    // after this point can put them back on screen.
+    // Clear the secret out of component state on the way out, so no render
+    // after this point can put it back on screen.
     setPassword("");
-    setDraft("");
     setBusy(false);
     // Writing the keychain is not signing in. The gate in `app/_layout` reads
     // `useSession().status`, which is resolved ONCE at launch — without this the
@@ -318,39 +280,41 @@ export default function LoginScreen() {
         setBusy(false);
         return;
       }
-      await adopt(result.token);
+      await adopt(result.token, setToken);
     })();
   }
 
-  /** Shape first, then the server. Both paths — paste and dev token — go here. */
-  function attemptPairing(candidate: string) {
+  /**
+   * The coach's only path. Same two client-side checks as the athlete password
+   * form — a blank field and an obvious typo cost no round trip — and then the
+   * server's answer, verbatim.
+   */
+  function attemptCoach() {
     if (busy) return;
-    const token = candidate.trim();
-    if (!token) return setProblem({ kind: "empty" });
-    if (!TOKEN_SHAPE.test(token)) return setProblem({ kind: "malformed" });
+    const address = email.trim();
+    if (!address || !password) return setProblem({ kind: "empty" });
+    if (!EMAIL_SHAPE.test(address)) return setProblem({ kind: "malformed" });
 
     setProblem(null);
     setBusy(true);
     void (async () => {
-      const failure = await verify(token);
-      if (failure) {
-        setProblem(failure);
+      let token: string;
+      try {
+        ({ token } = await coachLogin(address, password));
+      } catch (err) {
+        // The thrown value is mapped, never logged: it can echo the request,
+        // and this request body holds the password.
+        setProblem(problemOf(err));
         setBusy(false);
         return;
       }
-      await adopt(token);
+      await adopt(token, setCoachToken);
     })();
   }
 
-  const pairing = mode === "pairing";
-  const submit = pairing ? () => attemptPairing(draft) : attemptPassword;
-  const actionLabel = pairing
-    ? busy
-      ? "Checking…"
-      : "Pair this device"
-    : busy
-      ? "Logging in…"
-      : "Log in";
+  const coach = door === "coach";
+  const submit = coach ? attemptCoach : attemptPassword;
+  const actionLabel = busy ? "Logging in…" : "Log in";
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -366,105 +330,42 @@ export default function LoginScreen() {
         >
           <Card>
             <Text style={styles.title} accessibilityRole="header">
-              Welcome back
+              {coach ? "Coach sign-in" : "Welcome back"}
             </Text>
             <Text style={styles.body}>
-              {pairing
-                ? "On the RunGuard web app, open Profile → Pair the RunGuard iPhone app and copy the code shown there."
-                : "Use the email and password from your RunGuard account. This signs the app in on its own — you do not need a pairing code."}
+              {coach
+                ? "Use the email and password from the RunGuard dashboard. Signing in here shows your team's roster, calendar and data sources on this phone."
+                : "Use the email and password from your RunGuard account. Signing in is the only way onto this phone — there is no code to copy from anywhere."}
             </Text>
 
-            {/* One control, two choices, both visible: the athlete cannot pick
-                the wrong door if they can read both labels at once. */}
-            <View style={styles.segments} accessibilityRole="tablist">
-              {MODES.map((option, index) => {
-                const active = option.id === mode;
-                return (
-                  <Pressable
-                    key={option.id}
-                    // `dim`, not `rowPress`: a segment is an OBJECT inside a
-                    // control, not a list surface, and flashing a fill across
-                    // it would fight the fill that already says which half is
-                    // selected. See theme/press.
-                    style={({ pressed }) => [
-                      styles.segment,
-                      index > 0 && styles.segmentRuled,
-                      active && styles.segmentOn,
-                      dim(pressed),
-                    ]}
-                    onPress={() => switchTo(option.id)}
-                    disabled={busy}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active, disabled: busy }}
-                    accessibilityLabel={option.label}
-                  >
-                    <Text
-                      style={active ? styles.segmentLabelOn : styles.segmentLabel}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Field
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              editable={!busy}
+              placeholder="you@school.edu"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              spellCheck={false}
+              returnKeyType="next"
+            />
 
-            {pairing ? (
-              <>
-                <Field
-                  label="Pairing code"
-                  note="from the web app"
-                  value={draft}
-                  onChangeText={setDraft}
-                  editable={!busy}
-                  placeholder="dt_"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="off"
-                  spellCheck={false}
-                  // Deliberately visible: it is an opaque 43-character code
-                  // being checked against another screen, character by
-                  // character, and it is not a secret this device has yet.
-                  secureTextEntry={false}
-                  multiline
-                  style={styles.codeInput}
-                />
-                <Text style={styles.note}>
-                  The code identifies this device to RunGuard. It does not expire, so
-                  keep it to yourself.
-                </Text>
-              </>
-            ) : (
-              <>
-                <Field
-                  label="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  editable={!busy}
-                  placeholder="you@school.edu"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                  spellCheck={false}
-                  returnKeyType="next"
-                />
-
-                <Field
-                  label="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  editable={!busy}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="current-password"
-                  textContentType="password"
-                  returnKeyType="go"
-                  onSubmitEditing={attemptPassword}
-                />
-              </>
-            )}
+            <Field
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              editable={!busy}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="current-password"
+              textContentType="password"
+              returnKeyType="go"
+              onSubmitEditing={submit}
+            />
 
             <Pressable
               style={styles.action}
@@ -494,46 +395,63 @@ export default function LoginScreen() {
 
             {problem ? (
               <Text style={styles.problem} accessibilityLiveRegion="polite">
-                {explain(problem, mode)}
+                {/* Both doors are the same form, so both read the same
+                    sentences. */}
+                {explain(problem)}
               </Text>
-            ) : null}
-
-            {pairing && DEV_TOKEN ? (
-              // Runs the identical verify path. The value is never written into
-              // the visible field, so a screenshot of a dev build cannot leak it.
-              <Pressable
-                style={({ pressed }) => [styles.quiet, dim(pressed)]}
-                onPress={() => attemptPairing(DEV_TOKEN)}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-              >
-                <Text style={styles.quietLabel}>Use development token</Text>
-              </Pressable>
             ) : null}
           </Card>
 
-          {/* The other door, as a grouped card under a muted eyebrow — the same
-              shape `signup` and `pair` use for theirs, rather than the tinted
-              text link this was. Three reasons it moved OUTSIDE the card: it is
-              not part of the form it sits under, iOS says "another screen is
+          {/* The other doors, as grouped cards under muted eyebrows — the same
+              shape `signup` uses for its, rather than the tinted text link this
+              was. Three reasons they sit OUTSIDE the card: they
+              are not part of the form above them, iOS says "another screen is
               beneath this" with a chevron rather than with colour, and `List`
-              owns the row's press flash so it stops being a bare tappable.
+              owns the row's press flash so they stop being bare tappables.
 
-              `replace`, not `push` — the three entry points are equivalent
-              rather than nested, and a back stack of half-filled sign-in forms
-              is not worth preserving. No `onPress` while `busy` renders the row
+              `replace`, not `push` — the entry points are equivalent rather
+              than nested, and a back stack of half-filled sign-in forms is not
+              worth preserving. No `onPress` while `busy` renders a row
               genuinely inert, which is what `disabled` used to say here. */}
-          <Section label="New here" style={styles.footer}>
-            <List>
-              <ListRow
-                title="Create an account"
-                onPress={busy ? undefined : () => router.replace("/signup")}
-                chevron
-                isLast
-              />
-            </List>
-          </Section>
+          {coach ? (
+            <Section label="Not a coach" style={styles.footer}>
+              <List>
+                <ListRow
+                  title="Athlete sign-in"
+                  onPress={busy ? undefined : () => switchDoor("athlete")}
+                  isLast
+                />
+              </List>
+            </Section>
+          ) : (
+            <>
+              <Section label="New here" style={styles.footer}>
+                <List>
+                  <ListRow
+                    title="Create an account"
+                    onPress={busy ? undefined : () => router.replace("/signup")}
+                    chevron
+                    isLast
+                  />
+                </List>
+              </Section>
+
+              {/* No chevron on either of these, and that is the rule rather
+                  than an omission: a chevron means a screen is underneath, and
+                  these swap the card in place. Signing up genuinely pushes one,
+                  so it keeps its. */}
+              <Section label="Coaches" style={styles.footer}>
+                <List>
+                  <ListRow
+                    title="Sign in as a coach"
+                    sub="Your team's roster, calendar and data sources."
+                    onPress={busy ? undefined : () => switchDoor("coach")}
+                    isLast
+                  />
+                </List>
+              </Section>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -579,48 +497,6 @@ const styles = StyleSheet.create({
   title: { ...text.title, color: color.ink },
   body: { ...text.base, color: color.ink2, marginTop: space.sm },
 
-  /**
-   * The app's only segmented control, and the one place it has to read as a
-   * SYSTEM control rather than a drawn rectangle.
-   *
-   * The iOS system fill, and NO border — the same argument `input` below makes:
-   * a native control is a filled track, not an outlined box, and the outline is
-   * the web convention that gives away a form control dropped into an app. The
-   * track was `well` inside a `rule` box; `fill` is Apple's neutral grey at
-   * 12%, and it is not a brand colour and must never be used as one.
-   */
-  segments: {
-    flexDirection: "row",
-    backgroundColor: color.fill,
-    borderRadius: radius.control,
-    borderCurve: "continuous",
-    overflow: "hidden",
-    marginTop: space.xl,
-  },
-  segment: {
-    flex: 1,
-    minHeight: target.min,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: space.sm,
-  },
-  /** The rule between the halves, not around them — one control, two choices. */
-  segmentRuled: { borderLeftWidth: ruleWidth, borderLeftColor: color.rule },
-  /**
-   * The selected half is the same neutral grey one step up — `fillStrong` (16%)
-   * over `fill` (12%). It used to be the soft ember wash; the ember now belongs
-   * only to the primary action below, so this stops reading as a branded
-   * control and starts reading as a system one, and the screen keeps exactly
-   * one ember on the thing you tap to commit.
-   *
-   * That step is deliberately small, and colour is never the only signal: the
-   * selected label also goes semibold and from `ink2` up to `ink`. Either
-   * signal alone would carry the state.
-   */
-  segmentOn: { backgroundColor: color.fillStrong },
-  segmentLabel: { ...text.base, color: color.ink2 },
-  segmentLabelOn: { ...text.baseSemi, color: color.ink },
-
   field: { marginTop: space.xl, gap: space.sm },
   panelHead: {
     flexDirection: "row",
@@ -656,13 +532,6 @@ const styles = StyleSheet.create({
     minHeight: target.min,
   },
   /**
-   * Mono because it is a code, not prose, and a misread character costs a retry.
-   * Taller than a one-line field: 43 characters wrap at 360pt.
-   */
-  codeInput: { fontFamily: font.mono, minHeight: target.min * 1.5 },
-  note: { ...text.meta, color: color.muted, marginTop: space.sm },
-
-  /**
    * The ember signature, on the one thing you tap — one primary action per mode.
    * The gradient is laid in absolutely over this ground, so `brandStrong` is
    * both the pressed state and the fallback if the gradient ever fails to draw.
@@ -693,12 +562,6 @@ const styles = StyleSheet.create({
    * prose included.
    */
   figure: { fontFamily: font.mono, ...tabular },
-  quiet: {
-    minHeight: target.min,
-    justifyContent: "center",
-    marginTop: target.gap,
-  },
-  quietLabel: { ...text.baseSemi, color: color.muted },
   /**
    * The other door, one section below the card. The row carries its own 52pt
    * height, so nothing here spaces it — this is only the gap BETWEEN sections.

@@ -29,7 +29,11 @@ export function applySqliteSchema(db: Database.Database): void {
       sex TEXT,
       event_group TEXT,               -- 'distance' | 'mid' | 'sprint'
       avatar_hue INTEGER DEFAULT 210,
-      device_token TEXT UNIQUE,       -- iOS app auth token
+      device_token TEXT UNIQUE,       -- VESTIGIAL: authenticates nothing. Athletes
+                                      -- sign in with email + password and carry a
+                                      -- signed session (lib/session.ts). Kept only
+                                      -- because dropping it is a migration and
+                                      -- scripts/seed.ts still writes it.
       created_at TEXT DEFAULT (datetime('now'))
     );
 

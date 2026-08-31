@@ -1,4 +1,4 @@
-import { athleteLogIn } from "@/lib/session";
+import { athleteLogIn, signAthleteToken } from "@/lib/session";
 import { checkAuthRate, recordAuthFailure } from "@/lib/rateLimit";
 import {
   createAthleteAccount,
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   const eventGroup: string = groupGiven ? body.eventGroup : "distance";
 
   // Signup stays open — an athlete can join solo, that is the product. What is
-  // capped is the RATE, because a success here mints a live device_token (see
+  // capped is the RATE, because a success here mints a live athlete session (see
   // the response body) and the join-code branch below is a second guessing
   // surface reachable with no account at all. Gated before either DB lookup, so
   // a throttled caller learns nothing about which emails or codes exist.
@@ -103,11 +103,14 @@ export async function POST(request: Request) {
     grade,
     event_group: eventGroup,
   });
-  if (athlete.device_token) await athleteLogIn(athlete.device_token);
+  await athleteLogIn(athlete.id);
   return Response.json({
     ok: true,
     name: athlete.name,
     team: teamName,
-    token: athlete.device_token, // lets the iOS app sign up directly
+    // The same signed session the login route returns, so the iOS app can sign
+    // up directly and be authenticated on the next request. Signed, never
+    // stored: see `signAthleteToken` in lib/session.ts.
+    token: signAthleteToken(athlete.id),
   });
 }

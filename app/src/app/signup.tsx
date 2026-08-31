@@ -1,15 +1,16 @@
 /**
- * Athlete signup. Creates the account and pairs the device in one step.
+ * Athlete signup. Creates the account and signs the app in in one step.
  *
- * `POST /api/athlete-signup` (website/src/app/api/athlete-signup/route.ts) mints
- * the athlete's device token as part of creating the row and returns it —
- * `token: athlete.device_token`, commented there as "lets the iOS app sign up
- * directly". So a fresh install needs no web app, no copy-paste, no `/pair`.
+ * `POST /api/athlete-signup` (website/src/app/api/athlete-signup/route.ts)
+ * returns a session token for the account it just created — the same kind
+ * `/api/athlete-login` returns, so a fresh install needs no web app and no
+ * copy-paste.
  *
- * That token is the SAME permanent, non-revocable credential `lib/auth.ts`
- * describes. It goes to the Keychain and nowhere else: never logged, never held
- * in component state, never in an error message, never rendered — not even as a
- * success confirmation. Neither is the password.
+ * That token is the credential `lib/auth.ts` describes: derived, ended by
+ * signing out, and obtainable only by signing in or signing up. It goes to the
+ * Keychain and nowhere else — never logged, never held in component state, never
+ * in an error message, never rendered, not even as a success confirmation.
+ * Neither is the password.
  *
  * Two things the route decides that this form must not contradict:
  *  - The team code is OPTIONAL. `teamId` stays null when it is blank and the
@@ -99,7 +100,7 @@ const EVENT_GROUPS = [
 type EventGroup = (typeof EVENT_GROUPS)[number]["id"];
 
 /**
- * The outcomes worth telling apart, in the shape `pair.tsx` uses.
+ * The outcomes worth telling apart. Same shape as `login.tsx`.
  *
  * `rejected` carries the SERVER's sentence rather than a rewrite of it. This
  * route refuses in four different ways — a bad email, a short password, an
@@ -537,11 +538,6 @@ export default function SignupScreen() {
                 title="Log in with email"
                 onPress={busy ? undefined : () => router.replace("/login")}
                 chevron
-              />
-              <ListRow
-                title="Use a pairing code"
-                onPress={busy ? undefined : () => router.replace("/pair")}
-                chevron
                 isLast
               />
             </List>
@@ -587,7 +583,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
   fill: { flex: 1 },
   /**
-   * TOP-ALIGNED, unlike `login` and `pair`, which centre.
+   * TOP-ALIGNED, unlike `login`, which centres.
    *
    * Those two fit on one screen, so centring reads as deliberate placement.
    * This screen does not: six fields and a three-row radio group run to roughly
