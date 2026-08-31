@@ -171,6 +171,32 @@ export const color = {
   accentSoft: "#FDECC8",
 
   /**
+   * The design's `--accent-soft`: the ember at 18% light, 22% dark.
+   *
+   * A PAIR, and translucent, which is what makes it usable as a ground under
+   * type — it composites over whatever card it sits on and therefore follows
+   * the appearance. `accentSoft` above is an opaque light-only cream and its
+   * docblock scopes it to surfaces with no type on them; putting a word on that
+   * in dark mode is the ~1.05:1 trap the calendar screen already refused.
+   */
+  accentWash: dyn("rgba(245,158,11,0.18)", "rgba(245,158,11,0.22)"),
+
+  /**
+   * Ink for a word ON `accentWash`. Measured over the composited ground, which
+   * is `#FDEED3` light and `#4E3915` dark:
+   *
+   *     light  #976106  4.55:1     (`brandText`, unchanged)
+   *     dark   #E0A32B  4.92:1     (`brandText`'s #C98A12 is 3.71:1 — under)
+   *
+   * The dark branch is the one place the design's own accent could not be used
+   * verbatim: `--accent` dark is `#f0a72e`, close to this, but the app's
+   * `brandText` pair is tuned for the page ground rather than for a tinted
+   * chip, and on this one it falls short. A measured floor is the exception the
+   * design does not override.
+   */
+  accentWashInk: dyn("#976106", "#E0A32B"),
+
+  /**
    * Body-map support colour. The spec's rule survives the re-skin: soreness is
    * data entry about the body, so it must NOT wear the accent, or a tapped
    * region reads as a system action. Warm brick — same family as the ember,

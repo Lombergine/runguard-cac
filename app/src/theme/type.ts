@@ -232,6 +232,27 @@ export const text = {
     lineHeight: 40,
     letterSpacing: -0.02 * 34,
   } as TextStyle,
+
+  /**
+   * 27 display 800, -0.4 — the question ON the ember card.
+   *
+   * `prompt` above is the same question when it IS the screen (the check-in
+   * sheet). On Home it sits inside a card with a section below it, and the
+   * design sizes it down accordingly: `700 27px/1.15, letter-spacing:-0.4px`
+   * (`RunGuard iOS App copy.dc.html:242`).
+   *
+   * A rank rather than three literals in `CheckInPrompt`: it was carrying
+   * `fontSize: 27, lineHeight: 31, letterSpacing: -0.4` inline, which
+   * `app/CLAUDE.md` rules out — "never hardcode a colour, size, or spacing
+   * value in a component" — and which meant the design's number lived somewhere
+   * no audit of the type scale would ever find it.
+   */
+  promptCard: {
+    fontFamily: font.displayExtra,
+    fontSize: 27,
+    lineHeight: 31,
+    letterSpacing: -0.4,
+  } as TextStyle,
 } as const;
 
 export type TextRole = keyof typeof text;

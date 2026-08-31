@@ -751,9 +751,12 @@ function UnknownReadiness({ pending }: { pending: boolean }) {
  * stays put whether the card holds data or an `Absent`. That is why the three
  * blocks below draw cards and not eyebrows.
  *
- * None of it renders before a check-in. The empty prompt screen is the
- * signature, and a stack of tiles above the fold would be exactly the summary
- * widget the spec leaves the space empty instead of.
+ * IT RENDERS BEFORE A CHECK-IN TOO, and this paragraph used to say the
+ * opposite. That was true of the old full-viewport check-in screen, where the
+ * emptiness above the fold WAS the signature. The design replaced that with a
+ * compact ember card and puts Today, This week and Overnight underneath it
+ * whether or not the athlete has checked in — so the name is now about what the
+ * block contains rather than when it appears.
  */
 function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
   const today = profile.plan.days.find((d) => d.isToday);
@@ -1128,7 +1131,7 @@ const styles = StyleSheet.create({
   insightByline: { ...text.baseSemi, color: color.brandText },
 
   /**
-   * The design stacks its sections 22 apart. `layout.section` is 24 and is what
+   * The design stacks its sections 22 apart. `layout.section` is 22 and is what
    * every other screen in the app spends between groups; the theme is the
    * single source (app/CLAUDE.md), so the 2pt goes rather than a one-off.
    */

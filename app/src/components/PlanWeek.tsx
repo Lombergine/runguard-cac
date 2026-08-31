@@ -104,7 +104,7 @@ import { formatDistance } from "../lib/units";
 import { workoutBlocks, type WorkoutBlock } from "../lib/workout";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 import { color } from "../theme/tokens";
-import { text } from "../theme/type";
+import { font, text } from "../theme/type";
 
 /**
  * The engine's word for a day with no run, compared EXACTLY — the same test
@@ -839,23 +839,34 @@ const styles = StyleSheet.create({
    * palette says in as many words never to put a glyph on it. brandText on the
    * card is the pairing `dateToday` and `countdown` already ship.
    */
+  /** Filled and fully round, as the design draws it — `padding:3px 8px`. */
   coachPill: {
-    borderWidth: ruleWidth,
-    borderColor: color.brandStrong,
-    borderRadius: radius.control,
+    backgroundColor: color.accentWash,
+    borderRadius: radius.pill,
     paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    paddingVertical: 3,
   },
   /**
-   * One word, lowercase — the same register as the `taper` pill beside it.
+   * `COACH`, the design's own chip: 600 11px uppercase on the filled
+   * `accent-soft` (`RunGuard iOS App copy.dc.html:351`).
    *
-   * It read "from your coach" before. Four words made the quietest thing in
-   * the row its widest object: on a week the coach wrote, seven of them
-   * stacked down the card and outweighed the sessions they were annotating.
-   * The design marks this with a single word for that reason, and in a plan
-   * row next to a date "coach" can only mean one thing.
+   * It was lowercase `coach` in an outlined pill. The single word is right and
+   * the design agrees — it read "from your coach" before, and four words made
+   * the quietest thing in the row its widest object. But the case and the fill
+   * were the app's, on no stronger ground than matching the `taper` pill beside
+   * it, and internal consistency is no longer a reason to differ.
+   *
+   * The ink is `accentWashInk` rather than `brandText`: measured on the chip's
+   * own composited ground, `brandText` dark is 3.71:1. See `tokens.ts`.
    */
-  coachPillLabel: { ...text.meta, color: color.brandText },
+  coachPillLabel: {
+    fontFamily: font.bodySemi,
+    fontSize: 11,
+    lineHeight: 14,
+    textTransform: "uppercase",
+    letterSpacing: 0.04 * 11,
+    color: color.accentWashInk,
+  },
 
   type: { ...text.base, color: color.ink, marginTop: space.xs },
   prescription: { marginTop: space.xs },

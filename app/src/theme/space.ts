@@ -84,6 +84,14 @@ export const radius = {
    */
   card: 14,
   /**
+   * 18 — the two hero surfaces, softer than a card and tighter than a group.
+   *
+   * The design gives the ember check-in card and the readiness card the same
+   * `border-radius:18px` (`:236`, `:256`), one step off every other card. Both
+   * were carrying the literal; a third caller would have made it three.
+   */
+  hero: 18,
+  /**
    * The inset grouped list — `IOSList` in the design study's `ios-frame.jsx`.
    *
    * 26, and deliberately much rounder than `card`. iOS groups rows into a

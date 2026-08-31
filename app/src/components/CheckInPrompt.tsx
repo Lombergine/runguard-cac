@@ -54,8 +54,8 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Chevron } from "./List";
 import { color, shadow, staticColor } from "../theme/tokens";
-import { layout, space } from "../theme/space";
-import { font, text } from "../theme/type";
+import { layout, radius, space } from "../theme/space";
+import { text } from "../theme/type";
 
 /** The website's `--ember` stops and its 135°, as everywhere else. */
 const EMBER_STOPS = [0, 0.45, 1] as const;
@@ -115,9 +115,9 @@ export function CheckInPrompt({ dateLabel, onPress }: CheckInPromptProps) {
 
 const styles = StyleSheet.create({
   card: {
-    /* 18, between `card` and the grouped list's `group` — the design gives the
-       one ember surface a softer corner than the cards around it. */
-    borderRadius: 18,
+    /* `hero`: between `card` and the grouped list's `group` — the design gives
+       its two hero surfaces a softer corner than the cards around them. */
+    borderRadius: radius.hero,
     borderCurve: "continuous",
     overflow: "hidden",
     /* The flat ground the press reveals, and the fallback if the gradient never
@@ -140,21 +140,13 @@ const styles = StyleSheet.create({
    * A dark tint, subordinate to the question, that does NOT follow the system
    * appearance — see the header for the measurement.
    *
-   * `text.micro` rather than the design's 600 12px sans: every eyebrow in this
-   * app is the mono micro role, and taking the sans here would give the app two
-   * eyebrow voices (docs/design-port.md #1). The design's intent — small,
-   * uppercase, muted, tracked — survives.
+   * `text.micro` IS the design's eyebrow now — sans 600 13, +0.06em, uppercase.
+   * This comment used to argue for the app's mono rank instead; ledger row 1 is
+   * retired and the rank took the design's values, so there is nothing left to
+   * argue.
    */
   eyebrow: { ...text.micro, color: staticColor.ink2 },
-  question: {
-    ...text.title,
-    fontFamily: font.displayExtra,
-    fontSize: 27,
-    lineHeight: 31,
-    letterSpacing: -0.4,
-    color: staticColor.ink,
-    marginTop: space.sm,
-  },
+  question: { ...text.promptCard, color: staticColor.ink, marginTop: space.sm },
   cue: {
     flexDirection: "row",
     alignItems: "center",

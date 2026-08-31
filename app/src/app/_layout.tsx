@@ -31,6 +31,15 @@ SplashScreen.preventAutoHideAsync().catch(() => {
   /* already hidden; not an error worth surfacing */
 });
 
+/**
+ * The signed-out entrance, declared rather than inferred.
+ *
+ * `anchor`, not `initialRouteName`: expo-router v4 renamed it, and the old key
+ * is silently ignored on SDK 57 — which is worse than an error, because the
+ * comment below would still claim the guard exists.
+ */
+export const unstable_settings = { anchor: "welcome" };
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Archivo_700Bold,
@@ -211,8 +220,16 @@ function Gate() {
           decided by JSX order, silently, and was `login` — so a brand-new
           install opened on a form headed "Welcome back."
 
-          `welcome` is first, and `initialRouteName` says so a second time, so
-          neither a reorder nor a new file can move the entrance by accident.
+          `welcome` is first, and `unstable_settings.anchor` at the top of this
+          file says so a second time, so neither a reorder nor a new file can
+          move the entrance by accident.
+
+          That second half used to be a lie. The comment claimed
+          `initialRouteName` said it too and nothing in the project ever set it
+          — the belt was here, the braces were not, and the entrance was decided
+          by JSX order alone, which is the exact fragility this paragraph
+          describes. It is real now, and it is `anchor` rather than
+          `initialRouteName` because expo-router v4 renamed the key.
         */}
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="welcome" />
