@@ -46,40 +46,56 @@ export const tabular: TextStyle = {
  */
 export const text = {
   /**
-   * 11.5 mono, uppercase, +0.12em — micro-labels and eyebrows.
+   * 13 semibold sans, uppercase, +0.06em — micro-labels and eyebrows.
+   *
+   * THE DESIGN'S OWN RANK, and by some distance its most-used: `600 13px` with
+   * `letter-spacing:0.06em` appears 23 times, more than any other declaration
+   * except the body. This was 11.5 MONO at +0.12em, and the reason recorded
+   * for that was internal consistency — "every other eyebrow in the app is
+   * already the mono micro role". True, and not a rule. Under the standard the
+   * app is now held to, matching itself is not a reason to differ from the
+   * design.
+   *
+   * `tabular` stays. An eyebrow occasionally carries a count ("14 ATHLETES"),
+   * and figures in this app do not jitter.
    *
    * `lineHeight` is explicit because skeletons reserve height from these
    * numbers. Without it, callers guessed: CheckInCard used fontSize + space.xs
-   * (15.5) and RunCard used round(fontSize * 1.4) (16), so two reserved heights
-   * disagreed by half a point and neither matched what actually rendered.
+   * and RunCard used round(fontSize * 1.4), so two reserved heights disagreed
+   * by half a point and neither matched what actually rendered.
    */
   micro: {
-    fontFamily: font.mono,
-    fontSize: 11.5,
-    lineHeight: 16,
-    letterSpacing: 0.12 * 11.5,
+    fontFamily: font.bodySemi,
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.06 * 13,
     textTransform: "uppercase",
     ...tabular,
   } as TextStyle,
 
-  /** 14 body — secondary metadata, advisory reason lines. */
+  /** 13.5 body — the design's secondary line (18 uses). Metadata, reasons. */
   meta: {
     fontFamily: font.body,
-    fontSize: 14,
+    fontSize: 13.5,
     lineHeight: 20,
   } as TextStyle,
 
-  /** 16.5 body — the base size. */
+  /**
+   * 17 body — the base size, and the design's own (`400 17px`, 31 uses, more
+   * than any other declaration it makes). The app had 16.5, chosen to be "one
+   * step larger than a normal mobile app"; the design agrees and is half a
+   * point larger still.
+   */
   base: {
     fontFamily: font.body,
-    fontSize: 16.5,
+    fontSize: 17,
     lineHeight: 24,
   } as TextStyle,
 
-  /** 16.5 body, semibold — emphasis within prose, control labels. */
+  /** 17 body, semibold — the design's `600 17px`. Emphasis, control labels. */
   baseSemi: {
     fontFamily: font.bodySemi,
-    fontSize: 16.5,
+    fontSize: 17,
     lineHeight: 24,
   } as TextStyle,
 
@@ -130,11 +146,18 @@ export const text = {
     ...tabular,
   } as TextStyle,
 
-  /** 22 mono — inline stats. */
+  /**
+   * 24 mono — the tile figure. The design's `700 24px`.
+   *
+   * Its size, kept in the app's mono face rather than its sans: the size is the
+   * design's decision and the face is what makes a COLUMN of figures line up.
+   * That is the one carve-out in the type pass, and it is functional rather
+   * than taste — a stat grid and a calendar depend on digits being one width.
+   */
   stat: {
     fontFamily: font.mono,
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 24,
+    lineHeight: 30,
     ...tabular,
   } as TextStyle,
 
@@ -179,21 +202,24 @@ export const text = {
    * the app would then carry two display voices, one of them Apple's.
    *
    * DISTINCT FROM `prompt`, which is also 34: prompt is display-800 with
-   * NEGATIVE tracking and is reserved for the check-in question and nothing
+   * NEGATIVE tracking, and is reserved for the check-in question and nothing
    * else. A nav title is chrome and a check-in question is the thing the whole
-   * app exists to ask, so they must not be the same object — 700 versus 800
-   * and +0.4 versus -0.68 keeps the question the louder of the two even at
-   * identical size.
+   * app exists to ask, so they must not be the same object — 700 versus 800,
+   * and -0.6 against -0.68, keeps the question the louder of the two even at
+   * identical size. That margin is now thin, and deliberately so: the design
+   * sets its own nav title at `-0.6px` (`:229`) and this used +0.4.
    *
-   * The positive tracking is iOS's own for a large title: Archivo at 34 is
-   * tighter than SF Pro Display, and letting it set solid makes the title read
-   * as a headline rather than as navigation.
+   * The old value was iOS's own tracking for a large title, on the argument
+   * that Archivo at 34 is already tighter than SF Pro Display and letting it
+   * set solid reads as a headline rather than as navigation. A fair reading,
+   * and still only a reading — the design draws the title it wants, and under
+   * the current standard that settles it.
    */
   largeTitle: {
     fontFamily: font.displayBold,
     fontSize: 34,
     lineHeight: 41,
-    letterSpacing: 0.4,
+    letterSpacing: -0.6,
   } as TextStyle,
 
   /**

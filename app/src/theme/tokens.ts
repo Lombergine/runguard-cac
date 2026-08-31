@@ -96,6 +96,24 @@ export const color = {
   ruleSoft: dyn("rgba(34,29,21,0.09)", "rgba(255,255,255,0.07)"),
   ruleStrong: dyn("rgba(34,29,21,0.24)", "rgba(255,255,255,0.24)"),
 
+  /**
+   * The chrome grounds: the header bar and the tab bar.
+   *
+   * TRANSLUCENT, and the design's own values — `--nav` and `--tabbar`. They are
+   * meant to be seen through, with `blur(18px) saturate(180%)` behind them, and
+   * `expo-blur` now supplies that. Before it was installed these two surfaces
+   * were painted opaque with `bg` and `card`, and the header's docblock argued
+   * the case: without a real blur a 0.86-alpha strip over scrolling content is
+   * just muddy, and `visual-spec.md` rules out floating surfaces. That argument
+   * was sound while there was no blur; there is one now.
+   *
+   * The alphas differ by design — the nav is slightly more transparent than the
+   * tab bar (0.86 against 0.90), so the page shows through the top more than
+   * the bottom.
+   */
+  nav: dyn("rgba(250,247,242,0.86)", "rgba(20,18,16,0.84)"),
+  tabbar: dyn("rgba(250,247,242,0.90)", "rgba(20,18,16,0.90)"),
+
   /* ── The ember signature — "the fun" (globals.css:26-31) ───────────── */
   /** FILL only: bars, dots, gradient stops. 2.01:1 — never put a glyph on it. */
   brand: "#F59E0B",

@@ -15,13 +15,20 @@
  * to be 34pt, not iOS's collapsing large title. Reaching for the native one
  * would have cost three regressions to get further from the design.
  *
- * So this is an ordinary view the screen puts above its own list. It draws the
- * ground colour rather than the design's translucent `--nav`: without a blur
- * (`expo-blur` is not installed) a 0.86-alpha strip over scrolling content is
- * just muddy, and `visual-spec.md` rules floating surfaces out — "Lines instead
- * of shadows. Nothing floats." A hairline carries the edge instead.
+ * So this is an ordinary view the screen puts above its own list — but it is
+ * now the design's translucent `--nav` over a real blur rather than an opaque
+ * strip. `expo-blur` was not installed when this was written, and without a
+ * blur a 0.86-alpha bar over scrolling content is just muddy; that is why it
+ * painted `bg` and why this comment used to argue for it. The dependency is
+ * there now, so the reason is gone.
+ *
+ * `visual-spec.md`'s "nothing floats" still holds and is not in tension with
+ * this: a blurred bar is not floating ABOVE the page, it is the page seen
+ * through frosted glass, and it is still held by a hairline rather than a
+ * shadow.
  */
 import { View, Text, Pressable, StyleSheet } from "react-native";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 
@@ -32,6 +39,9 @@ import { text } from "../theme/type";
 import { dim } from "../theme/press";
 
 /** The icon grid every glyph in this app is drawn on. */
+/** The design's `blur(18px)`, in expo-blur's 0-100 scale. */
+const BLUR = 18;
+
 const GRID = 24;
 const ICON = 23;
 
@@ -140,8 +150,13 @@ export function ScreenHeader({ title, subtitle, actions }: ScreenHeaderProps) {
    * `SafeAreaView edges={["top"]}`, so spending the inset again would push the
    * title a status bar's height down the page.
    */
+  /*
+   * `tint="default"` follows the system appearance on its own, so the blur does
+   * not need a `useColorScheme()` of its own; the `nav` tint layered over it is
+   * a `DynamicColorIOS` pair and adapts the same way.
+   */
   return (
-    <View style={styles.bar}>
+    <BlurView intensity={BLUR} tint="default" style={styles.bar}>
       {/*
        * The action row sits ABOVE the title and is right-aligned on its own
        * line, as the design draws it — not beside the title, where a 34pt line
@@ -158,17 +173,17 @@ export function ScreenHeader({ title, subtitle, actions }: ScreenHeaderProps) {
         {title}
       </Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-    </View>
+    </BlurView>
   );
 }
 
 const styles = StyleSheet.create({
   /**
-   * The ground, not a card — see the note at the top of this file. The hairline
-   * is what separates it from the content scrolling beneath.
+   * The design's `--nav` over the blur — see the note at the top of this file.
+   * The hairline is what separates it from the content scrolling beneath.
    */
   bar: {
-    backgroundColor: color.bg,
+    backgroundColor: color.nav,
     paddingHorizontal: layout.page,
     paddingBottom: space.sm,
     borderBottomWidth: ruleWidth,

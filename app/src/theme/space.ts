@@ -6,6 +6,8 @@
  * slightly oversized on a desk and exactly right at arm's length.
  */
 
+import { StyleSheet } from "react-native";
+
 /** 4px scale. Use these names, not raw numbers. */
 export const space = {
   xs: 4,
@@ -96,10 +98,24 @@ export const radius = {
 } as const;
 
 /**
- * 1.5px, not a hairline. React Native accepts fractional widths and renders
- * them on the device's pixel grid.
+ * The design's hairline — `StyleSheet.hairlineWidth`, one device pixel.
+ *
+ * ── IT WAS 1.5, AND THE ARGUMENT FOR THAT WAS A JUDGEMENT ───────────────────
+ *
+ * The reasoning was real: a line read at arm's length on a track in direct
+ * sunlight wants more than a hairline, and the whole file is built on being one
+ * step larger than a normal mobile app. But the design draws every separator at
+ * `0.5px`, and "we decided we prefer heavier" is taste, not a rule — not a
+ * measured contrast floor, not one of `visual-spec.md`'s non-negotiables. Under
+ * the standard the app is now held to, taste does not outrank the design.
+ *
+ * `hairlineWidth` rather than a literal `0.5`: on a @3x phone that is 0.333pt,
+ * which is the ACTUAL single pixel the design's CSS `0.5px` asks for on a @2x
+ * display. Writing 0.5 would draw a line and a half on @3x.
+ *
+ * One token, every border in the app.
  */
-export const ruleWidth = 1.5;
+export const ruleWidth = StyleSheet.hairlineWidth;
 
 /** Left rule on SafetyNotice — deliberately heavier than a card rule. */
 export const safetyRuleWidth = 3;

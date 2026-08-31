@@ -34,14 +34,15 @@
  *     tab survives greyscale and glare. `visual-spec.md` §5: colour last.
  */
 import { Tabs } from "expo-router";
-import { ColorValue, StyleSheet, Text } from "react-native";
+import { ColorValue, StyleSheet, Text, View } from "react-native";
+import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { useSession } from "../../lib/session";
 import { ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
-import { font, text } from "../../theme/type";
+import { font } from "../../theme/type";
 
 /**
  * The bar's own height, above the home-indicator inset. One tap target plus a
@@ -51,6 +52,9 @@ import { font, text } from "../../theme/type";
 const BAR_HEIGHT = target.min + space.md;
 
 /** Coordinate grid the glyphs are drawn on. Never a rendered size. */
+/** The design's `blur(18px)`, in expo-blur's 0-100 scale. */
+const BLUR = 18;
+
 const GRID = 24;
 
 /**
@@ -212,6 +216,19 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: color.muted,
         tabBarStyle: [styles.bar, { height: BAR_HEIGHT + insets.bottom }],
         /*
+         * The design's `blur(18px) saturate(180%)` behind the bar. React
+         * Navigation renders this UNDER the items, which is why the bar itself
+         * must go transparent below — a `--tabbar` fill on `styles.bar` would
+         * sit on top of the blur and cancel it.
+         *
+         * `tint="default"` follows the system appearance on its own.
+         */
+        tabBarBackground: () => (
+          <BlurView intensity={BLUR} tint="default" style={StyleSheet.absoluteFill}>
+            <View style={styles.barTint} />
+          </BlurView>
+        ),
+        /*
          * Rendered rather than styled, so the focused tab can take the design's
          * heavier cut. `tabBarLabelStyle` is a static style and cannot vary by
          * focus; this receives `{ focused, color, children }` per tab, so one
@@ -316,7 +333,11 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   scene: { backgroundColor: color.bg },
   bar: {
-    backgroundColor: color.card,
+    /*
+     * Transparent: the ground is `tabBarBackground` above, which renders
+     * beneath the items. A colour here would paint over the blur.
+     */
+    backgroundColor: "transparent",
     borderTopWidth: ruleWidth,
     borderTopColor: color.ruleSoft,
     /*
@@ -328,10 +349,26 @@ const styles = StyleSheet.create({
   },
   /** Guarantees the 48px target even if the bar is ever shortened. */
   item: { minHeight: target.min },
-  // No colour here: the tint the navigator passes is what separates active
-  // from inactive, and it must not be overridden. The WEIGHT is ours — see
-  // `tabBarLabelStyle` at the navigator, which swaps in `labelOn` when focused.
-  label: text.micro,
+  /** The design's `--tabbar`, layered over the blur. */
+  barTint: { flex: 1, backgroundColor: color.tabbar },
+  /**
+   * The design's tab label: `10px`, uppercase, tracked (`:1002`).
+   *
+   * NOT `text.micro`. The two used to be the same object, and when `micro` took
+   * the design's eyebrow size (13) the tab labels went with it and grew three
+   * points. They are not the same rank: an eyebrow heads a group inside the
+   * page, a tab label is chrome under it, and the design sizes them apart.
+   *
+   * No colour: the tint the navigator passes is what separates active from
+   * inactive and must not be overridden. The WEIGHT is ours — `labelOn` below.
+   */
+  label: {
+    fontFamily: font.body,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.06 * 10,
+    textTransform: "uppercase",
+  },
   /** The design's 600 against 400 (`:1862`), so focus is not hue alone. */
-  labelOn: { fontFamily: font.monoSemi },
+  labelOn: { fontFamily: font.bodySemi },
 });

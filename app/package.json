@@ -8,6 +8,7 @@
     "@expo-google-fonts/spline-sans-mono": "^0.4.2",
     "@kingstinct/react-native-healthkit": "^14.0.2",
     "expo": "~57.0.11",
+    "expo-blur": "~57.0.2",
     "expo-constants": "~57.0.9",
     "expo-font": "~57.0.1",
     "expo-linear-gradient": "~57.0.1",
