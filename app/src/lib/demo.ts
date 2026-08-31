@@ -71,6 +71,25 @@ export function demoWrites(): readonly Write[] {
 }
 
 /**
+ * Every body written to `path`, oldest first.
+ *
+ * The half of this module that was missing. `recordWrite` has always kept the
+ * writes and `request()` has always resolved as though the server accepted
+ * them, but nothing READ them back — so a demo write survived exactly as long
+ * as the screen that made it held its own copy in local state. Home does
+ * (`setLogged`), which is why the athlete demo looked right; the coach calendar
+ * refetches instead, so a session the coach had just written vanished on the
+ * next render.
+ *
+ * Oldest first and NOT deduplicated, unlike `lastWrite`: a caller folding these
+ * into a map wants every one applied in order, so a day written twice ends up
+ * with the second version by ordinary replacement.
+ */
+export function writesTo(path: string): readonly unknown[] {
+  return writes.filter((w) => w.path === path).map((w) => w.body);
+}
+
+/**
  * The most recent body written to `path`, or null.
  *
  * Deliberately last-wins rather than merged: a second check-in replaces the

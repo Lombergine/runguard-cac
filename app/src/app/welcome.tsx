@@ -37,7 +37,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -51,8 +50,8 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 import { List, ListRow } from "../components/List";
 import { Section } from "../components/Section";
-import { ApiError, BASE_URL, getDemoPairing } from "../lib/api";
-import { setToken } from "../lib/auth";
+import { ApiError, getCoachDemoPairing, getDemoPairing } from "../lib/api";
+import { setCoachToken, setToken } from "../lib/auth";
 import { enterDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
 import { useReducedMotion } from "../lib/useReducedMotion";
@@ -331,31 +330,49 @@ export default function WelcomeScreen() {
   }
 
   /**
-   * The coach demo, which is NOT a screen in this app.
+   * The coach demo — a coach session on THIS phone, not a trip to the website.
    *
-   * There is no coach anything on the phone — `_layout.tsx` declares no coach
-   * group and `/api/mobile/*` has no coach surface — so this cannot open a view
-   * here. What it can do is open the one that exists: the website mints a demo
-   * coach session on `GET /api/demo/coach` and lands on the roster.
+   * It used to open `/api/demo/coach` in Safari, and the comment here explained
+   * why: "there is no coach anything on the phone". That was true and is not
+   * any more. `(tabs)/_layout.tsx` registers Roster, Calendar and Sources
+   * behind `Tabs.Protected guard={coach}`, and `/api/mobile/coach/*` backs all
+   * three. Handing a visitor to a browser now shows them the wrong product.
    *
-   * So the row leaves the app, and says so. It carries NO chevron: `List`'s
-   * rule is that a chevron promises a screen underneath, and handing someone to
-   * a browser is not that. The sub-line is the affordance instead.
+   * There is deliberately NO browser fallback. A fallback here is the old
+   * behaviour waiting for a bad network, and this row's whole job is to stay in
+   * the app; a failure says so and stays put, like the athlete row's.
    *
-   * Gated on the same `demoState` as the athlete row, and correctly so: both
-   * routes are governed by `DEMO_TEAM_ID`, and `/api/demo/coach` 404s when it
-   * is unset for the same reason `/api/mobile/demo` does. One probe, one
-   * answer, rather than a second request that could disagree with the first.
+   * Order matters, exactly as it does above: `enterDemo()` BEFORE the token is
+   * stored. It is what makes `lib/api` hold writes on the device, and a screen
+   * mounting between the two would be a live coach session — one that can write
+   * a team calendar — with no interception.
+   *
+   * `replace`, and to `/roster` specifically: the coach tab set has no `index`,
+   * so "/" is not a route a coach has. Replacing rather than pushing leaves no
+   * welcome screen underneath to swipe back to a session that has already begun.
    */
   function openCoachDemo() {
+    if (demoState === "opening") return;
     setDemoError(null);
+    setDemoState("opening");
     void (async () => {
-      const url = `${BASE_URL}/api/demo/coach`;
       try {
-        if (!(await Linking.canOpenURL(url))) throw new Error("unopenable");
-        await Linking.openURL(url);
-      } catch {
-        setDemoError("The coach demo could not be opened in your browser.");
+        const { token } = await getCoachDemoPairing();
+        enterDemo();
+        await setCoachToken(token);
+        await refresh();
+        router.replace("/roster");
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          setDemoState("off");
+          return;
+        }
+        setDemoError(
+          err instanceof ApiError
+            ? err.message
+            : "The coach demo could not be opened just now."
+        );
+        setDemoState("idle");
       }
     })();
   }
@@ -511,8 +528,9 @@ export default function WelcomeScreen() {
                   />
                   <ListRow
                     title="Coach demo"
-                    sub="The roster a coach sees. Opens in your browser — there is no coach view in the app."
+                    sub="The roster a coach sees before practice. Nothing you write is saved."
                     onPress={demoState === "opening" ? undefined : openCoachDemo}
+                    chevron
                     isLast
                   />
                 </List>

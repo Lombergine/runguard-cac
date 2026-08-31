@@ -277,6 +277,56 @@ export async function getDemoPairing(): Promise<{ token: string; name: string }>
   return { token, name: typeof body?.name === "string" ? body.name : "the demo runner" };
 }
 
+/**
+ * GET /api/mobile/demo/coach — a coach token for the demo team.
+ *
+ * The coach half of the route above, and it exists for the same reason: its own
+ * `fetch`, because `request()` refuses without a credential and the point here
+ * is to obtain the first one.
+ *
+ * WHAT COMES BACK is a real coach credential for a real team — strictly more
+ * than the athlete demo hands out, since it opens a whole roster. Two things
+ * make that safe, and only one of them is in this file. The server refuses any
+ * non-GET for the demo team at the single point where a coach request becomes a
+ * team id (`resolveCoachTeam`), so the calendar cannot be written from here by
+ * this app or by anything else. And the demo team must contain only seeded
+ * data — a standing condition stated in `website/src/lib/demo.ts` that nothing
+ * in code can check.
+ *
+ * `name` is the TEAM's, so the demo can say whose roster it is showing. It is
+ * nullable on the wire; the caller supplies its own words rather than printing
+ * an empty string.
+ *
+ * 404 means the demo is switched off on this server (`DEMO_TEAM_ID` unset), and
+ * is deliberately indistinguishable from a route that was never built.
+ */
+export async function getCoachDemoPairing(): Promise<{ token: string; name: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/api/mobile/demo/coach`, { signal: controller.signal });
+  } catch {
+    throw new ApiError(0, `Could not reach the RunGuard server at ${BASE_URL}.`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (res.status === 404) {
+    throw new ApiError(404, "The demo is not available on this server.");
+  }
+  if (!res.ok) throw new ApiError(res.status, `The demo could not be opened (${res.status}).`);
+
+  const body = (await res.json().catch(() => null)) as
+    | { token?: unknown; name?: unknown }
+    | null;
+  const token = typeof body?.token === "string" ? body.token : null;
+  if (!token) throw new ApiError(500, "The demo sent nothing this app can use.");
+
+  return { token, name: typeof body?.name === "string" ? body.name : "the demo team" };
+}
+
 /* ------------------------------------------------------------------ *
  * Profile writes
  * ------------------------------------------------------------------ */

@@ -63,16 +63,24 @@ import {
   saveCoachPlanDay,
   type CoachPlan,
   type CoachPlanDay,
+  type CoachPlanWrite,
 } from "../../lib/api";
+import { isDemo, writesTo } from "../../lib/demo";
 import { dayLabel, localDay, parseLocalDay } from "../../lib/dates";
-import { miNumFromMeters } from "../../lib/units";
+import { M_PER_MI, miNumFromMeters } from "../../lib/units";
 import { dim, rowPress } from "../../theme/press";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
 /** The date column. `target.min - space.md` is 36; the design draws 38. */
-const DATE_COL = target.min - space.md;
+/*
+ * Wide enough for the longest label the column can hold, which is "Today" —
+ * not the three-letter abbreviations it was sized for. At `target.min - md`
+ * (36) the word wrapped to "TODA / Y" on the one row a coach looks at first.
+ * `text.micro` is mono and tracked +0.12em, so five characters need about 40.
+ */
+const DATE_COL = target.min;
 
 /** Row height floor, and what a skeleton reserves. */
 const ROW_H = target.row + space.md;
@@ -317,7 +325,10 @@ function DayRow({
     >
       <View style={styles.dateCol}>
         {/* "today" as a WORD, not only as a wash — see the file header. */}
-        <Text style={styles.dow}>{isToday ? "Today" : DOW[d.getDay()]}</Text>
+        {/* `numberOfLines` so a future label cannot silently wrap again. */}
+        <Text style={styles.dow} numberOfLines={1}>
+          {isToday ? "Today" : DOW[d.getDay()]}
+        </Text>
         <Text style={styles.dom}>{String(d.getDate())}</Text>
       </View>
       <View style={styles.rowBody}>
@@ -416,9 +427,45 @@ export default function CalendarScreen() {
     });
   }, [plan, week]);
 
+  /**
+   * The week's written days, server first, then anything the demo is holding.
+   *
+   * ── WHY THE DEMO BRANCH IS HERE ─────────────────────────────────────────
+   *
+   * In the demo the POST never leaves the phone: `request()` records it and
+   * resolves (`lib/demo.ts`). `onSaved` then calls `load(true)`, which refetches
+   * the week the server still has — so without this the coach would write
+   * Thursday, watch the sheet close, and see Thursday empty again. A demo where
+   * saving silently does nothing is worse than one that refuses to save.
+   *
+   * The server refuses these writes too, independently and for real:
+   * `resolveCoachTeam` rejects any non-GET for the demo team. That is the
+   * guarantee; this is the part that keeps the demo worth looking at.
+   *
+   * MILES IN, METRES OUT — the same conversion `website/src/lib/teamPlan.ts`
+   * does, through the same constant, because the wire carries what the coach
+   * typed and `CoachPlanDay` carries what the column would hold. Zero becomes
+   * null there and here: a rest day is a day with no distance, not a 0.0 mi one.
+   */
   const written = useMemo(() => {
     const m = new Map<string, CoachPlanDay>();
     for (const d of plan?.days ?? []) m.set(d.date, d);
+
+    if (isDemo()) {
+      for (const body of writesTo("/api/mobile/coach/plan")) {
+        const w = body as Partial<CoachPlanWrite> | null;
+        if (!w || typeof w.date !== "string" || typeof w.type !== "string") continue;
+        const mi = w.distanceMi == null || w.distanceMi === "" ? null : Number(w.distanceMi);
+        m.set(w.date, {
+          date: w.date,
+          type: w.type,
+          distanceM: mi !== null && Number.isFinite(mi) && mi > 0 ? mi * M_PER_MI : null,
+          targetPace: w.targetPace ?? null,
+          details: w.details ?? null,
+          why: w.why ?? null,
+        });
+      }
+    }
     return m;
   }, [plan]);
 

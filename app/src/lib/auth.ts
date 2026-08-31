@@ -66,6 +66,27 @@ const RETIRED_DEVICE_TOKEN_KEY = "runguard.deviceToken";
 const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
 
 /**
+ * Which role a dev token is for, read off the token itself.
+ *
+ * ONE variable rather than two, because two would reintroduce a state this file
+ * works hard to make unreachable: `getCredential()` fails closed when both an
+ * athlete and a coach credential exist, and a second env var would be exactly
+ * that pair — with no setter in between to delete the other one.
+ *
+ * The two kinds are already distinguishable, and not by guesswork: an athlete
+ * session is `a.<athleteId>.<hmac>`, a coach session `<teamId>.<hmac>`
+ * (`website/src/lib/session.ts`). They sign different strings, so this only
+ * chooses which header a dev build sends — a token in the wrong slot is refused
+ * by the server rather than accepted as the other role.
+ *
+ * So moving the simulator between an athlete and a coach is one line of
+ * `app/.env`, which is the whole ergonomic point of the fallback.
+ */
+function devRole(token: string): Role {
+  return token.startsWith("a.") ? "athlete" : "coach";
+}
+
+/**
  * Set once someone signs out in this process, to stop the dev fallback signing
  * them straight back in.
  *
@@ -114,7 +135,7 @@ export async function getCredential(): Promise<Credential | null> {
   if (athlete) return { role: "athlete", token: athlete };
   if (coach) return { role: "coach", token: coach };
   const dev = devFallbackRevoked ? null : DEV_TOKEN;
-  return dev ? { role: "athlete", token: dev } : null;
+  return dev ? { role: devRole(dev), token: dev } : null;
 }
 
 /**
