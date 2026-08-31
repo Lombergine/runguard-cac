@@ -79,6 +79,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
+import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
 import { Section } from "../../components/Section";
 import { EXPLAINERS } from "../../components/InfoDot";
 import { Tile } from "../../components/Tile";
@@ -316,14 +317,19 @@ function recoveryTips(p: Profile): ReactNode[] {
  * readings already on the glass; the whole-page failure stays reserved for
  * having nothing at all.
  */
+/**
+ * The screen's own chrome now lives in `ScreenHeader` above the scroller — the
+ * design's pinned title and subtitle. What is left here is the one line that
+ * is not chrome: a stale-data notice, which belongs with the readings it is
+ * qualifying rather than in a header that is always on screen.
+ *
+ * The eyebrow ("Overnight") went with it. The design puts no eyebrow above a
+ * screen title, and it was naming the same thing the title does.
+ */
 function Header({ stale }: { stale?: boolean }) {
+  if (!stale) return null;
   return (
     <View style={styles.header}>
-      <Text style={styles.eyebrow}>Overnight</Text>
-      <Text style={styles.heading}>Recovery</Text>
-      <Text style={styles.note}>
-        What your sleep and your heart rate have been saying.
-      </Text>
       {stale ? (
         <Text style={styles.note}>
           Could not reach your server just now. These are the readings last
@@ -497,6 +503,7 @@ export default function RecoveryScreen() {
   // The shared `/me`, and with it the single 401 path — a revoked token ends
   // the session from inside the store. There is deliberately no catch here.
   const { profile, state, refreshing, refresh } = useProfile();
+  const actions = useTabHeaderActions();
   const failed = state === "failed";
 
   const tips = useMemo(() => (profile ? recoveryTips(profile) : []), [profile]);
@@ -506,6 +513,11 @@ export default function RecoveryScreen() {
   if (failed && !profile) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScreenHeader
+          title="Recovery"
+          subtitle="What your sleep and heart rate said"
+          actions={actions}
+        />
         <View style={styles.page}>
           <Header />
           <Card>
@@ -529,6 +541,11 @@ export default function RecoveryScreen() {
   if (!profile) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScreenHeader
+          title="Recovery"
+          subtitle="What your sleep and heart rate said"
+          actions={actions}
+        />
         <View style={styles.page}>
           <Header />
           {/* Grey bars at the exact final height, never a "—": a pending value
@@ -673,11 +690,7 @@ const styles = StyleSheet.create({
   section: { gap: space.md },
 
   header: { marginBottom: layout.section },
-  eyebrow: { ...text.micro, color: color.muted },
-  heading: { ...text.title, color: color.ink, marginTop: space.xs },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
-
-  /** Title left, muted note right — the website's Panel head (tabs.tsx:22). */
 
   statusRow: {
     flexDirection: "row",
@@ -686,6 +699,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginTop: space.md,
   },
+  eyebrow: { ...text.micro, color: color.muted },
   statusValue: { ...text.stat, color: color.ink },
   /** Body weight, lowercase, sentence register. Never display weight. */
   statusWord: { ...text.base },

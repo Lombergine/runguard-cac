@@ -32,6 +32,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
 import { Section } from "../../components/Section";
+import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
 import { Absent } from "../../components/Nothing";
 import { PlanWeek, planWeekMetrics } from "../../components/PlanWeek";
 import { RunCard, runCardMetrics } from "../../components/RunCard";
@@ -74,6 +75,7 @@ function countLabel(n: number): string {
 
 /** The page, over the sunrise ground. Every branch below renders through it. */
 function Screen({ children }: { children: ReactNode }) {
+  const actions = useTabHeaderActions();
   return (
     <View style={styles.root}>
       <LinearGradient
@@ -82,6 +84,16 @@ function Screen({ children }: { children: ReactNode }) {
         pointerEvents="none"
       />
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        {/*
+         * Inside `Screen`, so the loading, failed and loaded states all wear
+         * it — a header that appears only once the payload lands would make
+         * the tab look like it changed identity on arrival.
+         */}
+        <ScreenHeader
+          title="Training"
+          subtitle="This week's plan, and what you've run"
+          actions={actions}
+        />
         {children}
       </SafeAreaView>
     </View>
@@ -350,7 +362,14 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: layout.page,
-    paddingTop: space.xl,
+    /*
+     * `md`, not `xl`. The screen used to open straight onto its content, so it
+     * spent 24 lifting the first card off the status bar. `ScreenHeader` now
+     * sits above it with its own bottom padding and a hairline, and 24 more
+     * under that read as a gap where the header had been cut off. The design
+     * gives this scroller 14.
+     */
+    paddingTop: space.md,
     paddingBottom: layout.section,
   },
   /** Matches the FlatList separator, so loading and loaded rhythm agree. */

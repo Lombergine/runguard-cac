@@ -83,6 +83,7 @@ import {
   type ReadinessBand,
 } from "../../lib/readinessVerdict";
 import { dayLabel, localDay, receiptLabel } from "../../lib/dates";
+import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
 import { checkedInToday, readinessState } from "../../lib/readiness";
 import type {
   ProfileWithNextRace,
@@ -142,6 +143,7 @@ const EMBER_END = { x: 1, y: 1 } as const;
 
 export default function CheckInScreen() {
   const router = useRouter();
+  const actions = useTabHeaderActions();
   /**
    * `invalidate` ONLY. This screen's own data comes from the 5.3 KB `/home`,
    * and it stays that way — `useProfile()` here would trip the shared store's
@@ -471,33 +473,22 @@ export default function CheckInScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      {/* Chat and Settings are stack routes, not tabs — the bar is four items by
-          design. Without this header nothing in the app reached either of them,
-          and Settings is the only way to Profile, Connect and the privacy
-          policy, so the whole account half of the app was unreachable. */}
-      <View style={styles.header}>
-        <Text style={styles.wordmark}>RunGuard</Text>
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => router.push("/chat")}
-            accessibilityRole="button"
-            accessibilityLabel="Ask the RunGuard coach"
-            hitSlop={hitSlopFor(styles.headerAction)}
-            style={({ pressed }) => [styles.headerAction, dim(pressed)]}
-          >
-            <Text style={styles.headerActionLabel}>Ask RunGuard</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push("/settings")}
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            hitSlop={hitSlopFor(styles.headerAction)}
-            style={({ pressed }) => [styles.headerAction, dim(pressed)]}
-          >
-            <Text style={styles.headerActionLabel}>Settings</Text>
-          </Pressable>
-        </View>
-      </View>
+      {/*
+       * The wordmark bar this replaces existed because Chat and Settings are
+       * stack routes, not tabs, and nothing else in the app reached them —
+       * Settings being the only way to Profile, Connect and the privacy policy.
+       * `ScreenHeader` keeps that job and adds Alerts, so all three stack
+       * routes are reachable from every tab rather than only from Home.
+       *
+       * The date is passed in already formatted: non-negotiable #2 says a
+       * component displaying a date never derives one, and this is the same
+       * `dayLabel(localDay())` string the check-in prompt below prints.
+       */}
+      <ScreenHeader
+        title="Today"
+        subtitle={`${dayLabel(localDay())} · before practice`}
+        actions={actions}
+      />
       {/* The bottom inset belongs to the tab bar, which reserves it in its own
           height (see _layout.tsx), so the scroll view stops exactly above the
           bar and its last card clears it by one section. */}
@@ -916,48 +907,25 @@ function DashedRule() {
 }
 
 
-/**
- * The header actions are text, so their natural box is well under the 48pt
- * minimum. Rather than pad the labels apart — which would fight the header's
- * rhythm — the shortfall is added back as hitSlop, which is the same fix
- * BodyMap uses for anatomically small regions: enlarge the target, not the mark.
- */
-function hitSlopFor(style: { paddingVertical?: number; paddingHorizontal?: number }) {
-  const v = Math.max(0, (target.min - ((style.paddingVertical ?? 0) * 2 + 16)) / 2);
-  const h = Math.max(0, (target.min - ((style.paddingHorizontal ?? 0) * 2 + 40)) / 2);
-  return { top: v, bottom: v, left: h, right: h };
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
+  page: {
+    flexGrow: 1,
+    paddingHorizontal: layout.page,
+    /*
+     * `md`, not `xl`. `ScreenHeader` now sits above this scroller with its own
+     * bottom padding and a hairline; the extra 24 read as a gap where the
+     * header had been clipped. The design gives its scroller 14.
+     */
+    paddingTop: space.md,
+    paddingBottom: layout.section,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: layout.page,
     paddingTop: space.sm,
-  },
-  wordmark: { ...text.title, color: color.ink },
-  headerActions: { flexDirection: "row", gap: space.lg },
-  /**
-   * Every tappable on this screen is an OBJECT — a text link, a filled button,
-   * an outlined door — so all of them take `dim` from theme/press and none
-   * takes `rowPress`. `rowPress` flashes a fill across a SURFACE, and this
-   * screen has no list row to flash: its content is a card, a hero panel and a
-   * bento of tiles. The one place a fill does appear under a thumb is inside
-   * `CheckInCard`, which owns its own controls.
-   *
-   * The check-in card's ember "Done" is not touched here either — an ember
-   * primary drops its gradient to the flat `brandStrong` beneath rather than
-   * dimming, which is a richer signal and already consistent app-wide.
-   */
-  headerAction: { paddingVertical: space.xs, paddingHorizontal: space.xs },
-  headerActionLabel: { ...text.meta, color: color.brandText },
-  page: {
-    flexGrow: 1,
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
   },
   loadErrorAction: {
     marginTop: space.xl,

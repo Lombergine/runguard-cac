@@ -37,6 +37,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
 import { Section } from "../../components/Section";
+import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
 import { Stat } from "../../components/Stat";
 import { AddRaceForm, RemoveRace } from "../../components/AddRaceForm";
 import { LogResultForm } from "../../components/LogResultForm";
@@ -78,10 +79,6 @@ function placeLabel(place: number): string {
  * "6 races" — the numeral and its noun in ONE node, never a bare count with the
  * word rendered beside it.
  */
-function countLabel(n: number): string {
-  return `${n} ${n === 1 ? "race" : "races"}`;
-}
-
 /**
  * The screen header. `count` is null until the payload lands, and is withheld
  * at zero: an empty card is Absent, and "0 races" would state a measured fact
@@ -91,19 +88,19 @@ function countLabel(n: number): string {
  * `stale` adds ONE quiet line when a refetch failed over races already on
  * screen. The whole-page failure below stays reserved for having nothing.
  */
-function Header({ count, stale }: { count: number | null; stale?: boolean }) {
+/**
+ * The title, subtitle and race count moved to `ScreenHeader` above the
+ * scroller — the design's pinned header. The eyebrow ("Race log") went with
+ * them: the design puts none above a screen title, and it named the same thing
+ * the title does.
+ *
+ * What stays is the stale-data notice, which belongs beside the races it is
+ * qualifying rather than in chrome that is always on screen.
+ */
+function Header({ stale }: { stale?: boolean }) {
+  if (!stale) return null;
   return (
     <View style={styles.header}>
-      <Text style={styles.eyebrow}>Race log</Text>
-      <View style={styles.panelHead}>
-        <Text style={styles.heading}>Races</Text>
-        {count !== null && count > 0 ? (
-          <Text style={styles.count}>{countLabel(count)}</Text>
-        ) : null}
-      </View>
-      <Text style={styles.note}>
-        {"What is coming, and what you have already run."}
-      </Text>
       {stale ? (
         <Text style={styles.note}>
           Could not reach your server just now. These are the races last loaded.
@@ -392,6 +389,7 @@ function ResultRow({ result }: { result: RaceHistoryEntry }) {
 
 export default function RacesScreen() {
   // Shared `/me`, and with it the single 401 path — a revoked token ends the
+  const actions = useTabHeaderActions();
   // session from inside the store rather than from five separate catch blocks.
   const { profile: shared, state, refreshing, refresh, invalidate } = useProfile();
   /** `races.history` is not in the contract yet — see Profile. */
@@ -420,8 +418,13 @@ export default function RacesScreen() {
   if (failed && !profile) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScreenHeader
+          title="Races"
+          subtitle="Next up, pacing and your PRs"
+          actions={actions}
+        />
         <View style={styles.page}>
-          <Header count={null} />
+          <Header />
           <Card>
             <Text style={styles.failed}>Your races could not be loaded.</Text>
             <Pressable
@@ -441,8 +444,13 @@ export default function RacesScreen() {
   if (!profile) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScreenHeader
+          title="Races"
+          subtitle="Next up, pacing and your PRs"
+          actions={actions}
+        />
         <View style={styles.page}>
-          <Header count={null} />
+          <Header />
           {/* Reserves height so the sections do not jump as data arrives. */}
           <View style={styles.sections}>
             <View style={styles.skeletonCard} />
@@ -467,7 +475,7 @@ export default function RacesScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
         }
       >
-        <Header count={upcoming.length + history.length} stale={failed} />
+        <Header stale={failed} />
 
         <View style={styles.sections}>
           <Section
@@ -582,31 +590,6 @@ const styles = StyleSheet.create({
   retryLabel: { ...text.baseSemi, color: color.ink },
 
   header: { marginBottom: layout.section },
-  /** The Panel row: title left, note right, baselines shared, wraps at 360px. */
-  panelHead: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: space.md,
-    marginTop: space.xs,
-  },
-  heading: { ...text.title, color: color.ink },
-  /**
-   * Mono, with the noun welded on. Never a bare numeral. Ember on type, so it
-   * takes `brandText` — 4.88:1 on `bg`, where `brand` itself is 2.01:1.
-   *
-   * A mono span at `text.base`, NOT `text.stat`. At 22 it outranked the 19pt
-   * "Races" beside it, so the loudest thing in the header was the count of the
-   * rows rather than the screen it names — and the count is a caption on the
-   * heading, not the figure the screen is about. Overriding the family on a body
-   * role has to bring `tabular` along, exactly as `splits` does below.
-   *
-   * The noun stays inside the SAME node at the same size rather than becoming a
-   * body-face word beside a mono numeral: "6 races" is one welded fact
-   * (non-negotiable #4), and the countLabel docblock is explicit about it.
-   */
-  count: { ...text.base, fontFamily: font.mono, ...tabular, color: color.brandText },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   /** The one loud thing on the screen, and only when the race is nearly here. */
@@ -616,6 +599,15 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.card - ruleWidth,
     // The squircle iOS draws, matching the Card corner this strip caps.
     borderCurve: "continuous",
+  },
+  /** The Panel row: title left, note right, baselines shared, wraps at 360px. */
+  panelHead: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: space.md,
+    marginTop: space.xs,
   },
   upcomingBody: { padding: layout.cardPadding },
   countdown: { ...text.micro, color: color.muted },

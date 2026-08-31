@@ -528,20 +528,31 @@ function SpecimenSheet() {
         {/* ---------------------------------------------------------- */}
         <Section title="RunCard" note="Dates arrive pre-formatted, never derived" />
         <Text style={styles.note}>
-          Distance / Time / Pace, always that order, right of the route glyph.
-          Nothing here is coloured, so the greyscale copy should be identical.
+          A row, not a card: distance then time then pace on one mono line, the
+          date and the team&apos;s word beneath it. The surface and the
+          separators belong to the list that holds it, so each specimen below
+          supplies its own single-row slab. Nothing here is coloured, so the
+          greyscale copy should be identical.
         </Text>
-        <Specimen label="Ordinary run — eyebrow carries the date and the team's word">
-          <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" sessionLabel="Easy run" />
+        <Specimen label="Ordinary run — figures lead, date and session beneath">
+          <RunSlab>
+            <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" sessionLabel="Easy run" />
+          </RunSlab>
         </Specimen>
         <Specimen label="Spiked run — advisory inline, split dot, no banner or modal">
-          <RunCard run={SPIKED_RUN} dateLabel="Sun 12 Oct" sessionLabel="Long run" />
+          <RunSlab>
+            <RunCard run={SPIKED_RUN} dateLabel="Sun 12 Oct" sessionLabel="Long run" />
+          </RunSlab>
         </Specimen>
-        <Specimen label="No pace — the third column goes dashed, never '0:00 /mi'">
-          <RunCard run={PACELESS_RUN} dateLabel="Sat 11 Oct" />
+        <Specimen label="No pace — a dash in its place, never '0:00 /mi'">
+          <RunSlab>
+            <RunCard run={PACELESS_RUN} dateLabel="Sat 11 Oct" />
+          </RunSlab>
         </Specimen>
-        <Specimen label="No session type — eyebrow is the date alone">
-          <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" />
+        <Specimen label="No session type — the second line is the date alone">
+          <RunSlab>
+            <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" />
+          </RunSlab>
         </Specimen>
 
         {/* ---------------------------------------------------------- */}
@@ -1004,6 +1015,17 @@ function Caption({
  * axis"), and every numeral in this app is mono and tabular a word deep in
  * prose. Callers pass a nested `Text style={styles.figure}` for those.
  */
+/**
+ * The grouped surface a `RunCard` row sits on.
+ *
+ * `RunCard` stopped drawing its own card when it became a list row — the log
+ * is one slab with the corners at its ends, so the surface belongs to whatever
+ * holds the rows. On this sheet each specimen is one row, so it rounds both.
+ */
+function RunSlab({ children }: { children: React.ReactNode }) {
+  return <View style={styles.runSlab}>{children}</View>;
+}
+
 function Specimen({
   label,
   children,
@@ -1100,6 +1122,12 @@ const styles = StyleSheet.create({
   },
   sectionNote: { ...text.micro, color: color.muted, flexShrink: 1 },
   note: { ...text.meta, color: color.ink2, marginBottom: space.md },
+  /**
+   * One row's worth of the grouped surface `RunCard` now expects around it.
+   * Both corners, because a specimen is a list of one — in `(tabs)/runs.tsx`
+   * only the first and last rows round, and the rows between are square.
+   */
+  runSlab: { backgroundColor: color.card, borderRadius: radius.card },
 
   specimen: { marginTop: space.lg },
   specimenLabel: { ...text.meta, color: color.muted, marginBottom: space.sm },

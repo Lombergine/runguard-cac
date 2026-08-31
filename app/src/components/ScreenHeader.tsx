@@ -1,0 +1,166 @@
+/**
+ * The tab header: a title, a subtitle, and the three actions — pinned above
+ * the scroller, never collapsing.
+ *
+ * ── WHY THIS IS NOT THE NATIVE LARGE TITLE ─────────────────────────────────
+ *
+ * `theme/header.ts` records that `headerLargeTitleEnabled` was tried and
+ * reverted: the title stopped rendering at all, content was clipped on four of
+ * six screens because a large title needs
+ * `contentInsetAdjustmentBehavior="automatic"` on every consumer, and it wanted
+ * a second background token. That verdict still stands.
+ *
+ * It also would not have matched. The design's header is `flex:none` above the
+ * only scroller, so it is PINNED and never shrinks — a static bar that happens
+ * to be 34pt, not iOS's collapsing large title. Reaching for the native one
+ * would have cost three regressions to get further from the design.
+ *
+ * So this is an ordinary view the screen puts above its own list. It draws the
+ * ground colour rather than the design's translucent `--nav`: without a blur
+ * (`expo-blur` is not installed) a 0.86-alpha strip over scrolling content is
+ * just muddy, and `visual-spec.md` rules floating surfaces out — "Lines instead
+ * of shadows. Nothing floats." A hairline carries the edge instead.
+ */
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { useRouter } from "expo-router";
+import Svg, { Path } from "react-native-svg";
+
+import { color } from "../theme/tokens";
+import { layout, ruleWidth, space, target } from "../theme/space";
+import { text } from "../theme/type";
+import { dim } from "../theme/press";
+
+/** The icon grid every glyph in this app is drawn on. */
+const GRID = 24;
+const ICON = 23;
+
+/**
+ * Paths taken from the design. Drawn `fill="none"` and stroked, like the tab
+ * bar's glyphs and `List`'s chevron, so the whole icon vocabulary is one voice.
+ */
+const GLYPH = {
+  alerts:
+    "M12 3.2a7 7 0 00-7 7v3.3l-1.4 2.6h16.8L19 13.5v-3.3a7 7 0 00-7-7ZM9.6 18.7a2.6 2.6 0 004.8 0",
+  chat: "M4 5h16v11H9l-5 4z",
+  settings:
+    "M12 8.8a3.2 3.2 0 100 6.4 3.2 3.2 0 000-6.4M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3M6 6l2.1 2.1M15.9 15.9L18 18M18 6l-2.1 2.1M8.1 15.9L6 18",
+} as const;
+
+export type HeaderAction = {
+  glyph: keyof typeof GLYPH;
+  /** Spoken, and the only name this control has — there is no visible label. */
+  label: string;
+  onPress: () => void;
+};
+
+export type ScreenHeaderProps = {
+  title: string;
+  /**
+   * The line under the title. A NODE, not a string, because Home's carries a
+   * date and non-negotiable #2 requires that to arrive pre-formatted rather
+   * than be derived here.
+   */
+  subtitle?: React.ReactNode;
+  actions?: readonly HeaderAction[];
+};
+
+/**
+ * The three actions every tab header carries, in the design's order.
+ *
+ * Here rather than in each screen so the set cannot drift: five copies of this
+ * list is five chances for one tab to lose the bell or order them differently.
+ */
+export function useTabHeaderActions(): readonly HeaderAction[] {
+  const router = useRouter();
+  return [
+    { glyph: "alerts", label: "Alerts", onPress: () => router.push("/alerts") },
+    { glyph: "chat", label: "Ask RunGuard", onPress: () => router.push("/chat") },
+    { glyph: "settings", label: "Settings", onPress: () => router.push("/settings") },
+  ];
+}
+
+function ActionButton({ glyph, label, onPress }: HeaderAction) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={space.sm}
+      style={({ pressed }) => dim(pressed)}
+    >
+      <Svg width={ICON} height={ICON} viewBox={`0 0 ${GRID} ${GRID}`} fill="none">
+        <Path
+          d={GLYPH[glyph]}
+          /*
+           * `brandText`, never `brand`: the fill measures 2.01:1 and these are
+           * glyphs. The design strokes them in its accent, which is the same
+           * intent at a contrast the app has actually measured.
+           */
+          stroke={color.brandText}
+          strokeWidth={(ruleWidth * GRID) / ICON}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </Pressable>
+  );
+}
+
+export function ScreenHeader({ title, subtitle, actions }: ScreenHeaderProps) {
+  /*
+   * No top inset here. Every screen that mounts this already wraps itself in a
+   * `SafeAreaView edges={["top"]}`, so spending the inset again would push the
+   * title a status bar's height down the page.
+   */
+  return (
+    <View style={styles.bar}>
+      {/*
+       * The action row sits ABOVE the title and is right-aligned on its own
+       * line, as the design draws it — not beside the title, where a 34pt line
+       * and a 23pt glyph would have to agree on a baseline they do not share.
+       */}
+      {actions?.length ? (
+        <View style={styles.actions}>
+          {actions.map((a) => (
+            <ActionButton key={a.glyph} {...a} />
+          ))}
+        </View>
+      ) : null}
+      <Text style={styles.title} accessibilityRole="header">
+        {title}
+      </Text>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  /**
+   * The ground, not a card — see the note at the top of this file. The hairline
+   * is what separates it from the content scrolling beneath.
+   */
+  bar: {
+    backgroundColor: color.bg,
+    paddingHorizontal: layout.page,
+    paddingBottom: space.sm,
+    borderBottomWidth: ruleWidth,
+    borderBottomColor: color.ruleSoft,
+  },
+  /** Right-aligned, on a row tall enough to be a real target. */
+  actions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: space.lg,
+    minHeight: target.min,
+  },
+  /**
+   * `largeTitle` keeps its `+0.4` tracking rather than the design's `-0.6px`:
+   * `type.ts` records that as iOS's own value for a large title, and Archivo at
+   * 34 is already tighter than SF Pro Display. See docs/design-port.md #4.
+   */
+  title: { ...text.largeTitle, color: color.ink },
+  subtitle: { ...text.meta, color: color.muted, marginTop: space.xs },
+});
+
+export default ScreenHeader;

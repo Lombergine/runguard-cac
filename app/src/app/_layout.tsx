@@ -158,6 +158,16 @@ function Gate() {
               never mounts, and a deep link to /activity/12 has nothing to
               resolve to. */}
           <Stack.Screen name="activity/[id]" />
+          {/* Everything the engine has flagged about one athlete. Same reason
+              as the run above: it is that athlete's own data, so signed out it
+              never mounts and /alerts resolves to nothing. */}
+          <Stack.Screen name="alerts" />
+          {/*
+            The session detail, pushed from a plan row. Registered here rather
+            than by the agent that built it, because two concurrent writers to
+            this file would have clobbered each other's Screen entry.
+          */}
+          <Stack.Screen name="plan/[date]" />
         </Stack.Protected>
 
         {/*
