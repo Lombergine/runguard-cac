@@ -617,8 +617,8 @@ const styles = StyleSheet.create({
    */
   splits: { ...text.statInline, color: color.ink2, marginTop: space.xs },
   raceNote: { ...text.meta, color: color.muted, marginTop: space.xs },
-  /** Ember-coloured meta on the card ground — the pairing `countdown` uses.
-      A word about the race, not a badge that rates it. */
+  /** Ember-coloured meta on the card ground — the pairing `countdownSoon`
+      uses. A word about the race, not a badge that rates it. */
   priority: { ...text.meta, color: color.brandText, marginTop: space.xs },
   checklist: { gap: space.xs, marginTop: space.md },
   checklistHead: { ...text.micro, color: color.muted },
