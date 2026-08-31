@@ -79,6 +79,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
+import { Section } from "../../components/Section";
 import { EXPLAINERS } from "../../components/InfoDot";
 import { Tile } from "../../components/Tile";
 import { SleepChart } from "../../components/charts/SleepChart";
@@ -344,15 +345,6 @@ function Header({ stale }: { stale?: boolean }) {
  * `note` is a NODE for the same reason `PanelProps.note` is: a caveat is very
  * often a figure ("0–100"), and every numeral in this app is mono and tabular.
  */
-function SectionHeading({ title, note }: { title: string; note?: ReactNode }) {
-  return (
-    <View style={styles.panelHead}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {note ? <Text style={styles.sectionNote}>{note}</Text> : null}
-    </View>
-  );
-}
-
 /**
  * The five readings (tabs.tsx:576-609), in TWO sections rather than the
  * website's single five-up grid.
@@ -389,8 +381,7 @@ function Readings({ profile }: { profile: Profile }) {
   const r = profile.risk.recovery;
   return (
     <>
-      <View style={styles.section}>
-        <SectionHeading title="Measured overnight" note="from your wearable" />
+      <Section label="Measured overnight" note="from your wearable" style={styles.section}>
         <View style={styles.grid}>
           <View style={styles.gridRow}>
             <Tile
@@ -422,18 +413,18 @@ function Readings({ profile }: { profile: Profile }) {
             />
           </View>
         </View>
-      </View>
+      </Section>
 
-      <View style={styles.section}>
-        <SectionHeading
-          title="Worked out, not measured"
-          note={
-            <>
-              <Text style={styles.figure}>0–100</Text>
-              {", worked out rather than measured"}
-            </>
-          }
-        />
+      <Section
+        label="Worked out, not measured"
+        note={
+          <>
+            <Text style={styles.figure}>0–100</Text>
+            {", worked out rather than measured"}
+          </>
+        }
+        style={styles.section}
+      >
         <View style={styles.gridRow}>
           {/*
             `freshness` is always a number, so `hasActivityHistory` is the
@@ -493,7 +484,7 @@ function Readings({ profile }: { profile: Profile }) {
             }
           />
         </View>
-      </View>
+      </Section>
     </>
   );
 }
@@ -618,8 +609,7 @@ export default function RecoveryScreen() {
 
           {/* 4. The observations. Server-composed prose, rendered as prose:
                  no marker, no colour, no weight — see divergence 5. */}
-          <View style={styles.section}>
-            <SectionHeading title="What your data is showing" />
+          <Section label="What your data is showing" style={styles.section}>
             {insights.length === 0 ? (
               <Absent label="No observations yet." />
             ) : (
@@ -631,15 +621,14 @@ export default function RecoveryScreen() {
                 ))}
               </Card>
             )}
-          </View>
+          </Section>
 
           {/* 5. The tips. The website prefixes each with an ember "→"
                  (tabs.tsx:646); an arrow pointing at a sentence is what turns a
                  description into a directive, so the marker here is the same
                  neutral dot `races.tsx` uses for pacing lines — a shape, in a
                  fill token, with no word sitting on it. */}
-          <View style={styles.section}>
-            <SectionHeading title="Recovery tips" note="based on today's data" />
+          <Section label="Recovery tips" note="based on today's data" style={styles.section}>
             <Card>
               {tips.map((tip, i) => (
                 <View key={i} style={i > 0 ? styles.tipRowNext : styles.tipRow}>
@@ -650,7 +639,7 @@ export default function RecoveryScreen() {
                 </View>
               ))}
             </Card>
-          </View>
+          </Section>
 
           {/*
             6. The website's footnote reads `SpO₂ ≈ 97-98%` (tabs.tsx:636) — a
@@ -689,15 +678,6 @@ const styles = StyleSheet.create({
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   /** Title left, muted note right — the website's Panel head (tabs.tsx:22). */
-  panelHead: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: space.md,
-  },
-  sectionTitle: { ...text.title, color: color.ink },
-  sectionNote: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   statusRow: {
     flexDirection: "row",

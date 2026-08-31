@@ -61,6 +61,7 @@ import {
   SorenessList,
   type LoggedSoreness,
 } from "../../components/CheckInCard";
+import { Section } from "../../components/Section";
 import { CheckInPrompt } from "../../components/CheckInPrompt";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
 import { ReadinessRing } from "../../components/ReadinessRing";
@@ -740,14 +741,10 @@ function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
 
   return (
     <View style={styles.sections}>
-      <View style={styles.section}>
-        {/* The Panel head, on a section whose content is itself made of cards:
-            title left, the caveat right. The tiles below are the website's
-            bento, which stands on the ground rather than nesting in a panel. */}
-        <View style={styles.panelHead}>
-          <Text style={styles.panelTitle}>Recovery</Text>
-          <Text style={styles.panelNote}>from your wearable</Text>
-        </View>
+      {/* A GROUP of cards, so the label sits outside and above them — the
+          `Section` rank, not `Panel`'s. The tiles below are the website's
+          bento, which stands on the ground rather than nesting in a panel. */}
+      <Section label="Recovery" note="from your wearable" style={styles.section}>
         {profile.risk.recovery.hasData ? (
           <RecoveryGrid recovery={profile.risk.recovery} />
         ) : (
@@ -756,7 +753,7 @@ function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
           // really only one.
           <Absent label="No wearable data recorded" />
         )}
-      </View>
+      </Section>
 
       {/*
         `weekKm` is always a number, so the guard is `hasActivityHistory`, not

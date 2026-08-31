@@ -36,6 +36,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
+import { Section } from "../../components/Section";
 import { Stat } from "../../components/Stat";
 import { AddRaceForm, RemoveRace } from "../../components/AddRaceForm";
 import { LogResultForm } from "../../components/LogResultForm";
@@ -113,15 +114,6 @@ function Header({ count, stale }: { count: number | null; stale?: boolean }) {
 }
 
 /** The Panel hierarchy: title left, caveat right, content below. */
-function SectionHeading({ title, note }: { title: string; note: string }) {
-  return (
-    <View style={styles.panelHead}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={styles.sectionNote}>{note}</Text>
-    </View>
-  );
-}
-
 /**
  * The split-by-split plan. Server-composed sentences, rendered as description —
  * markers are shapes, so the block never reads as a set of orders.
@@ -478,15 +470,15 @@ export default function RacesScreen() {
         <Header count={upcoming.length + history.length} stale={failed} />
 
         <View style={styles.sections}>
-          <View style={styles.section}>
-            <SectionHeading
-              title="Upcoming"
-              note={
-                predictionKnown
-                  ? "Predicted times come from your recent training."
-                  : "Predictions need synced runs."
-              }
-            />
+          <Section
+            label="Upcoming"
+            note={
+              predictionKnown
+                ? "Predicted times come from your recent training."
+                : "Predictions need synced runs."
+            }
+            style={styles.section}
+          >
             {upcoming.length === 0 ? (
               <Absent label="No races scheduled." />
             ) : (
@@ -500,10 +492,9 @@ export default function RacesScreen() {
               ))
             )}
             <AddRaceForm onChanged={invalidate} />
-          </View>
+          </Section>
 
-          <View style={styles.section}>
-            <SectionHeading title="History" note="Every step down is a PR." />
+          <Section label="History" note="Every step down is a PR." style={styles.section}>
             {history.length === 0 ? (
               <Absent label="No races run yet." />
             ) : (
@@ -519,7 +510,7 @@ export default function RacesScreen() {
               </Card>
             )}
             <LogResultForm onChanged={invalidate} />
-          </View>
+          </Section>
 
           {/* PR progression. Owns its own Card and head — do not wrap it.
               Below History on purpose: the times themselves come first, and
@@ -608,8 +599,6 @@ const styles = StyleSheet.create({
    * (non-negotiable #4), and the countLabel docblock is explicit about it.
    */
   count: { ...text.base, fontFamily: font.mono, ...tabular, color: color.brandText },
-  sectionTitle: { ...text.title, color: color.ink },
-  sectionNote: { ...text.meta, color: color.muted, flexShrink: 1 },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   /** The one loud thing on the screen, and only when the race is nearly here. */
