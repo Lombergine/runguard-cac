@@ -80,6 +80,26 @@ export const text = {
     lineHeight: 24,
   } as TextStyle,
 
+  /**
+   * 14 mono — a figure that sits UNDER the thing it describes.
+   *
+   * The gap this fills: between `micro` (11.5, uppercase, an eyebrow) and
+   * `stat` (22, a figure a screen is about) there was no mono rank at all, so
+   * a subordinate figure had to borrow `stat` and then outshouted the title
+   * above it — a plan row read "5 mi @ 8:10 /mi" louder than "Easy run", which
+   * inverts what the row is for.
+   *
+   * The design sets this line at 13.5 sans. Mono at the same size runs wider,
+   * so 14 with `meta`'s 20 leading holds the same optical weight while keeping
+   * the rule that every numeral in this app is mono and tabular.
+   */
+  statInline: {
+    fontFamily: font.mono,
+    fontSize: 14,
+    lineHeight: 20,
+    ...tabular,
+  } as TextStyle,
+
   /** 22 mono — inline stats. */
   stat: {
     fontFamily: font.mono,

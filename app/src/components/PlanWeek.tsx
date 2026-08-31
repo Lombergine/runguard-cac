@@ -679,8 +679,14 @@ const styles = StyleSheet.create({
 
   type: { ...text.base, color: color.ink, marginTop: space.xs },
   prescription: { marginTop: space.xs },
-  /** Mono, with the unit already inside the string. Never a bare numeral. */
-  figure: { ...text.stat, color: color.ink2 },
+  /**
+   * Mono, with the unit already inside the string. Never a bare numeral.
+   *
+   * `statInline`, not `stat`: this figure sits UNDER the session type and
+   * describes it. At 22 it read louder than "Easy run" above it, inverting the
+   * row — the design has the type lead at 17 and the figure follow at 13.5.
+   */
+  figure: { ...text.statInline, color: color.ink2 },
 
   /** The status slot. No margin of its own, so an empty one costs nothing. */
   action: { paddingHorizontal: layout.cardPadding },

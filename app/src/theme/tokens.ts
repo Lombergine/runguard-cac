@@ -252,4 +252,43 @@ export const darkColor = {
   ruleSoft: "rgba(255,255,255,0.07)",
 } as const;
 
+/**
+ * The five-step ember ramp — load intensity, for the year grid and the HR-zone
+ * bar.
+ *
+ * Raw `rgb()` for the same reason as `staticColor`: both consumers paint SVG
+ * or a flex track, and the design carries them as literals for exactly that
+ * reason. Five steps, not the three in `color.ember`: that one is a gradient
+ * (three stops interpolated), this one is a scale (five discrete levels that
+ * must stay distinguishable side by side).
+ *
+ * Deeper is a harder day. Step 0 is the lightest load, step 4 the heaviest.
+ */
+export const emberRamp = [
+  "rgb(245,158,11)",
+  "rgb(217,136,14)",
+  "rgb(188,113,16)",
+  "rgb(160,91,19)",
+  "rgb(131,68,21)",
+] as const;
+
+/** The same scale lifted for a dark ground. */
+export const emberRampDark = [
+  "rgb(242,174,28)",
+  "rgb(214,146,20)",
+  "rgb(184,116,18)",
+  "rgb(153,89,18)",
+  "rgb(120,63,20)",
+] as const;
+
+/**
+ * The disclosure chevron's stroke.
+ *
+ * A neutral grey rather than a ramp step, and deliberately the same in both
+ * appearances: it is chrome pointing at a row, not information about it. Taken
+ * from the design, which likewise carries it as a literal because it lands in
+ * an SVG `stroke`.
+ */
+export const chevronStroke = "rgba(140,140,140,0.62)";
+
 export type ColorToken = keyof typeof color;
