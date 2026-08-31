@@ -188,7 +188,27 @@ function Editor({
 
   return (
     <SafeAreaView style={styles.sheet} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.sheetPage} keyboardDismissMode="on-drag">
+      {/*
+       * ── THE FORM WAS UNUSABLE WITH THE KEYBOARD UP ──────────────────────
+       *
+       * Five inputs and a Save button in a sheet with neither of these. The
+       * multiline "Details" field sits below the keyboard line, so a coach
+       * typing into it could not see what they were typing; and
+       * `keyboardDismissMode` without `keyboardShouldPersistTaps` is the
+       * pairing that eats a tap — the default is "never", so the first press
+       * on Save is spent dismissing the keyboard and never reaches the button.
+       * Type, scroll up, tap Save, nothing happens, tap again.
+       *
+       * Same two lines as `login.tsx`, `signup.tsx`, `chat.tsx` and
+       * `profile.tsx`. This sheet was the only form in the app without them,
+       * and it is the one this screen exists for.
+       */}
+      <ScrollView
+        contentContainerStyle={styles.sheetPage}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
         <Text style={styles.sheetEyebrow}>{dateText}</Text>
         <Text style={styles.sheetTitle}>
           {existing ? "Edit the session" : "Write the session"}

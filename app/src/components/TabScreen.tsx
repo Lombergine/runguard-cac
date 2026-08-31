@@ -98,6 +98,18 @@ export function TabScreen({
        */
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
+      /*
+       * The other half: the keyboard must not COVER the field being typed in.
+       * Races carries two forms with ten inputs between them and had neither
+       * this nor a `KeyboardAvoidingView`, so `LogResultForm` — near the bottom
+       * of a long page — sat under the keyboard by default.
+       *
+       * This rather than a `KeyboardAvoidingView` wrapper, which is what the
+       * older input screens use: it is one prop instead of a view and a
+       * platform check, it insets the scroller the keyboard's actual height
+       * rather than guessing, and it costs nothing on the tabs with no inputs.
+       */
+      automaticallyAdjustKeyboardInsets
       refreshControl={
         onRefresh ? (
           <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} />
