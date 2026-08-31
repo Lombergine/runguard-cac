@@ -9,7 +9,10 @@ import {
   SourceSans3_400Regular,
   SourceSans3_600SemiBold,
 } from "@expo-google-fonts/source-sans-3";
-import { SplineSansMono_500Medium } from "@expo-google-fonts/spline-sans-mono";
+import {
+  SplineSansMono_500Medium,
+  SplineSansMono_600SemiBold,
+} from "@expo-google-fonts/spline-sans-mono";
 
 import { ProfileProvider } from "../lib/profileStore";
 import { SessionProvider, useSession } from "../lib/session";
@@ -35,6 +38,7 @@ export default function RootLayout() {
     SourceSans3_400Regular,
     SourceSans3_600SemiBold,
     SplineSansMono_500Medium,
+    SplineSansMono_600SemiBold,
   });
 
   /*

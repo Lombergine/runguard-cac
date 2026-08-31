@@ -20,6 +20,16 @@ export const font = {
   body: "SourceSans3_400Regular",
   bodySemi: "SourceSans3_600SemiBold",
   mono: "SplineSansMono_500Medium",
+  /**
+   * The mono at 600, for the one place a mono rank has to carry weight rather
+   * than colour: the focused tab label. The design sets 600 against 400 there
+   * (`RunGuard iOS App copy.dc.html:1862`) so the current tab is legible
+   * without its accent — `visual-spec.md` §5, colour last.
+   *
+   * A weight, not a second face: `fontWeight` on a custom family synthesises
+   * badly on iOS, so the real cut is registered in `_layout.tsx` and named here.
+   */
+  monoSemi: "SplineSansMono_600SemiBold",
 } as const;
 
 /**

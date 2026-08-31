@@ -25,6 +25,7 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 
+import { useSession } from "../lib/session";
 import { color } from "../theme/tokens";
 import { layout, ruleWidth, space, target } from "../theme/space";
 import { text } from "../theme/type";
@@ -65,17 +66,44 @@ export type ScreenHeaderProps = {
 };
 
 /**
- * The three actions every tab header carries, in the design's order.
+ * The actions a tab header carries, in the design's order.
  *
- * Here rather than in each screen so the set cannot drift: five copies of this
- * list is five chances for one tab to lose the bell or order them differently.
+ * Here rather than in each screen so the set cannot drift: eight copies of this
+ * list is eight chances for one tab to lose the bell or order them differently.
+ *
+ * ── A COACH GETS TWO, NOT THREE ─────────────────────────────────────────────
+ *
+ * This was role-blind, and all three coach tabs render it, so a coach was shown
+ * an "Ask RunGuard" button that opens the ATHLETE's chat: `getChat()` is
+ * `/me`-shaped, and `request()` refuses an athlete route for a coach credential
+ * before a packet leaves the phone. The design had already decided the answer —
+ * its coach nav has Alerts and Settings and no chat (`:1850`) — and it is the
+ * right one twice over: RunGuard's chat answers questions about YOUR training,
+ * and a coach has no training here. Better not to offer the door than to open
+ * it onto a 401.
+ *
+ * Alerts and Settings stay for both. Settings is now role-aware (it asks
+ * `/coach/roster` rather than `/home`, which used to sign a coach out on the
+ * first tap).
  */
 export function useTabHeaderActions(): readonly HeaderAction[] {
   const router = useRouter();
+  const { role } = useSession();
+  const alerts: HeaderAction = {
+    glyph: "alerts",
+    label: "Alerts",
+    onPress: () => router.push("/alerts"),
+  };
+  const settings: HeaderAction = {
+    glyph: "settings",
+    label: "Settings",
+    onPress: () => router.push("/settings"),
+  };
+  if (role === "coach") return [alerts, settings];
   return [
-    { glyph: "alerts", label: "Alerts", onPress: () => router.push("/alerts") },
+    alerts,
     { glyph: "chat", label: "Ask RunGuard", onPress: () => router.push("/chat") },
-    { glyph: "settings", label: "Settings", onPress: () => router.push("/settings") },
+    settings,
   ];
 }
 

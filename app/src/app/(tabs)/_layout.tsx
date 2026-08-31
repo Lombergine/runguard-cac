@@ -20,30 +20,28 @@
  * Three things this file is careful about:
  *
  *  1. White bar over the cream page, held up by the website's hairline
- *     (`ruleSoft`) at the app's 1.5px width — the colour is the site's, the
- *     weight is ours, because a true hairline vanishes in sunlight. Under
- *     sunrise the bar may also float: `shadow.card`, the one elevation token,
- *     replaces the navigator's own `elevation: 8`. Nothing is hand-rolled.
- *  2. The active tab is the ember, because the ember is the brand. It lands
- *     twice and the two colours are NOT interchangeable: the label is a glyph
- *     and takes `brandText` (5.21:1 on the white bar), the icon is a shape and
- *     takes `brandStrong` (3.19:1 — over the 3:1 floor for a drawn element,
- *     where the `brand` fill itself would be 2.01:1 and invisible outdoors).
- *     Inactive stays `muted`, 5.16:1.
- *  3. The glyphs are drawn at the UI's own rule weight rather than at an icon
- *     set's. Each is stroked at `ruleWidth` device pixels exactly (the grid is
- *     scaled out of the stroke width), so a tab icon and a card border are the
- *     same line — a printed key, not a widget.
+ *     (`ruleSoft`). NO SHADOW: it carried `shadow.card`, which the design's bar
+ *     does not have, and `tokens.ts` says in as many words that a shadow is
+ *     elevation and never emphasis. The bar is not elevated; it is the edge of
+ *     the page, and a hairline is what says so.
+ *  2. The active tab is the ember, because the ember is the brand — and it is
+ *     ONE ember. The label and the glyph used to take `brandText` and
+ *     `brandStrong` respectively, which drew a focused tab in two shades one
+ *     step apart; the design uses a single `--accent` for both. Inactive stays
+ *     `muted`, 5.16:1.
+ *  3. Focus is not carried by colour alone. The glyph thickens (2.1 against
+ *     1.6) and the label goes semibold, both from the design, so the current
+ *     tab survives greyscale and glare. `visual-spec.md` §5: colour last.
  */
 import { Tabs } from "expo-router";
-import { ColorValue, StyleSheet } from "react-native";
+import { ColorValue, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { useSession } from "../../lib/session";
 import { ruleWidth, space, target } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { color } from "../../theme/tokens";
+import { font, text } from "../../theme/type";
 
 /**
  * The bar's own height, above the home-indicator inset. One tap target plus a
@@ -108,14 +106,31 @@ const SOURCES = "M12 3.5 V13.8 M8.2 10 L12 13.8 L15.8 10 M4.5 16.5 V20.5 H19.5 V
  * the grid by it keeps the rendered stroke at exactly `ruleWidth` pixels
  * whatever size the platform asks for.
  */
+/**
+ * The design's own stroke weights: 2.1 focused, 1.6 idle (`:1861`).
+ *
+ * WEIGHT, not just hue. The bar used one constant width and let colour alone
+ * say which tab was current, which is the thing `visual-spec.md` §5 rules out —
+ * "colour last", and never colour only. A thicker glyph and a heavier label
+ * survive greyscale, glare and colour-blindness; the ember is the third cue,
+ * not the only one.
+ *
+ * On the 24-unit grid these are absolute, so they are scaled by the rendered
+ * size the navigator asks for rather than being written as device pixels.
+ */
+const STROKE_ON = 2.1;
+const STROKE_OFF = 1.6;
+
 function Glyph({
   d,
   stroke,
   size,
+  weight,
 }: {
   d: string;
   stroke: ColorValue;
   size: number;
+  weight: number;
 }) {
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${GRID} ${GRID}`}>
@@ -123,17 +138,23 @@ function Glyph({
         d={d}
         fill="none"
         stroke={stroke}
-        strokeWidth={(ruleWidth * GRID) / size}
+        strokeWidth={(weight * GRID) / size}
+        /* The design rounds both; the app's header glyphs already do. */
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
 }
 
 /**
- * One tab's icon renderer. The navigator hands down the active tint, which is
- * the label's ember (`brandText`); the drawn glyph takes the brighter
- * `brandStrong` instead, so the ember reads as ember at 1.5px without putting a
- * 2:1 fill under a word.
+ * One tab's icon renderer.
+ *
+ * The glyph takes the tint the navigator hands down and nothing else. It used
+ * to substitute `brandStrong` when focused, so a focused tab was drawn in two
+ * different embers — the label in `brandText`, the icon a shade brighter. The
+ * design uses one `--accent` for both (`:1860`), and two accents one step apart
+ * read as a rendering mistake rather than a distinction.
  */
 function tabIcon(d: string) {
   return function TabIcon({
@@ -146,7 +167,12 @@ function tabIcon(d: string) {
     size: number;
   }) {
     return (
-      <Glyph d={d} stroke={focused ? color.brandStrong : tint} size={size} />
+      <Glyph
+        d={d}
+        stroke={tint}
+        size={size}
+        weight={focused ? STROKE_ON : STROKE_OFF}
+      />
     );
   };
 }
@@ -185,18 +211,39 @@ export default function TabsLayout() {
         tabBarActiveTintColor: color.brandText,
         tabBarInactiveTintColor: color.muted,
         tabBarStyle: [styles.bar, { height: BAR_HEIGHT + insets.bottom }],
-        tabBarLabelStyle: styles.label,
+        /*
+         * Rendered rather than styled, so the focused tab can take the design's
+         * heavier cut. `tabBarLabelStyle` is a static style and cannot vary by
+         * focus; this receives `{ focused, color, children }` per tab, so one
+         * definition here covers all eight rather than eight `options` blocks.
+         *
+         * `color` is the navigator's own tint and is applied last — it is what
+         * separates active from inactive and must not be overridden.
+         */
+        tabBarLabel: ({ focused, color: tint, children }) => (
+          <Text
+            style={[styles.label, focused ? styles.labelOn : null, { color: tint }]}
+            numberOfLines={1}
+          >
+            {children}
+          </Text>
+        ),
         tabBarItemStyle: styles.item,
       }}
     >
+      {/* The design's order and the design's names: Today · Training · Stats ·
+          Recovery · Races (`ATHLETE_TABS`, RunGuard iOS App copy.dc.html:1227).
+          Stats and Recovery were transposed, and tab one was called "Home"
+          while the screen it opens is titled "Today" — the app disagreeing with
+          itself about the name of its own front page. */}
       <Tabs.Protected guard={!coach}>
         <Tabs.Screen
           name="index"
           options={{
-            title: "Home",
-            // "Home" does not say what is there, and this is the tab that
-            // matters. The rest are named after what they show.
-            tabBarAccessibilityLabel: "Home, the daily check-in",
+            title: "Today",
+            // The name alone does not say what is there, and this is the tab
+            // that matters. The rest are named after what they show.
+            tabBarAccessibilityLabel: "Today, the daily check-in",
             tabBarIcon: tabIcon(HOME),
           }}
         />
@@ -210,17 +257,17 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="recovery"
-          options={{
-            title: "Recovery",
-            tabBarIcon: tabIcon(RECOVERY),
-          }}
-        />
-        <Tabs.Screen
           name="stats"
           options={{
             title: "Stats",
             tabBarIcon: tabIcon(STATS),
+          }}
+        />
+        <Tabs.Screen
+          name="recovery"
+          options={{
+            title: "Recovery",
+            tabBarIcon: tabIcon(RECOVERY),
           }}
         />
         <Tabs.Screen
@@ -270,17 +317,21 @@ const styles = StyleSheet.create({
   scene: { backgroundColor: color.bg },
   bar: {
     backgroundColor: color.card,
-    // The website's hairline colour at the app's 1.5px width.
     borderTopWidth: ruleWidth,
     borderTopColor: color.ruleSoft,
-    // The one elevation token, verbatim — it also supplies the `elevation` that
-    // replaces the navigator's default 8. Its offset is downward, so what shows
-    // above the bar is the soft top of the 14px blur, not a second shadow.
-    ...shadow.card,
+    /*
+     * No shadow. It had `shadow.card`, and the design's bar has none — see the
+     * docblock. `elevation: 0` is explicit because the navigator's own default
+     * is 8 on Android, so removing the token alone would leave a shadow there.
+     */
+    elevation: 0,
   },
   /** Guarantees the 48px target even if the bar is ever shortened. */
   item: { minHeight: target.min },
   // No colour here: the tint the navigator passes is what separates active
-  // from inactive, and it must not be overridden.
+  // from inactive, and it must not be overridden. The WEIGHT is ours — see
+  // `tabBarLabelStyle` at the navigator, which swaps in `labelOn` when focused.
   label: text.micro,
+  /** The design's 600 against 400 (`:1862`), so focus is not hue alone. */
+  labelOn: { fontFamily: font.monoSemi },
 });
