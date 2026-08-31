@@ -1,5 +1,6 @@
 import { getAthlete, AthleteRow } from "./db";
 import { isDemoAthlete, isWrite } from "./demoAthlete";
+import { demoTeamId } from "./demo";
 import {
   athleteTokenFromCookie,
   currentTeamId,
@@ -110,11 +111,33 @@ export async function resolveAthleteWithPath(
  * two kinds sign different strings (`coach:<id>` vs `athlete:<id>`), so an
  * athlete's signature can never match a team's. Domain separation is in the
  * signed message, not in the parsing.
+ *
+ * ── THE DEMO TEAM CANNOT BE WRITTEN ─────────────────────────────────────────
+ *
+ * `/api/mobile/demo/coach` hands a real coach token for the demo team to anyone
+ * who asks — that is the point of a demo. A coach token is strictly more than an
+ * athlete one, and unlike the athlete demo there is now a coach WRITE behind it:
+ * `POST /api/mobile/coach/plan` sets the team's training calendar. Without this
+ * branch any visitor could rewrite what the demo team is told to run, and every
+ * later visitor would see it.
+ *
+ * So it is refused HERE rather than in the plan route, for the reason
+ * `demoAthlete.ts` gives for doing the same thing one function up: a guard on
+ * the route is a guard someone forgets to copy onto the next route. This is the
+ * single place a coach request becomes a team id, so a write that gets past it
+ * does not exist. `isWrite` is everything but GET and HEAD — not a list of
+ * mutating routes, because a list is the convention that drifts.
+ *
+ * `demoTeamId()` is null whenever `DEMO_TEAM_ID` is unset, and null never equals
+ * a real team id, so with the demo off this branch changes nothing.
  */
 export async function resolveCoachTeam(request: Request): Promise<number | null> {
   const auth = request.headers.get("authorization") || "";
   if (!auth.startsWith("Bearer ")) return null;
-  return verifyCoachToken(auth.slice(7));
+  const teamId = verifyCoachToken(auth.slice(7));
+  if (teamId === null) return null;
+  if (isWrite(request.method) && teamId === demoTeamId()) return null;
+  return teamId;
 }
 
 export async function resolveAthlete(

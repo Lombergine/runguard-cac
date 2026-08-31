@@ -116,7 +116,7 @@ import Constants from "expo-constants";
 import { Absent } from "../components/Nothing";
 import { List, ListRow } from "../components/List";
 import { Section } from "../components/Section";
-import { getHome, isUnauthorized } from "../lib/api";
+import { getCoachRoster, getHome, isUnauthorized } from "../lib/api";
 import { isDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
 import { useScreenHeader } from "../theme/header";
@@ -148,7 +148,7 @@ const DEMO_NOTE =
   "You are looking at a real seeded runner's training as an athlete would see it. Anything you changed stayed on this phone and is never sent — the roster on the server is untouched.";
 
 /**
- * The athlete's name is the only server value on this screen. Three states, not
+ * Who is signed in is the only server value on this screen. Three states, not
  * two: "still loading" is not "we asked and there is nothing", and neither of
  * them may render as an empty line that reads as fine.
  *
@@ -163,7 +163,7 @@ type NameState =
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { signOut } = useSession();
+  const { role, signOut } = useSession();
   const [name, setName] = useState<NameState>({ kind: "loading" });
   const [signingOut, setSigningOut] = useState(false);
   // Read once per render: the value only changes on sign-out, which unmounts this.
@@ -175,12 +175,43 @@ export default function SettingsScreen() {
    */
   const scheme = useColorScheme();
 
+  /** Athletes are a person; coaches are a team. See the row below. */
+  const identityLabel = role === "coach" ? "Coaching" : "Signed in as";
+
+  /*
+   * ── THIS SCREEN IS REACHED BY BOTH ROLES, AND USED TO EJECT ONE OF THEM ────
+   *
+   * The gear is in `ScreenHeader`, which every tab mounts — the coach's three
+   * included. This effect called `getHome()` unconditionally, and `/home` is an
+   * athlete route: `request()` fails closed when the stored credential is the
+   * wrong role (`api.ts:108`), so a coach got a 401 before a packet left the
+   * phone, and the 401 branch below signed them out. Tapping the gear ended a
+   * coach's session. It ended the coach DEMO on the visitor's first curious tap.
+   *
+   * So the question the screen asks depends on who is asking. An athlete's
+   * identity is their name; a coach's is their team, which is the only thing
+   * `/coach/roster` will tell us about the holder of the token — there is no
+   * coach `/me`, and inventing one to fetch a display string would be a new
+   * endpoint carrying a coach's email for the sake of one line of text.
+   *
+   * The 401 branch stays exactly as it was, and now means what it says: the
+   * server no longer honours this token. It is no longer reachable by simply
+   * being the wrong role, because the wrong role is no longer asked.
+   */
   useEffect(() => {
     let alive = true;
-    // /home rather than /me: this screen reads one string, and /me is 57 KB.
-    getHome()
-      .then((profile) => {
-        if (alive) setName({ kind: "known", name: profile.athlete.name });
+    const who =
+      role === "coach"
+        ? // The team, not the coach. `team.name` is nullable — a token outliving
+          // its team row resolves fine — and `null` is unknown, not blank.
+          getCoachRoster().then((r) => r.team.name)
+        : // /home rather than /me: this screen reads one string, and /me is 57 KB.
+          getHome().then((p) => p.athlete.name);
+
+    who
+      .then((found) => {
+        if (!alive) return;
+        setName(found ? { kind: "known", name: found } : { kind: "failed" });
       })
       .catch((err: unknown) => {
         if (!alive) return;
@@ -197,7 +228,7 @@ export default function SettingsScreen() {
     return () => {
       alive = false;
     };
-  }, [signOut]);
+  }, [role, signOut]);
 
   /**
    * Leave. `signOut()` is the only sanctioned way out, and it does the two
@@ -286,13 +317,19 @@ export default function SettingsScreen() {
         {/* ---- Account ----------------------------------------------- */}
         <Section label="Account" note="This phone">
           <List>
+            {/*
+              The label follows the role, because the VALUE does. A coach's
+              identity here is their team — "Signed in as Leland XC" would read
+              as the team being the account, which is the wrong shape for a
+              screen whose next control signs someone out.
+            */}
             {name.kind === "known" ? (
-              <ListRow title="Signed in as" detail={name.name} />
+              <ListRow title={identityLabel} detail={name.name} />
             ) : name.kind === "loading" ? (
               // `target.row` reserves the row's height, so nothing jumps when the
               // name lands. Not a spinner: it is one line of text arriving, and
               // the row's detail is already muted so it cannot read as the answer.
-              <ListRow title="Signed in as" detail="Loading…" />
+              <ListRow title={identityLabel} detail="Loading…" />
             ) : (
               /*
                 Absent, not an em dash in the detail slot. A failed fetch is "we
@@ -305,7 +342,10 @@ export default function SettingsScreen() {
                 draws no row separator. See the NEEDS PRIMITIVE note.
               */
               <View style={styles.blockRow}>
-                <Absent eyebrow="SIGNED IN AS" label="Could not reach the server." />
+                <Absent
+                  eyebrow={identityLabel.toUpperCase()}
+                  label="Could not reach the server."
+                />
               </View>
             )}
 

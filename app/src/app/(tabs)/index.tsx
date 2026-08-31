@@ -76,6 +76,7 @@ import InfoDot, { EXPLAINERS } from "../../components/InfoDot";
 import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
 import { useInvalidateProfile } from "../../lib/profileStore";
 import { useLiveRefresh } from "../../lib/useLiveRefresh";
+import { useSession } from "../../lib/session";
 
 import {
   readinessBand,
@@ -162,7 +163,7 @@ const EMBER_START = { x: 0, y: 0 } as const;
 const EMBER_END = { x: 1, y: 1 } as const;
 
 export default function CheckInScreen() {
-  const router = useRouter();
+  const { signOut } = useSession();
   const actions = useTabHeaderActions();
   /**
    * `invalidate` ONLY. This screen's own data comes from the 5.3 KB `/home`,
@@ -174,7 +175,20 @@ export default function CheckInScreen() {
    */
   const invalidateProfile = useInvalidateProfile();
   const [profile, setProfile] = useState<ProfileWithNextRace | null>(null);
-  const [loadError, setLoadError] = useState<"none" | "signedOut" | "failed">("none");
+  /*
+   * No `signedOut` member. It used to be one, and the branch it drove offered a
+   * "Sign in" button that could not work: `login` lives inside
+   * `Stack.Protected guard={!signedIn}` (_layout.tsx), and setting local state
+   * here never told the gate anything — so the session was still "in", `login`
+   * was not in the navigator, and `router.replace("/login")` was swallowed. A
+   * fresh install landed on a screen whose only control did nothing, forever.
+   *
+   * A dead token is the session's business, not this screen's. `signOut()` in
+   * the catch below is the same answer `chat.tsx` and `settings.tsx` give, and
+   * `settings.tsx` states the rule: which navigator exists is the gate's
+   * decision, and routing from a screen being unmounted only races it.
+   */
+  const [loadError, setLoadError] = useState<"none" | "failed">("none");
   /** Set only when this session submitted the check-in — the one time we know. */
   const [submittedAt, setSubmittedAt] = useState<Date | null>(null);
   /**
@@ -262,7 +276,16 @@ export default function CheckInScreen() {
         );
       })
       .catch((err: unknown) => {
-        if (alive) setLoadError(isUnauthorized(err) ? "signedOut" : "failed");
+        if (!alive) return;
+        // The gate is keychain-deep: it knows a token is stored, not that the
+        // server still honours it. Ending the session unmounts this screen, so
+        // nothing is rendered for the 401 — the gate shows `welcome`, which is
+        // where signing in actually lives.
+        if (isUnauthorized(err)) {
+          void signOut();
+          return;
+        }
+        setLoadError("failed");
       });
     AccessibilityInfo.isReduceMotionEnabled()
       .then((on) => {
@@ -272,13 +295,13 @@ export default function CheckInScreen() {
     return () => {
       alive = false;
     };
-  }, [reveal, reloadKey]);
+  }, [reveal, reloadKey, signOut]);
 
   /**
    * Quietly re-reads `/home` on a timer once the first load has landed, so a
    * coach's plan edit shows up here without a pull-to-refresh. Skipped while
-   * `profile` is still null (the effect above owns the first load and its own
-   * `signedOut`/`failed` branches) and while a check-in write is in flight
+   * `profile` is still null (the effect above owns the first load, its `failed`
+   * branch, and the sign-out a 401 triggers) and while a check-in write is in flight
    * (`submitting`) or the soreness card is reopened — a background refetch
    * landing mid-write could hand `setProfile` a `todaySoreness` that has not
    * caught up with what this screen just posted, and this tab already refetches
@@ -439,39 +462,20 @@ export default function CheckInScreen() {
   }
 
   if (loadError !== "none") {
-    // A signed-out device is not an error state, it is a first run — and until
-    // this button existed it was a dead end: the copy explained the problem and
-    // offered nothing to do about it, on the one screen a fresh install opens.
-    const signedOut = loadError === "signedOut";
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.page}>
-          <Text style={styles.loadError}>
-            {signedOut
-              ? "This device isn't signed in yet, so there is nothing to show."
-              : "Your check-in couldn't be loaded."}
-          </Text>
-          {signedOut ? (
-            <Pressable
-              onPress={() => router.replace("/login")}
-              accessibilityRole="button"
-              accessibilityLabel="Sign in to RunGuard"
-              style={({ pressed }) => [styles.loadErrorAction, dim(pressed)]}
-            >
-              <Text style={styles.loadErrorActionLabel}>Sign in</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => {
-                setLoadError("none");
-                setReloadKey((n) => n + 1);
-              }}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.loadErrorAction, dim(pressed)]}
-            >
-              <Text style={styles.loadErrorActionLabel}>Try again</Text>
-            </Pressable>
-          )}
+          <Text style={styles.loadError}>Your check-in couldn&rsquo;t be loaded.</Text>
+          <Pressable
+            onPress={() => {
+              setLoadError("none");
+              setReloadKey((n) => n + 1);
+            }}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.loadErrorAction, dim(pressed)]}
+          >
+            <Text style={styles.loadErrorActionLabel}>Try again</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
