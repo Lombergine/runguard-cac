@@ -64,9 +64,10 @@
  * read here.
  *
  * A null reading means NOT RECORDED, never zero — every one of the five goes
- * through `<Tile/>`, whose null case is a dash in `color.unknown`.
+ * through `<ReadingRow/>`, whose null case is a dash in `color.unknown` over
+ * the words "Not recorded".
  */
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -82,15 +83,15 @@ import { Card } from "../../components/Card";
 import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
 import { Section } from "../../components/Section";
 import { EXPLAINERS } from "../../components/InfoDot";
-import { Tile } from "../../components/Tile";
+import { Chevron } from "../../components/List";
 import { SleepChart } from "../../components/charts/SleepChart";
 import { SleepStages } from "../../components/charts/SleepStages";
 import { useProfile } from "../../lib/profileStore";
 import { fitnessKnown, readinessState } from "../../lib/readiness";
 import { readinessBand, readinessValue, type ReadinessBand } from "../../lib/readinessVerdict";
 import type { Profile } from "../../lib/types";
-import { layout, radius, space, target } from "../../theme/space";
-import { dim } from "../../theme/press";
+import { layout, radius, ruleWidth, space, target } from "../../theme/space";
+import { dim, rowPress } from "../../theme/press";
 import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
@@ -134,20 +135,39 @@ function signed(n: number): string {
 /**
  * Skeleton heights, derived from the same tokens the real blocks are built
  * from rather than eyeballed, so the layout cannot shift as data lands.
- *
- * A tile is: padding, micro label, gap, the figure, gap, the sub-line, padding.
  */
 const MICRO_LINE = text.micro.lineHeight as number;
 const META_LINE = text.meta.lineHeight as number;
 const STAT_LINE = text.stat.lineHeight as number;
-const TILE_H =
-  layout.cardPadding * 2 + MICRO_LINE + space.xs + STAT_LINE + space.xs + META_LINE;
+const BASE_LINE = text.base.lineHeight as number;
+/**
+ * A reading row at its floor: `target.row`, the same 52pt grouped-list row the
+ * rest of the app uses.
+ */
+const READING_ROW_H = target.row;
+/**
+ * A reading row carrying a second line — a delta ("+3 bpm vs base") or the
+ * words "Not recorded". Padding, the label, the sub-line, padding, which
+ * clears the 52pt floor.
+ */
+const READING_ROW_SUB_H = space.sm * 2 + BASE_LINE + META_LINE;
+/** n rows pooled in one card, with a hairline between each pair. */
+function slabH(rows: number[]): number {
+  return rows.reduce((a, b) => a + b, 0) + (rows.length - 1) * ruleWidth;
+}
 /** The banner: padding, eyebrow, gap, the figure row, padding. */
 const BANNER_H = layout.cardPadding * 2 + MICRO_LINE + space.md + STAT_LINE;
 /** A prose card holding three paragraphs: padding, 3 × body, 2 × gap, padding. */
 const PANEL_H = layout.cardPadding * 2 + META_LINE * 3 + space.md * 2;
-/** One section heading, at the line height it actually renders at. */
-const HEADING_H = text.title.lineHeight as number;
+/**
+ * One section label, at the line height it actually renders at.
+ *
+ * `text.micro`, which is what `Section` sets its label in. It used to be
+ * `text.title` (24), from when the sleep blocks drew a 19pt panel title of
+ * their own; both are labelled groups now, so nothing on this screen renders
+ * at that rank and the skeleton was reserving eight points that never arrive.
+ */
+const HEADING_H = MICRO_LINE;
 
 /* ------------------------------------------------------------------ *
  * The status banner
@@ -341,84 +361,140 @@ function Header({ stale }: { stale?: boolean }) {
 }
 
 /**
- * The Panel hierarchy: title left, caveat right, content below.
+ * One reading, and — one tap away — what it is and where it came from.
  *
- * A SECOND RANK, not a panel title. It sits OUTSIDE the card at `text.title`
- * (19) because it groups several cards — the two-tile grid, a chart, a prose
- * card — where `Panel`'s 14pt title names the one surface it is drawn on. Do
- * not convert it; the two are different jobs at different altitudes.
+ * THE DESIGN'S ROW, NOT THE WEBSITE'S TILE. The readings were a two-up grid of
+ * `<Tile/>`, each with a circled "i" beside its label that opened the explainer
+ * in a modal. The design draws them as grouped-list rows with a disclosure
+ * chevron, and the explanation unfolds in place underneath. The copy is
+ * unchanged — the same five `EXPLAINERS` strings, which are the website's own
+ * `info=` sentences and are NOT retyped here — only the surface it arrives on.
  *
- * `note` is a NODE for the same reason `PanelProps.note` is: a caveat is very
- * often a figure ("0–100"), and every numeral in this app is mono and tabular.
+ * The row is better than the dot for the reason `Tile`'s own note documents at
+ * length: the dot cost the label 20pt of width, so "BODY BATTERY" and "SLEEP
+ * CONSISTENCY" wrapped to two lines at the 360pt floor. A row has the whole
+ * width and a target the size of the row rather than of a 16pt circle.
+ *
+ * ABSENT IS STILL A DASH, NOT A DASHED BOX. `Tile` settled this and the reason
+ * survives the shape change: three unrecorded readings drawn as three dashed
+ * rectangles made absence the loudest thing on the screen, and the spec asks
+ * for absence to be *distinguishable*, not *prominent*. So a missing reading is
+ * "—" in `color.unknown` where the figure would be, with the words "Not
+ * recorded" beneath it — never a zero, never a blank, and never a number.
+ *
+ * NO ANIMATION ON THE CHEVRON. The design rotates it 90°; it does so here too,
+ * as a state, not as a transition. § "Quality floor" asks for reduced motion to
+ * be respected and an explainer that has to be read gains nothing from arriving
+ * slowly — the same call `InfoDot` made for the panel it opens.
  */
+function ReadingRow({
+  label,
+  value,
+  sub,
+  info,
+  isLast = false,
+}: {
+  /** The design's wording. Sentence case — `text.base`, not the micro rank. */
+  label: string;
+  /**
+   * Pre-formatted WITH its unit welded on ("7.2 h", "48 ms", "67/100").
+   * `null` means the reading was never recorded — never a stand-in numeral.
+   */
+  value: string | null;
+  /** A delta ("+3 bpm vs base"). Mono, because it is a figure. */
+  sub?: string;
+  /** One of `EXPLAINERS`. The copy lives in `components/InfoDot`. */
+  info: string;
+  /** Last row in the card: suppresses the separator. Caller-set, as `List`. */
+  isLast?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const absent = value === null;
+  const subLine = absent ? "Not recorded" : sub;
+  return (
+    <View>
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        accessibilityRole="button"
+        /* The website's form (InfoDot.tsx:35), with the reading read out first
+           so the announcement is the row and not just the question. */
+        accessibilityLabel={`${label}, ${
+          absent ? "not recorded" : value
+        }. What is ${label}?`}
+        /* The spec's `aria-expanded` on disclosures, in its RN spelling. */
+        accessibilityState={{ expanded: open }}
+        /* A row is a SURFACE, so it flashes a fill across its full width
+           rather than dimming its own content. See theme/press. */
+        style={({ pressed }) => [styles.readingRow, rowPress({ pressed })]}
+      >
+        <View style={styles.readingBody}>
+          <Text style={styles.readingLabel}>{label}</Text>
+          {subLine ? <Text style={styles.readingSub}>{subLine}</Text> : null}
+        </View>
+        <Text style={absent ? styles.readingValueAbsent : styles.readingValue}>
+          {absent ? "—" : value}
+        </Text>
+        <View style={open ? styles.chevronOpen : styles.chevron}>
+          <Chevron />
+        </View>
+      </Pressable>
+      {open ? <Text style={styles.readingInfo}>{info}</Text> : null}
+      {isLast ? null : <View style={styles.separator} pointerEvents="none" />}
+    </View>
+  );
+}
+
 /**
- * The five readings (tabs.tsx:576-609), in TWO sections rather than the
- * website's single five-up grid.
+ * The five readings (tabs.tsx:576-609), in TWO groups rather than the
+ * website's single five-up grid — and rather than the design's single list.
  *
  * WHY SPLIT. Three of the five are measurements a watch took; the other two are
  * 0–100 figures the engine computed from them. `lib/types.ts` is explicit that
  * `fitness.freshness` is "a model output, not a measurement", and the website
  * files all five under one grid with no note at all — which quietly claims the
- * scores were measured too. The split is the cheapest honest fix: each heading
- * says what its own figures are, and no tile has to apologise for itself in its
- * sub-line.
+ * scores were measured too. The design does the same, under a group headed
+ * "Measured overnight"; pooling them there would put that claim in the heading
+ * itself. The split is the cheapest honest fix: each heading says what its own
+ * figures are, and no row has to apologise for itself in its sub-line. It is
+ * also what the design's own footnote promises — "what it is and *where it came
+ * from*" — and a reader should not have to open a row to learn that much.
  *
- * It also lands the tiles 1+2 and 2 with no empty cell. Five tiles two-up
- * leaves a hole in the last row, and a hole reads as a tile that failed to
- * load — the one thing a blank must never do in this app (see the note on
- * `RecoveryGrid` in `(tabs)/index.tsx`). Nothing is invented to fill a slot and
- * no slot is left open.
- *
- * `sub` carries deltas only. `<Tile/>` sets that line in mono because it is
- * meant to hold a figure; prose there would be prose in a numeral's typeface.
- *
- * THE EXPLAINERS ARE A DISCLOSURE, NOT A CAPTION — a decision this file left
- * open. The website's five `info=` sentences run to about forty words each
- * (tabs.tsx:581-608), which is five paragraphs of prose competing with five
- * figures if they are printed in place. They would also have to sit somewhere,
- * and the only slot a tile has is `sub`, which is set in mono for deltas. So
- * each one hides behind the circled "i" beside its label and opens on a tap:
- * the numbers keep the screen, and the explanation is one tap away for the
- * reader who wants it. `components/InfoDot` has the mechanics and the copy;
- * `EXPLAINERS.sleep7d` carries the only string that is not the website's
- * verbatim, and says why.
+ * `sub` carries deltas only, set in mono because it holds a figure; prose there
+ * would be prose in a numeral's typeface.
  */
 function Readings({ profile }: { profile: Profile }) {
   const r = profile.risk.recovery;
   return (
     <>
       <Section label="Measured overnight" note="from your wearable" style={styles.section}>
-        <View style={styles.grid}>
-          <View style={styles.gridRow}>
-            <Tile
-              label="Sleep · 7d avg"
-              info={EXPLAINERS.sleep7d}
-              value={r.sleepAvg !== null ? `${r.sleepAvg} h` : null}
-            />
-          </View>
-          <View style={styles.gridRow}>
-            <Tile
-              label="HRV"
-              info={EXPLAINERS.hrv}
-              value={r.hrv !== null ? `${r.hrv} ms` : null}
-              sub={
-                r.hrvDeltaPct !== null
-                  ? `${signed(r.hrvDeltaPct)}% vs base`
-                  : undefined
-              }
-            />
-            <Tile
-              label="Resting HR"
-              info={EXPLAINERS.restingHr}
-              value={r.restingHr !== null ? `${r.restingHr} bpm` : null}
-              sub={
-                r.restingHrDelta !== null
-                  ? `${signed(r.restingHrDelta)} bpm vs base`
-                  : undefined
-              }
-            />
-          </View>
-        </View>
+        <Card padded={false} style={styles.readings}>
+          <ReadingRow
+            label="Sleep · 7d"
+            info={EXPLAINERS.sleep7d}
+            value={r.sleepAvg !== null ? `${r.sleepAvg} h` : null}
+          />
+          <ReadingRow
+            label="HRV"
+            info={EXPLAINERS.hrv}
+            value={r.hrv !== null ? `${r.hrv} ms` : null}
+            sub={
+              r.hrvDeltaPct !== null
+                ? `${signed(r.hrvDeltaPct)}% vs base`
+                : undefined
+            }
+          />
+          <ReadingRow
+            label="Resting HR"
+            info={EXPLAINERS.restingHr}
+            value={r.restingHr !== null ? `${r.restingHr} bpm` : null}
+            sub={
+              r.restingHrDelta !== null
+                ? `${signed(r.restingHrDelta)} bpm vs base`
+                : undefined
+            }
+            isLast
+          />
+        </Card>
       </Section>
 
       <Section
@@ -431,13 +507,13 @@ function Readings({ profile }: { profile: Profile }) {
         }
         style={styles.section}
       >
-        <View style={styles.gridRow}>
+        <Card padded={false} style={styles.readings}>
           {/*
             `freshness` is always a number, so `hasActivityHistory` is the
             guard — see divergence 4 in the header. With nothing synced this
             figure is 67 computed from an empty series.
           */}
-          <Tile
+          <ReadingRow
             label="Body battery"
             info={EXPLAINERS.bodyBattery}
             value={
@@ -479,7 +555,7 @@ function Readings({ profile }: { profile: Profile }) {
             So: if there is no sleep in the current window, consistency over that
             window is unknown, whatever the engine still remembers.
           */}
-          <Tile
+          <ReadingRow
             label="Sleep consistency"
             info={EXPLAINERS.sleepConsistency}
             value={
@@ -488,8 +564,18 @@ function Readings({ profile }: { profile: Profile }) {
                 ? `${profile.patterns.sleepConsistency}/100`
                 : null
             }
+            isLast
           />
-        </View>
+        </Card>
+        {/*
+          The design's footnote, under the readings it describes. It sits under
+          the SECOND group because it is true of both: every one of the five
+          rows opens, and the sentence would be half a promise under the first
+          group alone.
+        */}
+        <Text style={styles.footnote}>
+          Tap a reading for what it is and where it came from.
+        </Text>
       </Section>
     </>
   );
@@ -554,25 +640,35 @@ export default function RecoveryScreen() {
           <View style={styles.sections}>
             <View style={[styles.skeleton, { height: BANNER_H }]} />
 
+            {/* Three rows pooled in one card. Sleep · 7d carries no delta, so
+                it stands at the row floor; HRV and Resting HR both carry one
+                and stand a line taller. */}
             <View style={styles.section}>
               <View style={[styles.skeleton, styles.skeletonHeading]} />
-              <View style={styles.grid}>
-                <View style={styles.gridRow}>
-                  <View style={[styles.skeleton, styles.skeletonTile]} />
-                </View>
-                <View style={styles.gridRow}>
-                  <View style={[styles.skeleton, styles.skeletonTile]} />
-                  <View style={[styles.skeleton, styles.skeletonTile]} />
-                </View>
-              </View>
+              <View
+                style={[
+                  styles.skeleton,
+                  {
+                    height: slabH([
+                      READING_ROW_H,
+                      READING_ROW_SUB_H,
+                      READING_ROW_SUB_H,
+                    ]),
+                  },
+                ]}
+              />
             </View>
 
             <View style={styles.section}>
               <View style={[styles.skeleton, styles.skeletonHeading]} />
-              <View style={styles.gridRow}>
-                <View style={[styles.skeleton, styles.skeletonTile]} />
-                <View style={[styles.skeleton, styles.skeletonTile]} />
-              </View>
+              <View
+                style={[
+                  styles.skeleton,
+                  { height: slabH([READING_ROW_H, READING_ROW_H]) },
+                ]}
+              />
+              {/* The footnote under the group, so it does not appear late. */}
+              <View style={[styles.skeleton, styles.skeletonFootnote]} />
             </View>
 
             <View style={styles.section}>
@@ -615,14 +711,11 @@ export default function RecoveryScreen() {
           {/* 2. The five readings, in two sections — see Readings. */}
           <Readings profile={profile} />
 
-          {/* 3. Sleep. Both components own their own panel head — do not
-                 wrap them in a SectionHeading or the title doubles. */}
-          <View style={styles.section}>
-            <SleepChart sleep30={profile.sleep30} />
-          </View>
-          <View style={styles.section}>
-            <SleepStages sleep30={profile.sleep30} />
-          </View>
+          {/* 3. Sleep. Both components own their own `Section` — label, note
+                 and caption — so they are dropped in bare and must not be
+                 wrapped in a second one. */}
+          <SleepChart sleep30={profile.sleep30} />
+          <SleepStages sleep30={profile.sleep30} />
 
           {/* 4. The observations. Server-composed prose, rendered as prose:
                  no marker, no colour, no weight — see divergence 5. */}
@@ -646,13 +739,23 @@ export default function RecoveryScreen() {
                  neutral dot `races.tsx` uses for pacing lines — a shape, in a
                  fill token, with no word sitting on it. */}
           <Section label="Recovery tips" note="based on today's data" style={styles.section}>
-            <Card>
+            <Card padded={false}>
               {tips.map((tip, i) => (
-                <View key={i} style={i > 0 ? styles.tipRowNext : styles.tipRow}>
-                  <View style={styles.tipMarkCol}>
-                    <View style={styles.tipMark} />
+                <View key={i}>
+                  {/* BETWEEN rows only, and inset from the left so it starts
+                      under the row's own text — `List.separator`'s geometry.
+                      A rule above the first row or below the last would read
+                      as a clipped row, which is the design's own bug (see
+                      docs/design-port.md, structure 6). */}
+                  {i > 0 ? (
+                    <View style={styles.separator} pointerEvents="none" />
+                  ) : null}
+                  <View style={styles.tipRow}>
+                    <View style={styles.tipMarkCol}>
+                      <View style={styles.tipMark} />
+                    </View>
+                    <Text style={styles.tipText}>{tip}</Text>
                   </View>
-                  <Text style={styles.tipText}>{tip}</Text>
                 </View>
               ))}
             </Card>
@@ -704,17 +807,71 @@ const styles = StyleSheet.create({
   /** Body weight, lowercase, sentence register. Never display weight. */
   statusWord: { ...text.base },
 
-  grid: { gap: space.md },
-  // Explicit rows rather than a wrapping grid: `flex: 1` on each tile keeps a
-  // pair the same width and the same height at 360px. A row with one tile in it
-  // is the full-width tile.
-  gridRow: { flexDirection: "row", gap: space.md },
+  /**
+   * The readings card. `overflow` is load-bearing: without it a row's press
+   * flash paints square corners over the card's rounded ones, which is the
+   * single most obvious tell that a grouped list was hand-rolled. Same reason
+   * `List.slab` carries it.
+   */
+  readings: { overflow: "hidden" },
+  /**
+   * `minHeight`, not `height`: `target.row` (52) is the floor, and a row with
+   * a delta line or Dynamic Type turned up grows past it rather than clipping.
+   */
+  readingRow: {
+    minHeight: target.row,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: layout.cardPadding,
+    paddingVertical: space.sm,
+  },
+  /** Takes the slack, so the figure and the chevron stay pinned right. */
+  readingBody: { flex: 1 },
+  readingLabel: { ...text.base, color: color.ink },
+  /** Mono: the sub-line holds a delta, and every numeral here is mono. */
+  readingSub: { ...text.statInline, color: color.muted },
+  /** 16.5 mono — a figure at body rank, level with the label beside it. */
+  readingValue: { ...text.statBase, color: color.ink },
+  /** Same size and position as a real reading, so the column stays aligned. */
+  readingValueAbsent: { ...text.statBase, color: color.unknown },
+  /** Points at the row. Rotates a quarter turn once the row is open. */
+  chevron: { justifyContent: "center" },
+  chevronOpen: { justifyContent: "center", transform: [{ rotate: "90deg" }] },
+  /**
+   * The explanation, unfolded. Prose in the body face at the size every other
+   * explanatory line in the app is set at — the design's 13.5px sans has no
+   * rank here, and `text.meta` is what `InfoDot`'s own panel already uses, so
+   * the two surfaces that carry these five strings read identically.
+   *
+   * Indented to the row's text column and given the row's own horizontal
+   * padding, so it reads as belonging to the row above rather than as a new
+   * one.
+   */
+  readingInfo: {
+    ...text.meta,
+    color: color.ink2,
+    paddingHorizontal: layout.cardPadding,
+    paddingBottom: layout.cardPadding,
+  },
+  /**
+   * BETWEEN rows only, inset from the left so it starts under the row's own
+   * text — the way iOS draws a list, and `List.separator`'s geometry.
+   */
+  separator: {
+    height: ruleWidth,
+    marginLeft: layout.cardPadding,
+    backgroundColor: color.ruleSoft,
+  },
 
   prose: { ...text.meta, color: color.ink2 },
   proseNext: { ...text.meta, color: color.ink2, marginTop: space.md },
 
-  tipRow: { flexDirection: "row", gap: space.sm },
-  tipRowNext: { flexDirection: "row", gap: space.sm, marginTop: space.md },
+  tipRow: {
+    flexDirection: "row",
+    gap: space.sm,
+    padding: layout.cardPadding,
+  },
   /** Centres the marker on the first line without hardcoding an offset. */
   tipMarkCol: { height: META_LINE, justifyContent: "center" },
   tipMark: {
@@ -756,7 +913,8 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     backgroundColor: color.well,
   },
-  skeletonTile: { flex: 1, height: TILE_H },
   /** Half width, so the reserved heading reads as a heading, not as a card. */
   skeletonHeading: { height: HEADING_H, width: "50%" },
+  /** One line of muted prose under a group. */
+  skeletonFootnote: { height: META_LINE, width: "75%" },
 });

@@ -66,9 +66,10 @@ import { CheckInPrompt } from "../../components/CheckInPrompt";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
 import { ReadinessRing } from "../../components/ReadinessRing";
 import { Absent } from "../../components/Nothing";
-import { Tile } from "../../components/Tile";
+import { Card } from "../../components/Card";
+import { Chevron } from "../../components/List";
 import { Notifications } from "../../components/Notifications";
-import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
+import { TodayBlock } from "../../components/TodayBlock";
 import { WeekProgress } from "../../components/WeekProgress";
 import { ApiError, getHome, isUnauthorized, postCheckin } from "../../lib/api";
 import InfoDot, { EXPLAINERS } from "../../components/InfoDot";
@@ -90,10 +91,10 @@ import type {
   ReadinessState,
   RecoverySnapshot,
 } from "../../lib/types";
-import { dim } from "../../theme/press";
+import { dim, rowPress } from "../../theme/press";
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { font, tabular, text } from "../../theme/type";
 
 /** A coach's plan edit should reach the home screen without a manual reload. */
 const LIVE_REFRESH_MS = 25_000;
@@ -135,6 +136,25 @@ const VERDICT_COLOR: Record<ReadinessBand, string> = {
 };
 
 const STAT_LINE = text.stat.lineHeight as number;
+
+/**
+ * The width of the delta column in the Overnight card.
+ *
+ * FIXED, and that is the whole reason it exists: the column is pinned right, so
+ * a fixed width is what puts the three figures to its left on one axis instead
+ * of letting each one step in and out as its delta changes length.
+ *
+ * Derived rather than guessed. Spline Sans Mono 500 is monospaced at
+ * 1200/2000 em — the same 0.6 advance `Tile` measures its labels against — and
+ * the widest sub this card can carry is "+12 bpm vs base", 15 characters, at
+ * `text.statInline`. That is 126pt, which still leaves the longest label
+ * ("Resting HR") its full line at the 360pt floor.
+ */
+const SUB_CHARS = 15;
+const MONO_ADVANCE = 0.6;
+const SUB_WIDTH = Math.ceil(
+  SUB_CHARS * MONO_ADVANCE * (text.statInline.fontSize as number)
+);
 
 /** The website's `--ember`: `linear-gradient(135deg, …)` with a stop at 45%. */
 const EMBER_STOPS = [0, 0.45, 1] as const;
@@ -480,15 +500,16 @@ export default function CheckInScreen() {
        * `ScreenHeader` keeps that job and adds Alerts, so all three stack
        * routes are reachable from every tab rather than only from Home.
        *
-       * The date is passed in already formatted: non-negotiable #2 says a
-       * component displaying a date never derives one, and this is the same
-       * `dayLabel(localDay())` string the check-in prompt below prints.
+       * NO SUBTITLE. It read "Sun 30 Aug · before practice", which is word for
+       * word what the check-in prompt's own eyebrow says two lines below it —
+       * the date printed twice on one screen, and the second copy the louder
+       * of the two by position. The design has no subtitle here at all: the
+       * prompt's eyebrow is where the day lives, and once the athlete has
+       * checked in the receipt carries it instead. Either way it appears
+       * exactly once, which is what non-negotiable #2 asks for. Nothing else
+       * was in the subtitle, so the prop goes rather than being emptied.
        */}
-      <ScreenHeader
-        title="Today"
-        subtitle={`${dayLabel(localDay())} · before practice`}
-        actions={actions}
-      />
+      <ScreenHeader title="Today" actions={actions} />
       {/* The bottom inset belongs to the tab bar, which reserves it in its own
           height (see _layout.tsx), so the scroll view stops exactly above the
           bar and its last card clears it by one section. */}
@@ -719,8 +740,19 @@ function UnknownReadiness({ pending }: { pending: boolean }) {
 }
 
 /**
- * Everything the check-in unlocks, in the order the day is read: the body, then
- * the week, then today, then the next thing on the calendar.
+ * Everything the check-in unlocks, in the design's order: today, then the week,
+ * then last night's readings.
+ *
+ * THE ORDER CHANGED, and the change is the point. It used to run recovery,
+ * week, today, race — three wearable tiles first, so the screen opened on
+ * numbers a watch collected while the athlete slept. The design puts the day's
+ * own plan directly under the check-in and demotes the wearable to the bottom
+ * under "Overnight", which is both what an athlete opening the app at 6am wants
+ * first and the same demotion the check-in already applies to readiness.
+ *
+ * Each group is a `Section` — a label OUTSIDE and above one card — so the label
+ * stays put whether the card holds data or an `Absent`. That is why the three
+ * blocks below draw cards and not eyebrows.
  *
  * None of it renders before a check-in. The empty prompt screen is the
  * signature, and a stack of tiles above the fold would be exactly the summary
@@ -732,18 +764,25 @@ function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
 
   return (
     <View style={styles.sections}>
-      {/* A GROUP of cards, so the label sits outside and above them — the
-          `Section` rank, not `Panel`'s. The tiles below are the website's
-          bento, which stands on the ground rather than nesting in a panel. */}
-      <Section label="Recovery" note="from your wearable" style={styles.section}>
-        {profile.risk.recovery.hasData ? (
-          <RecoveryGrid recovery={profile.risk.recovery} />
-        ) : (
-          // No wearable at all. One dashed slot rather than a grid of them:
-          // three Absents would state three separate unknowns where there is
-          // really only one.
-          <Absent label="No wearable data recorded" />
-        )}
+      {/*
+        One card, two rows: today's session and the next race. The eyebrow says
+        "Today" and no date, because the day is already stated once above —
+        by the check-in prompt's eyebrow, or by the receipt that replaces it.
+      */}
+      <Section label="Today" style={styles.section}>
+        <TodayBlock
+          day={today}
+          /* Null renders no race row at all — see TodayBlock, distinction 3. */
+          race={
+            next
+              ? {
+                  name: next.name,
+                  daysUntil: next.daysUntil,
+                  dateLabel: dayLabel(next.date),
+                }
+              : null
+          }
+        />
       </Section>
 
       {/*
@@ -752,29 +791,29 @@ function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
         run is a blank reading as a measured fact, which is the one failure the
         visual spec exists to prevent.
       */}
-      {profile.risk.hasActivityHistory ? (
-        <WeekProgress
-          weekKm={profile.risk.weekKm}
-          weeklyTargetKm={profile.weeklyTargetKm ?? null}
-        />
-      ) : (
-        <Absent eyebrow="Weekly mileage" label="No runs recorded yet" />
-      )}
+      <Section label="This week" style={styles.section}>
+        {profile.risk.hasActivityHistory ? (
+          <WeekProgress
+            weekKm={profile.risk.weekKm}
+            weeklyTargetKm={profile.weeklyTargetKm ?? null}
+          />
+        ) : (
+          /* No `eyebrow` — the Section above it is the eyebrow now, and two
+             would be the same label twice. */
+          <Absent label="No runs recorded yet" />
+        )}
+      </Section>
 
-      <TodayBlock day={today} dateLabel={dayLabel(localDay())} />
-
-      {/* Renders nothing at all when the calendar is empty — see NextRaceBlock. */}
-      <NextRaceBlock
-        race={
-          next
-            ? {
-                name: next.name,
-                daysUntil: next.daysUntil,
-                dateLabel: dayLabel(next.date),
-              }
-            : null
-        }
-      />
+      <Section label="Overnight" note="from your wearable" style={styles.section}>
+        {profile.risk.recovery.hasData ? (
+          <Overnight recovery={profile.risk.recovery} />
+        ) : (
+          // No wearable at all. One dashed slot rather than a card of them:
+          // three Absents would state three separate unknowns where there is
+          // really only one.
+          <Absent label="No wearable data recorded" />
+        )}
+      </Section>
 
       {/*
         Last on the screen, and renders nothing when there is nothing — see
@@ -795,56 +834,146 @@ function signed(n: number): string {
 }
 
 /**
- * The wearable readings: Sleep · 7d, then HRV and Resting HR.
+ * The wearable readings, as the design's "Overnight" card: Sleep · 7d, HRV and
+ * Resting HR as three rows, then the way through to the Recovery tab.
  *
- * Deliberately NOT <RecoveryTiles/>, whose fourth tile is this week's mileage.
- * That figure renders below through <WeekProgress/> instead, which carries the
- * target alongside it — the more useful framing, and the one the athlete can
- * act on — and the same number cannot appear twice on one screen in two
- * different framings without one of them looking wrong.
+ * ── WHY ROWS AND NOT THE TILES THIS REPLACES ────────────────────────────────
  *
- * THE VACATED SLOT IS NOT LEFT EMPTY. Three tiles in a two-up grid used to
- * leave a hole in the bottom-right, which read as a tile that had failed to
- * load — the one thing this app must never let a blank do. So the grid is
- * mixed-size, the way the website's bento is: sleep takes a full row on its
- * own, and the two readings that carry a "vs base" delta pair off beneath it.
- * Nothing is invented to fill a slot and no slot is left open.
+ * The tiles were a two-up bento with a full-width sleep tile on top, which is
+ * the WEBSITE's shape. It cost a lot of vertical space for three figures, it
+ * put three separate elevated surfaces under one section label, and — because
+ * a tile stacks its label over its value — the three values never lined up as a
+ * column. Rows do: a label, a figure, and its delta, all reading left to right,
+ * with the delta column fixed so the figures beside it stay on one axis.
+ *
+ * Still deliberately NOT the fourth tile the website carries here, this week's
+ * mileage. That figure renders in "This week" above, with its target alongside
+ * it — the more useful framing, and the one the athlete can act on — and the
+ * same number must not appear twice on one screen in two different framings.
  *
  * Every figure is already rounded by the server (website/src/lib/risk.ts), so
  * nothing is re-formatted here beyond welding the unit on. Null is a reading
- * that was never taken and renders as absent through <Tile/> — never 0.
+ * that was never taken: it renders as a dash in `unknown` with "Not recorded"
+ * where the delta goes, which is the treatment `Tile` documents at length —
+ * absence has to be DISTINGUISHABLE, not prominent, and three dashed boxes in
+ * one card would make the unknowns outweigh the data. Never 0, never blank.
  */
-function RecoveryGrid({ recovery }: { recovery: RecoverySnapshot }) {
+function Overnight({ recovery }: { recovery: RecoverySnapshot }) {
+  const router = useRouter();
   return (
-    <View style={styles.grid}>
-      <View style={styles.gridRow}>
-        <Tile
-          label="Sleep · 7d"
-          value={recovery.sleepAvg !== null ? `${recovery.sleepAvg} h` : null}
-        />
-      </View>
-      <View style={styles.gridRow}>
-        <Tile
-          label="HRV"
-          value={recovery.hrv !== null ? `${recovery.hrv} ms` : null}
-          sub={
-            recovery.hrvDeltaPct !== null
-              ? `${signed(recovery.hrvDeltaPct)}% vs base`
-              : undefined
-          }
-        />
-        <Tile
-          label="Resting HR"
-          value={recovery.restingHr !== null ? `${recovery.restingHr} bpm` : null}
-          sub={
-            recovery.restingHrDelta !== null
-              ? `${signed(recovery.restingHrDelta)} bpm vs base`
-              : undefined
-          }
-        />
+    <Card padded={false} style={styles.rowsCard}>
+      <OvernightRow
+        label={
+          <>
+            {"Sleep · "}
+            <Text style={styles.rowFigure}>7d</Text>
+          </>
+        }
+        accessibilityLabel="Sleep, seven day average"
+        value={recovery.sleepAvg !== null ? `${recovery.sleepAvg} h` : null}
+      />
+      <RowRule />
+      <OvernightRow
+        label="HRV"
+        accessibilityLabel="HRV"
+        value={recovery.hrv !== null ? `${recovery.hrv} ms` : null}
+        sub={
+          recovery.hrvDeltaPct !== null
+            ? `${signed(recovery.hrvDeltaPct)}% vs base`
+            : null
+        }
+      />
+      <RowRule />
+      <OvernightRow
+        label="Resting HR"
+        accessibilityLabel="Resting heart rate"
+        value={recovery.restingHr !== null ? `${recovery.restingHr} bpm` : null}
+        sub={
+          recovery.restingHrDelta !== null
+            ? `${signed(recovery.restingHrDelta)} bpm vs base`
+            : null
+        }
+      />
+      <RowRule />
+      {/*
+        The design's last row. `navigate`, not `push`: Recovery is a TAB, and
+        pushing it would stack a second copy of a screen the tab bar already
+        owns. The chevron takes the label's own colour rather than the neutral
+        `chevronStroke` — `List` keeps that override for exactly this case, a
+        row whose whole label is an accent-coloured action.
+      */}
+      <Pressable
+        onPress={() => router.navigate("/recovery")}
+        accessibilityRole="link"
+        accessibilityLabel="See all recovery"
+        style={({ pressed }) => [styles.seeAll, rowPress({ pressed })]}
+      >
+        <Text style={styles.seeAllLabel}>See all recovery</Text>
+        <Chevron stroke={color.brandText} />
+      </Pressable>
+    </Card>
+  );
+}
+
+/**
+ * One reading. Label, figure, and the delta the figure is off its baseline.
+ *
+ * `label` is a NODE because "Sleep · 7d" carries a figure of its own, and every
+ * numeral in this app is mono and tabular even when it is naming a window
+ * rather than measuring something. `accessibilityLabel` therefore has to be
+ * spelled out separately — "Sleep · 7d" read aloud is not a sentence.
+ *
+ * `value` and `sub` arrive pre-formatted WITH their units welded on, the same
+ * contract `Tile` documents: there is no `unit` prop, because a separate unit
+ * prop is precisely how a bare numeral ends up in a different text node from
+ * the thing it measures (non-negotiable #3).
+ */
+function OvernightRow({
+  label,
+  accessibilityLabel,
+  value,
+  sub = null,
+}: {
+  label: React.ReactNode;
+  accessibilityLabel: string;
+  value: string | null;
+  sub?: string | null;
+}) {
+  const absent = value === null;
+  return (
+    <View style={styles.readingRow}>
+      <Text style={styles.readingLabel} accessibilityLabel={accessibilityLabel}>
+        {label}
+      </Text>
+      <Text style={[styles.readingValue, absent && styles.readingValueAbsent]}>
+        {absent ? "—" : value}
+      </Text>
+      {/*
+        The column renders even when there is nothing in it, because its width
+        is what holds the three values above on one axis. Empty is empty space,
+        not a reading — the only thing it ever says is "Not recorded", and only
+        when the value beside it is a dash.
+      */}
+      <View style={styles.readingSubColumn}>
+        {absent ? (
+          <Text style={styles.readingAbsentNote}>Not recorded</Text>
+        ) : sub !== null ? (
+          <Text style={styles.readingSub}>{sub}</Text>
+        ) : null}
       </View>
     </View>
   );
+}
+
+/**
+ * The hairline between two rows of a card, inset from the left so it starts
+ * under the labels — iOS's own separator, and the design's.
+ *
+ * BETWEEN rows only, never above the first or below the last; see
+ * docs/design-port.md #6.
+ */
+function RowRule() {
+  return <View style={styles.rowRule} />;
 }
 
 /**
@@ -1013,14 +1142,76 @@ const styles = StyleSheet.create({
    */
   insightByline: { ...text.baseSemi, color: color.brandText },
 
+  /**
+   * The design stacks its sections 22 apart. `layout.section` is 24 and is what
+   * every other screen in the app spends between groups; the theme is the
+   * single source (app/CLAUDE.md), so the 2pt goes rather than a one-off.
+   */
   sections: { marginTop: layout.section, gap: layout.section },
   section: { gap: space.md },
-  grid: { gap: space.md },
-  // Explicit rows rather than a wrapping grid: `flex: 1` on each tile keeps a
-  // pair the same width and the same height at 360px, which a flexBasis wrap
-  // does not guarantee once one tile carries a sub-line. A row with one tile in
-  // it is the full-width tile.
-  gridRow: { flexDirection: "row", gap: space.md },
+
+  /**
+   * A card of rows. `overflow: "hidden"` so the last row's press flash is
+   * clipped to the card's curve rather than painting square corners over it —
+   * and it does not cost the card its shadow, which `PlanWeek`'s `blocksCard`
+   * records the reason for.
+   */
+  rowsCard: { overflow: "hidden" },
+  /**
+   * The design's row: 16 in from each side, 12 top and bottom.
+   *
+   * `center`, not `baseline`, and that is not a preference. The delta lives in
+   * a fixed-width `View` (see SUB_WIDTH), and Yoga has no text baseline to read
+   * off a View — it falls back to the box's bottom edge, which would hang the
+   * three deltas below the figures they belong to. Centring is also what every
+   * other row in this app does, `ListRow` included. The label and the figure
+   * share a 24pt line box either way, so those two sit on one baseline.
+   */
+  readingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: layout.cardPadding,
+    paddingVertical: space.md,
+  },
+  /** Takes the slack, so the figure and its delta stay pinned right. */
+  readingLabel: { ...text.base, color: color.ink, flex: 1 },
+  /**
+   * `ink2`, not `ink`: the design sets the figure one step back from its label,
+   * which keeps the row reading label-first. `statBase` is the app's mono rank
+   * at body size, so a figure row and a prose row sit on one optical line.
+   */
+  readingValue: { ...text.statBase, color: color.ink2 },
+  /** Same size and position as a real value, so the column still aligns. */
+  readingValueAbsent: { color: color.unknown },
+  /** Fixed — see SUB_WIDTH. */
+  readingSubColumn: { width: SUB_WIDTH },
+  readingSub: { ...text.statInline, color: color.muted, textAlign: "right" },
+  /**
+   * Prose, not a figure: "Not recorded" names what the dash means, so it takes
+   * the body face rather than the mono one the deltas use. `ink2` because it is
+   * the only thing on the row saying why the value is a dash.
+   */
+  readingAbsentNote: { ...text.meta, color: color.ink2, textAlign: "right" },
+  /** A mono span nested in a body label — "Sleep · 7d". */
+  rowFigure: { fontFamily: font.mono, ...tabular },
+  rowRule: {
+    marginLeft: layout.cardPadding,
+    height: ruleWidth,
+    backgroundColor: color.ruleSoft,
+  },
+  /** A real target, unlike the three inert rows above it. */
+  seeAll: {
+    minHeight: target.min,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.md,
+    paddingHorizontal: layout.cardPadding,
+    paddingVertical: space.md,
+  },
+  /** `brandText`, never `brand`: this is a glyph. 5.21:1 on card vs 2.15:1. */
+  seeAllLabel: { ...text.base, color: color.brandText },
 
   /**
    * The way back into soreness after the check-in is done. An outlined control,

@@ -50,7 +50,6 @@ import { Absent } from "../components/Nothing";
 import { List, ListRow } from "../components/List";
 import { Panel } from "../components/Panel";
 import { Section } from "../components/Section";
-import { Stat } from "../components/Stat";
 import { dayLabel, localDay, timeLabel } from "../lib/dates";
 import {
   availability,
@@ -66,7 +65,7 @@ import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
 import { color } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
-import { layout, radius, ruleWidth, space, target } from "../theme/space";
+import { layout, radius, space, target } from "../theme/space";
 
 /**
  * `connectedSources` is on the /api/mobile/me payload
@@ -90,6 +89,19 @@ const NO_SOURCES = "No data yet";
 const EMBER_STOPS = [0, 0.45, 1] as const;
 const EMBER_START = { x: 0, y: 0 } as const;
 const EMBER_END = { x: 1, y: 1 } as const;
+
+/**
+ * A count with the thing counted welded into the same node.
+ *
+ * Non-negotiable #3 has no exemption for a count: "12" under a "WORKOUTS READ"
+ * micro-label is a bare numeral with its unit somewhere else in the layout,
+ * which is the split the rule names. The figures below therefore read "12
+ * workouts", and the row title beside them says where they came from rather
+ * than repeating the noun.
+ */
+function count(n: number, singular: string): string {
+  return `${n} ${singular}${n === 1 ? "" : "s"}`;
+}
 
 /** "6:12am · Tue 14 Oct", composed from lib/dates. Never derived in a component. */
 function syncLabel(iso: string): string | null {
@@ -366,64 +378,6 @@ export default function ConnectScreen() {
                     )}
                   </Pressable>
                 ) : null}
-
-                {last ? (
-                  <View style={styles.figures}>
-                    <View style={styles.row}>
-                      <View style={styles.cell}>
-                        <Stat label="WORKOUTS READ" value={String(last.read.workouts)} />
-                      </View>
-                      <View style={styles.cell}>
-                        <Stat label="DAYS OF READINGS" value={String(last.read.metrics)} />
-                      </View>
-                    </View>
-                    <View style={styles.row}>
-                      <View style={styles.cell}>
-                        <Stat label="NEW WORKOUTS" value={String(last.imported.workouts)} />
-                      </View>
-                      <View style={styles.cell} />
-                    </View>
-                    {/* Refusals, when there were any. Without this the figures
-                        above cannot be told apart from a healthy repeat sync:
-                        both read N and import 0, and the caption below used to
-                        say a zero could only mean "nothing had changed". */}
-                    {refused ? (
-                      <Text style={styles.problem} accessibilityLiveRegion="polite">
-                        Your server refused{" "}
-                        {/*
-                          The counts are numerals sitting in prose, so they
-                          change FACE — mono and tabular — while keeping the
-                          sentence's size and colour. The thing counted is
-                          welded into the same node ("3 workouts", never "3" +
-                          "workouts"); "of readings" is a qualifier, not a unit,
-                          so it stays in the body face.
-                        */}
-                        {refused.workouts > 0 ? (
-                          <Text style={styles.figure}>
-                            {`${refused.workouts} workout${refused.workouts === 1 ? "" : "s"}`}
-                          </Text>
-                        ) : null}
-                        {refused.workouts > 0 && refused.metrics > 0 ? " and " : ""}
-                        {refused.metrics > 0 ? (
-                          <>
-                            <Text style={styles.figure}>
-                              {`${refused.metrics} day${refused.metrics === 1 ? "" : "s"}`}
-                            </Text>
-                            {" of readings"}
-                          </>
-                        ) : null}{" "}
-                        as unreadable. They were not stored, and they are not counted as
-                        new.
-                      </Text>
-                    ) : null}
-                    {/* The caveat that stops a zero reading as a failure. Its
-                        second sentence is only true when nothing was refused. */}
-                    <Text style={styles.caption}>
-                      New counts only the workouts your server had not already stored.
-                      {refused ? "" : " Zero means nothing had changed since the last sync."}
-                    </Text>
-                  </View>
-                ) : null}
               </>
             )}
 
@@ -441,6 +395,100 @@ export default function ConnectScreen() {
             ) : null}
           </Panel>
         </View>
+
+        {/* ── What the last sync actually moved ────────────────────────── */}
+        {/*
+          A GROUP of figures the app can prove, so it takes a `Section` eyebrow
+          outside a `List` — the same shape as Connected sources below and as
+          every group on settings.tsx. It was a 2×2 grid of `Stat` tiles inside
+          the panel above, with an empty fourth cell holding the corner open,
+          and its labels were the only ones in the app typed in capitals
+          (`text.micro` uppercases them already, so "WORKOUTS READ" was being
+          shouted twice).
+
+          The eyebrow's note is the pre-formatted local sync time — never
+          derived here, non-negotiable #2 — and it stays in the BODY face, as
+          every other date in this app does: `RunCard` records the reason, that
+          mono would put the words sharing the line into the figure voice. The
+          COUNTS below are mono, tabular and welded to what they count.
+
+          Nothing in this group is a claim about a PERMISSION. Apple never
+          discloses read denial, so these are only ever "what came back", which
+          is the one thing this screen can prove.
+        */}
+        {last ? (
+          <Section label="Last sync" note={lastAt} style={styles.section}>
+            <List>
+              {/* Inert rows: a figure is a fact, and there is no screen under
+                  it. See List.tsx's one non-cosmetic rule. */}
+              <ListRow
+                title="Read from Apple Health"
+                detail={
+                  <Text style={styles.figure}>
+                    {count(last.read.workouts, "workout")}
+                  </Text>
+                }
+              />
+              <ListRow
+                title="Overnight readings"
+                detail={
+                  <Text style={styles.figure}>
+                    {count(last.read.metrics, "day")}
+                  </Text>
+                }
+              />
+              <ListRow
+                title="New to your server"
+                detail={
+                  <Text style={styles.figure}>
+                    {count(last.imported.workouts, "workout")}
+                  </Text>
+                }
+                isLast
+              />
+            </List>
+
+            {/* Refusals, when there were any. Without this the figures above
+                cannot be told apart from a healthy repeat sync: both read N and
+                import 0, and the caption below used to say a zero could only
+                mean "nothing had changed". */}
+            {refused ? (
+              <Text style={styles.problem} accessibilityLiveRegion="polite">
+                Your server refused{" "}
+                {/*
+                  The counts are numerals sitting in prose, so they change FACE
+                  — mono and tabular — while keeping the sentence's size and
+                  colour. The thing counted is welded into the same node ("3
+                  workouts", never "3" + "workouts"); "of readings" is a
+                  qualifier, not a unit, so it stays in the body face.
+                */}
+                {refused.workouts > 0 ? (
+                  <Text style={styles.figure}>
+                    {count(refused.workouts, "workout")}
+                  </Text>
+                ) : null}
+                {refused.workouts > 0 && refused.metrics > 0 ? " and " : ""}
+                {refused.metrics > 0 ? (
+                  <>
+                    <Text style={styles.figure}>
+                      {count(refused.metrics, "day")}
+                    </Text>
+                    {" of readings"}
+                  </>
+                ) : null}{" "}
+                as unreadable. They were not stored, and they are not counted as new.
+              </Text>
+            ) : null}
+
+            {/* The caveat that stops a zero reading as a failure. Its second
+                sentence is only true when nothing was refused. */}
+            <Text style={styles.caption}>
+              &ldquo;New to your server&rdquo; counts only the workouts it had not
+              already stored.
+              {refused ? "" : " Zero means nothing had changed since the last sync."}
+            </Text>
+          </Section>
+        ) : null}
 
         {/* ── Connected sources ────────────────────────────────────────── */}
         {/*
@@ -550,19 +598,10 @@ const styles = StyleSheet.create({
   actionLabel: { ...text.baseSemi, color: color.ink },
 
   /**
-   * `space.xs` + the Panel's 12pt gap puts 16pt above the rule to match the
-   * 16pt below it — the rule reads as a divider between two blocks rather than
-   * as an underline on the button.
+   * The caveat under the figures. `Section` gaps its children by `space.sm`,
+   * which is the right distance for a caption that belongs to the slab above it
+   * rather than following it as a separate thing.
    */
-  figures: {
-    marginTop: space.xs,
-    paddingTop: space.lg,
-    borderTopWidth: ruleWidth,
-    borderTopColor: color.ruleSoft,
-    gap: space.lg,
-  },
-  row: { flexDirection: "row", gap: space.md },
-  cell: { flex: 1 },
   caption: { ...text.meta, color: color.muted },
 
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */

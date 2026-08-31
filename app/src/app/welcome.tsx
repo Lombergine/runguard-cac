@@ -21,12 +21,18 @@
  * this screen exists exactly when there is no session, which is the same
  * question the gate already answers.
  *
- * VOICE. The website sells the coach "See the injury coming before it happens."
- * That is a prediction, and `CLAUDE.md` is explicit that RunGuard is a
- * monitoring signal and never phrases output as diagnosis or forecast — doubly
- * so on the athlete's own screen, where the athlete is a minor. The three cards
- * below carry the site's athlete-facing claims, kept because they are true and
- * checkable, in the app's descriptive voice.
+ * VOICE. The headline and the lede are the design's, verbatim, and they are the
+ * website's own sell. An earlier revision of this file rejected them as a
+ * forecast, on `CLAUDE.md`'s rule that RunGuard never phrases output as
+ * diagnosis. Two things settle it the other way. That rule governs OUTPUT —
+ * what the app says about a particular athlete on a particular day, which is
+ * §Status-and-advisory's territory and is unaffected by anything on this
+ * screen. And the design pairs the claim with the footnote below the actions —
+ * "Not medical advice. RunGuard monitors training load and recovery." — which
+ * is the disclaimer that objection was asking for, placed where the athlete
+ * reads it before they have typed anything. The claim is also checkable: the
+ * app does read Apple Health, and it does tell a coach who is carrying more
+ * load than usual.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -42,7 +48,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 
-import { Card } from "../components/Card";
 import { List, ListRow } from "../components/List";
 import { Section } from "../components/Section";
 import { ApiError, getDemoPairing } from "../lib/api";
@@ -141,25 +146,33 @@ function useEntrance(steps: number, reduced: boolean) {
  */
 const GRID = 24;
 /**
- * Drawn at exactly `text.title`'s line box, so the glyph sits on the card
- * title's own line without a nudge. Derived rather than guessed, and NOT taken
- * from the spacing scale — `space.ts` is explicit that welding a size to a
- * spacing step means a padding change silently reshapes something else.
+ * The tinted disc the glyph sits on, and the glyph drawn inside it.
+ *
+ * Both are derived from TYPE metrics rather than from the spacing scale, which
+ * is the rule this file already followed for its glyph: `space.ts` is explicit
+ * that welding a size to a spacing step means a padding change silently
+ * reshapes something else. The disc takes `text.statLarge`'s line box and the
+ * glyph `text.meta`'s, so a 34pt disc carries a 20pt mark with even air around
+ * it — the design's "small glyph on a tinted disc" at the app's own measures.
  */
-const GLYPH_SIZE = text.title.lineHeight as number;
+const DISC_SIZE = text.statLarge.lineHeight as number;
+const GLYPH_SIZE = text.meta.lineHeight as number;
 
-/** A tick. The check-in is two taps and nothing else. */
-const CHECK = "M4 12.5 L9.5 18 L20 6.5";
 /** Two arcs chasing each other — the workout arriving on its own. */
 const SYNC =
   "M4.5 12 A7.5 7.5 0 0 1 18.4 8.2 M18.9 5 L18.4 8.2 L15.2 8.6 " +
   "M19.5 12 A7.5 7.5 0 0 1 5.6 15.8 M5.1 19 L5.6 15.8 L8.8 15.4";
-/** Two figures, one of them half out of frame: a team, or just you. */
-const TEAM =
-  "M9 10 A3 3 0 1 0 9 4 A3 3 0 1 0 9 10 " +
-  "M3.5 19.5 C3.5 15.8 6 14 9 14 C12 14 14.5 15.8 14.5 19.5 " +
-  "M16.5 6.5 A2.5 2.5 0 1 1 16.5 11.5 " +
-  "M17.5 14.3 C19.7 14.9 20.5 16.8 20.5 19.5";
+/** A tick. The check-in is two taps and nothing else. */
+const CHECK = "M4 12.5 L9.5 18 L20 6.5";
+/**
+ * Three written lines, the last one short.
+ *
+ * Deliberately NOT an eye, a magnifier or anything else from the watching
+ * vocabulary: this point is that the app writes down what it saw and stops
+ * there. A surveillance glyph would say the opposite of the sentence beside it,
+ * and it is the sentence the whole product rests on.
+ */
+const NOTE = "M5 7.5 H19 M5 12 H19 M5 16.5 H12.5";
 
 /**
  * `brandStrong`, not `brand`: a 1.5pt stroke needs the 3:1 floor a drawn
@@ -168,46 +181,49 @@ const TEAM =
  */
 function Glyph({ d }: { d: string }) {
   return (
-    <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
-      <Path
-        d={d}
-        fill="none"
-        stroke={color.brandStrong}
-        strokeWidth={(ruleWidth * GRID) / GLYPH_SIZE}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <View style={styles.disc}>
+      <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
+        <Path
+          d={d}
+          fill="none"
+          stroke={color.brandStrong}
+          strokeWidth={(ruleWidth * GRID) / GLYPH_SIZE}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </View>
   );
 }
 
 /**
- * What the athlete gets, in the order they will meet it.
+ * What the athlete gets, in the order the design puts them in.
  *
  * Three, not five: this screen is read standing up, once. Each is a fact the
- * app can be held to rather than a promise — you can join solo, the figures
- * come from Health, the coach sees the same numbers you do.
+ * app can be held to rather than a promise — the runs really do arrive on their
+ * own, the check-in really is two taps, and the third one is the product's
+ * whole position rather than a feature.
  *
- * A CARD each, with a glyph, a title and one body line, rather than the ruled
- * bullet list this used to be: the design's onboarding sequence is three cards,
- * and a title the eye can land on is what makes the sequence skimmable at
- * arm's length. The claims themselves are unchanged.
+ * ROWS, not cards. This used to be three `Card`s, which put three elevated
+ * surfaces above the primary action and made the list compete with it. The
+ * design draws them as plain rows on the page ground with the tinted disc doing
+ * the marking, so the only raised things on the screen are the two you tap.
  */
 const POINTS = [
-  {
-    glyph: CHECK,
-    title: "Two taps before practice",
-    body: "Check in with how you slept and where you are sore. No typing.",
-  },
   {
     glyph: SYNC,
     title: "Syncs itself",
     body: "Runs arrive from Apple Health the moment a workout ends.",
   },
   {
-    glyph: TEAM,
-    title: "Team or solo",
-    body: "Join a team with a code, or train on your own.",
+    glyph: CHECK,
+    title: "Two taps a day",
+    body: "Sleep, then soreness. That's the whole check-in.",
+  },
+  {
+    glyph: NOTE,
+    title: "Describes, never instructs",
+    body: "It says what was observed. Your coach decides.",
   },
 ] as const;
 
@@ -219,8 +235,8 @@ export default function WelcomeScreen() {
    * One step per thing that arrives, in reading order. Named rather than
    * indexed so reordering the page cannot silently reorder the stagger.
    */
-  const [riseWordmark, riseIntro, risePoints, riseActions, risePolicy] =
-    useEntrance(5, reducedMotion);
+  const [riseWordmark, riseIntro, risePoints, riseActions, riseDemo, risePolicy] =
+    useEntrance(6, reducedMotion);
   /**
    * "off" hides the button entirely. It starts as "idle" and only moves to
    * "off" once the server has actually answered 404 — guessing would either
@@ -278,26 +294,23 @@ export default function WelcomeScreen() {
         <View style={styles.bottom}>
           <Animated.View style={[styles.top, riseIntro]}>
             <Text style={styles.heading} accessibilityRole="header">
-              See how your training is landing.
+              See the injury coming before it happens
             </Text>
             <Text style={styles.lede}>
-              RunGuard watches your training load and how you are recovering,
-              and shows you — and your coach — what it is actually doing to you.
+              RunGuard reads your training from Apple Health, and tells your
+              coach who needs a lighter day — before practice starts.
             </Text>
           </Animated.View>
 
           <Animated.View style={[styles.points, risePoints]}>
             {POINTS.map((point) => (
-              // `Card` carries the radius, the hairline and the one elevation
-              // token, so these three cannot drift from every other card in the
-              // app. The row layout is the only thing set here.
-              <Card key={point.title} style={styles.point}>
+              <View key={point.title} style={styles.point}>
                 <Glyph d={point.glyph} />
                 <View style={styles.pointBody}>
                   <Text style={styles.pointTitle}>{point.title}</Text>
                   <Text style={styles.pointText}>{point.body}</Text>
                 </View>
-              </Card>
+              </View>
             ))}
           </Animated.View>
 
@@ -330,40 +343,75 @@ export default function WelcomeScreen() {
               )}
             </Pressable>
 
-            {/* The other two doors, each a grouped card under its own muted
-                eyebrow — the design's shape, and `Section` so the eyebrow keeps
-                the app's `text.micro` rank rather than growing a second voice.
-                `List` owns the row's press flash and the chevron that promises
-                a screen underneath, so neither is hand-drawn here. */}
-            <Section label="Sign in">
-              <List>
-                <ListRow
-                  title="I already have an account"
-                  onPress={() => router.push("/login")}
-                  chevron
-                  isLast
-                />
-              </List>
-            </Section>
+            {/*
+              The second door, as the design's outlined CTA rather than the
+              eyebrow'd grouped row it was.
+
+              Two buttons is the design's shape and it is also the truer one:
+              signing up and signing in are the same KIND of act, and putting
+              one on a chevron row under a "Sign in" eyebrow ranked it below the
+              demo. Outlined at `ruleWidth`, with no fill and no ember — this
+              screen spends its one accent on the button above, and a second
+              filled button would make neither of them the answer.
+
+              `dim`, not the gradient drop: there is no gradient to drop, and
+              `theme/press` gives a bordered control the opacity fade.
+            */}
+            <Pressable
+              style={({ pressed }) => [styles.secondary, dim(pressed)]}
+              onPress={() => router.push("/login")}
+              accessibilityRole="button"
+            >
+              <Text style={styles.secondaryLabel}>I already have an account</Text>
+            </Pressable>
 
             {/*
-              The demo. Last, and quiet: it is the least committing thing on the
-              screen, not the recommended one.
-
-              It opens a REAL seeded athlete's record read-only — every write the
-              demo makes is kept on this phone and never sent (lib/demo.ts), and
-              the server refuses them independently, so nothing typed here can
-              reach the roster a coach is being shown.
-
-              Hidden entirely when the server has no demo configured, rather than
-              shown and then failing: `getDemoPairing()` 404s when `DEMO_TEAM_ID`
-              is unset, and a button that cannot work is worse than no button.
-
-              While it is opening the row loses its `onPress`, which makes it
-              genuinely inert — no chevron, no flash, no role — rather than a row
-              that still looks followable and is not. That is `List`'s rule, and
-              it is what `disabled` used to approximate here.
+              The design's footnote, and the disclaimer the headline above is
+              held to. Muted and at note rank deliberately: it is a standing
+              condition on the whole screen rather than a warning, and
+              `visual-spec.md` §Status-and-advisory is categorical that nothing
+              in this app is styled to shout.
             */}
+            <Text style={styles.footnote}>
+              Not medical advice. RunGuard monitors training load and recovery.
+            </Text>
+          </Animated.View>
+
+          {/*
+            The demo. Last, and quiet: it is the least committing thing on the
+            screen, not the recommended one.
+
+            It opens a REAL seeded athlete's record read-only — every write the
+            demo makes is kept on this phone and never sent (lib/demo.ts), and
+            the server refuses them independently, so nothing typed here can
+            reach the roster a coach is being shown.
+
+            ONE row. The design offers an athlete demo and a coach demo; there
+            is no coach anything on the phone — `_layout.tsx` has no coach group
+            and `/api/mobile/*` has no coach surface — so a second row would be
+            a door onto nothing.
+
+            The row does NOT name the athlete. The design labels it "Ethan Park,
+            grade 11 — mid-season, shin settling", and this app cannot stand
+            behind any of that: `website/src/lib/demoAthlete.ts` picks whoever
+            `DEMO_ATHLETE_ID` names and falls back to the alphabetically first
+            runner on the demo team, so the name is a deployment setting, and
+            the seed has Ethan in grade 10 rather than 11. Printing an identity
+            the client never resolved is the failure `visual-spec.md` names
+            under "Fails closed" — a surface must never render data with an
+            unconfirmed name attached. What replaces it is the one thing about
+            the demo that is true on every deployment.
+
+            Hidden entirely when the server has no demo configured, rather than
+            shown and then failing: `getDemoPairing()` 404s when `DEMO_TEAM_ID`
+            is unset, and a button that cannot work is worse than no button.
+
+            While it is opening the row loses its `onPress`, which makes it
+            genuinely inert — no chevron, no flash, no role — rather than a row
+            that still looks followable and is not. That is `List`'s rule, and
+            it is what `disabled` used to approximate here.
+          */}
+          <Animated.View style={[styles.demo, riseDemo]}>
             {demoState !== "off" ? (
               <Section label="Or open a demo">
                 <List>
@@ -371,8 +419,9 @@ export default function WelcomeScreen() {
                     title={
                       demoState === "opening"
                         ? "Opening the demo…"
-                        : "Look around first"
+                        : "Athlete demo"
                     }
+                    sub="Someone else's season. Nothing you tap is saved."
                     onPress={demoState === "opening" ? undefined : openDemo}
                     chevron
                     isLast
@@ -431,27 +480,58 @@ const styles = StyleSheet.create({
   bottom: { gap: layout.section },
   top: { gap: space.md },
   wordmark: { ...text.title, color: color.brandText },
+  /**
+   * `text.display`, NOT the design's 34.
+   *
+   * The design sets this headline at 700/34/-0.5, and both of the app's 34pt
+   * display roles are spoken for by name in `type.ts`: `prompt` is the check-in
+   * question "and nothing else", and `largeTitle` is the native stack's
+   * collapsing nav title, explicitly "NOT a role a screen sets on a `Text`".
+   * `text.display`'s own docblock was written for this exact line — "a screen
+   * whose whole job is one sentence… spending [prompt] on a welcome headline
+   * would put the app's loudest type on the one screen an athlete sees once".
+   * It carries the design's weight (800) and its negative tracking; only the
+   * size steps down.
+   */
   heading: { ...text.display, color: color.ink },
   lede: { ...text.base, color: color.ink2 },
 
-  points: { gap: space.md },
-  /**
-   * Layout only — `Card` has already set the ground, the radius, the hairline
-   * and the shadow, and its `style` is merged last so this cannot fight them.
-   * The glyph is drawn at exactly `text.title`'s 24pt line box, so it sits on
-   * the title's own line without a nudge.
-   */
+  points: { gap: space.lg },
+  /** A row on the page ground: disc, then the two lines beside it. */
   point: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  /**
+   * The tinted disc. `accentSoft` is the ember wash — a SHAPE tinted with the
+   * accent, with the mark itself drawn in `brandStrong` on top of it, so
+   * nothing legible ever lands on the 2.01:1 fill.
+   */
+  disc: {
+    width: DISC_SIZE,
+    height: DISC_SIZE,
+    borderRadius: radius.pill,
+    backgroundColor: color.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pointBody: { flex: 1, gap: space.xs },
-  pointTitle: { ...text.title, color: color.ink },
-  pointText: { ...text.base, color: color.ink2 },
+  pointTitle: { ...text.baseSemi, color: color.ink },
+  pointText: { ...text.meta, color: color.ink2 },
 
   /**
-   * `layout.section`, not `target.gap`: the primary action and the two eyebrow'd
-   * groups below it are sections now, not three buttons in a stack, and the
-   * design separates sections rather than crowding them into a tap-target gap.
+   * The two CTAs and their footnote, as one block. `space.md` between them —
+   * they are one decision offered two ways, not two sections, and they still
+   * clear `target.gap`.
    */
-  actions: { gap: layout.section },
+  actions: { gap: space.md },
+  /**
+   * `radius.control`, not the design's 14.
+   *
+   * 14 is `radius.card` — the CONTENT-surface role. Every button in this app
+   * takes `radius.control` (10), including the login screen this one pushes
+   * to, so adopting the design's corner on the three signed-out screens alone
+   * would put two button shapes one tap apart. The same argument holds for the
+   * design's 16pt vertical padding: `target.min` is the app's control height
+   * everywhere. Both are worth changing — as one change, across all of them.
+   */
   primary: {
     minHeight: target.min,
     alignItems: "center",
@@ -463,6 +543,27 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   primaryLabel: { ...text.baseSemi, color: color.ink },
+  /** Outlined at `ruleWidth`, the design's 1.5 — and the app's only line weight. */
+  secondary: {
+    minHeight: target.min,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.lg,
+    borderWidth: ruleWidth,
+    borderColor: color.ruleStrong,
+    borderRadius: radius.control,
+    borderCurve: "continuous",
+  },
+  secondaryLabel: { ...text.baseSemi, color: color.ink },
+  /** The standing disclaimer. Note rank, muted, no fill and no border. */
+  footnote: { ...text.meta, color: color.muted },
+
+  /**
+   * The demo group and the one sentence that explains a failed attempt to open
+   * it, as a single entrance step. `space.md`, not `layout.section`: the error
+   * belongs to the row above it rather than following it as a section.
+   */
+  demo: { gap: space.md },
 
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2 },

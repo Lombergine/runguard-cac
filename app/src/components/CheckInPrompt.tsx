@@ -25,23 +25,42 @@
  * `brandStrong` ground beneath — the idiom `login.tsx`, `welcome.tsx` and the
  * check-in's own Done button already share, and the fallback if the gradient
  * fails to draw.
+ *
+ * ── AND THE INK IS `staticColor`, NOT `color` ───────────────────────────────
+ *
+ * Every glyph on this card reads against the ember gradient, and
+ * `LinearGradient` needs its stops as real strings — so `color.ember` is one
+ * of the few tokens `tokens.ts` deliberately does NOT wrap in
+ * `DynamicColorIOS`. The gradient therefore does not change with the system
+ * appearance. `color.ink` does: it resolves to #F6F2EB in dark mode, which is
+ * the near-white this file's own paragraph above rules out at 1.67:1 on the
+ * lightest stop. The card was rendering its question, its affordance line and
+ * its chevron in exactly that.
+ *
+ * So the three foreground values come from `staticColor`, whose whole purpose
+ * is "a place a dynamic colour cannot go". Measured against stop 0 (#FBBF24),
+ * the lightest ground any of them sits on:
+ *
+ *     staticColor.ink   #221D15   12.4:1     question, affordance, chevron
+ *     staticColor.ink2  #55503F    4.83:1    eyebrow
+ *
+ * The eyebrow was `rgba(34,29,21,0.62)`, the design's own value, which
+ * composites over that stop to #755B1B — **3.85:1**, under the floor. `ink2`
+ * is the same intent (a dark tint, subordinate to the question) at a ratio the
+ * app has actually measured, and it is a token rather than a literal.
  */
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Path } from "react-native-svg";
 
-import { color } from "../theme/tokens";
-import { layout, ruleWidth, space } from "../theme/space";
+import { Chevron } from "./List";
+import { color, shadow, staticColor } from "../theme/tokens";
+import { layout, space } from "../theme/space";
 import { font, text } from "../theme/type";
 
 /** The website's `--ember` stops and its 135°, as everywhere else. */
 const EMBER_STOPS = [0, 0.45, 1] as const;
 const EMBER_START = { x: 0, y: 0 } as const;
 const EMBER_END = { x: 1, y: 1 } as const;
-
-/** Same 24-unit grid and rule weight as the tab bar's glyphs. */
-const GRID = 24;
-const CHEVRON_SIZE = 18;
 
 export type CheckInPromptProps = {
   /**
@@ -76,20 +95,16 @@ export function CheckInPrompt({ dateLabel, onPress }: CheckInPromptProps) {
             <Text style={styles.question}>Anything sore?</Text>
             <View style={styles.cue}>
               <Text style={styles.cueLabel}>Two taps</Text>
-              <Svg
-                width={CHEVRON_SIZE}
-                height={CHEVRON_SIZE}
-                viewBox={`0 0 ${GRID} ${GRID}`}
-              >
-                <Path
-                  d="M9 6l6 6-6 6"
-                  fill="none"
-                  stroke={color.ink}
-                  strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
+              {/*
+                `List`'s exported chevron, not a sixth local copy of the path —
+                the whole point of exporting it (see its note there, and the
+                "One chevron, not four" commit). The design draws every
+                disclosure chevron at 18, which is what that component is.
+                Stroked in the card's own ink rather than the neutral
+                `chevronStroke`, because here it is part of an affordance line
+                on a saturated ground, not chrome pointing at a list row.
+              */}
+              <Chevron stroke={staticColor.ink} />
             </View>
           </View>
         </>
@@ -108,20 +123,36 @@ const styles = StyleSheet.create({
     /* The flat ground the press reveals, and the fallback if the gradient never
        draws — either way the label keeps a real background. */
     backgroundColor: color.brandStrong,
+    /**
+     * The design gives this card a coloured glow. It does not ship: a glow is
+     * emphasis, and `tokens.ts` is explicit that "a shadow is elevation, never
+     * emphasis" — the same call `WeekProgress` and `TodayBlock` already
+     * recorded against the web panels they ported. What the design is right
+     * about is that the card is RAISED, so it takes `shadow.card`, the one
+     * elevation this app has, exactly as every other surface does.
+     */
+    ...shadow.card,
   },
+  /* 20: the design's padding, composed from the scale rather than written as a
+     number — `cardPadding` (16) plus one step. */
   body: { padding: layout.cardPadding + space.xs },
   /**
-   * Ink at 62%, the design's own value. Not `muted`: that token is tuned for
-   * the cream page, and on the ember it would be a different, muddier grey.
+   * A dark tint, subordinate to the question, that does NOT follow the system
+   * appearance — see the header for the measurement.
+   *
+   * `text.micro` rather than the design's 600 12px sans: every eyebrow in this
+   * app is the mono micro role, and taking the sans here would give the app two
+   * eyebrow voices (docs/design-port.md #1). The design's intent — small,
+   * uppercase, muted, tracked — survives.
    */
-  eyebrow: { ...text.micro, color: "rgba(34,29,21,0.62)" },
+  eyebrow: { ...text.micro, color: staticColor.ink2 },
   question: {
     ...text.title,
     fontFamily: font.displayExtra,
     fontSize: 27,
     lineHeight: 31,
     letterSpacing: -0.4,
-    color: color.ink,
+    color: staticColor.ink,
     marginTop: space.sm,
   },
   cue: {
@@ -130,7 +161,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginTop: space.md,
   },
-  cueLabel: { ...text.baseSemi, color: color.ink },
+  cueLabel: { ...text.baseSemi, color: staticColor.ink },
 });
 
 export default CheckInPrompt;

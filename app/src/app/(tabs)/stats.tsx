@@ -1,12 +1,18 @@
 /**
- * Stats — the athlete's own numbers, in the website's order
- * (`website/src/components/athlete/tabs.tsx:428-541`): the body scan, five
- * headline tiles, the week's heart-rate zones, PRs against predicted times, the
- * charts, and the training year.
+ * Stats — the athlete's own numbers, in the design study's order.
+ *
+ * The design draws this screen as four sections: a 2×2 tile grid with no
+ * eyebrow, the week in heart-rate zones, the body scan, and the training year.
+ * Those four ship here in that order. The PR table and the five charts sit
+ * BETWEEN the third and the fourth rather than being dropped: the design's mock
+ * simply has no PRs and no series behind it, and `docs/design-port.md` opens by
+ * saying the design's appearance is authoritative but "its mock data, its fake
+ * API calls and its backend are not". Deleting a year of an athlete's real
+ * numbers because a mockup did not carry them is not a port.
  *
  * THREE THINGS THIS SCREEN IS CAREFUL ABOUT
  *
- * 1. EVERY TILE IS INCAPABLE OF PRINTING A NUMBER IT DOES NOT HAVE. The five
+ * 1. EVERY TILE IS INCAPABLE OF PRINTING A NUMBER IT DOES NOT HAVE. The four
  *    figures are model outputs and rolling windows, not measurements — a
  *    fitness score with no synced running behind it is the model talking to
  *    itself (`lib/types.ts:258`), and a VO₂max is null until a wearable reports
@@ -29,15 +35,25 @@
  *    not anything is ever tapped.
  */
 import { useMemo } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BodyScan } from "../../components/BodyScan";
 import { EXPLAINERS } from "../../components/InfoDot";
 import { Absent } from "../../components/Nothing";
 import { PrTable } from "../../components/PrTable";
+import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { Section } from "../../components/Section";
 import { Tile } from "../../components/Tile";
-import { EMBER_RAMP, YEAR_GRID_HEIGHT, YearGrid } from "../../components/YearGrid";
+import { YEAR_GRID_HEIGHT, YearGrid } from "../../components/YearGrid";
 import { AcwrChart } from "../../components/charts/AcwrChart";
 import { FitnessChart } from "../../components/charts/FitnessChart";
 import { LoadChart } from "../../components/charts/LoadChart";
@@ -49,9 +65,8 @@ import type { Badge, Profile, ZoneMinutes } from "../../lib/types";
 import { formatDistance } from "../../lib/units";
 import { layout, radius, space, target } from "../../theme/space";
 import { Card } from "../../components/Card";
-import { Panel } from "../../components/Panel";
 import { dim } from "../../theme/press";
-import { color } from "../../theme/tokens";
+import { color, emberRamp, emberRampDark } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
 /**
@@ -74,10 +89,7 @@ const ZONES = ["z1", "z2", "z3", "z4", "z5"] as const;
  * THIS IS THE ONE FRAGILE READ ON THE SCREEN and it is fragile at the source,
  * not here: the server ships the streak only as English inside a badge caption
  * — `detail: \`Longest streak: ${bestStreak} days\`` (engine.ts:656) — so both
- * surfaces have to take a sentence apart to get the number back out. The
- * website does it with `.replace("Longest streak: ", "")`, which means a
- * one-word edit to that caption silently turns its tile into the whole
- * sentence rendered as a value.
+ * surfaces have to take a sentence apart to get the number back out.
  *
  * So: match the DIGITS rather than the prose around them, and treat anything
  * that does not match — a missing badge, a reworded caption, a payload without
@@ -85,8 +97,7 @@ const ZONES = ["z1", "z2", "z3", "z4", "z5"] as const;
  * zero, because "you have never trained two days running" is a claim about the
  * athlete and this is only a claim about a string.
  *
- * The real fix is a numeric field on the payload. See the report for this
- * stage; if one lands, delete this function and read it.
+ * The real fix is a numeric field on the payload; if one lands, delete this.
  */
 function longestStreak(badges: Badge[] | undefined): string | null {
   const detail = badges?.find((b) => b.id === "streak7")?.detail;
@@ -99,24 +110,22 @@ function longestStreak(badges: Badge[] | undefined): string | null {
 }
 
 /**
- * The screen header. `stale` adds ONE quiet line when a refetch failed over
- * numbers already on the glass; the whole-page failure stays reserved for
- * having nothing at all.
+ * The screen's own chrome now lives in `ScreenHeader` above the scroller — the
+ * design's pinned title and subtitle, which no longer scrolls away. What is
+ * left here is the one line that is not chrome: a stale-data notice, which
+ * belongs with the numbers it is qualifying rather than in a header that is
+ * always on screen.
+ *
+ * The eyebrow ("Your numbers") went with it. The design puts no eyebrow above a
+ * screen title, and it was naming the same thing the title does.
  */
 function Header({ stale }: { stale?: boolean }) {
+  if (!stale) return null;
   return (
     <View style={styles.header}>
-      <Text style={styles.eyebrow}>Your numbers</Text>
-      <Text style={styles.heading}>Stats</Text>
       <Text style={styles.note}>
-        Fitness, load and heart rate — and the year behind them.
+        Could not reach your server just now. These are the numbers last loaded.
       </Text>
-      {stale ? (
-        <Text style={styles.note}>
-          Could not reach your server just now. These are the numbers last
-          loaded.
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -125,85 +134,87 @@ function Header({ stale }: { stale?: boolean }) {
  * Time in each heart-rate zone over the last seven days.
  *
  * The bar wears the SAME five-rung ember ramp as the training year at the foot
- * of this screen (`components/YearGrid`) rather than the website's five
- * separate hues. Two five-step encodings of "how hard" on one screen would be
- * two visual languages for one idea, the ramp is monotonic in greyscale where
+ * of this screen (`theme/tokens`) rather than the website's five separate hues.
+ * Two five-step encodings of "how hard" on one screen would be two visual
+ * languages for one idea, the ramp is monotonic in greyscale where
  * blue→green→amber→orange→red is not, and the status tokens stay where they
  * belong: on verdicts, never on chrome.
  *
- * A zone at zero minutes is a measured zero and prints `0 min`. The whole panel
- * only goes Absent when there is nothing at all — no `load` leg, or no
+ * The ramp is picked with `useColorScheme()` for the same reason `YearGrid`
+ * picks it that way: these are plain flex views, not SVG paint, so unlike the
+ * charts they can follow the system appearance — and if only one of the two
+ * surfaces did, the screen would band the same idea two different ways in dark
+ * mode.
+ *
+ * A zone at zero minutes is a measured zero and prints `0 min`. The whole
+ * section only goes Absent when there is nothing at all — no `load` leg, or no
  * heart-rate minutes recorded all week, which is what a week of runs synced
  * without a strap looks like.
  */
 function HrZones({ zones }: { zones: ZoneMinutes | undefined }) {
+  const ramp = useColorScheme() === "dark" ? emberRampDark : emberRamp;
+
   // Rounded once, here, and summed from the rounded parts — so the total in
   // the note is always exactly the five figures in the legend added up.
   const minutes = ZONES.map((z) => Math.round(zones?.[z] ?? 0));
   const total = minutes.reduce((s, m) => s + m, 0);
 
   return (
-    <Panel
-      title="Time in HR zones"
+    <Section
+      /* The design's eyebrow, whole: "Time in HR zones · last 7 days". It is a
+         label ABOVE the card, not a title inside it — the two heading ranks
+         Section and Panel exist to keep apart. */
+      label="Time in HR zones · last 7 days"
       /* The total is a figure sitting in prose. It changes FACE, not colour —
          mono and tabular inside the note's own body text, with the unit welded
          into the same node. */
-      note={
-        total > 0 ? (
-          <>
-            <Text style={styles.figure}>{`${total} min`}</Text>
-            {" · last 7 days"}
-          </>
-        ) : (
-          "last 7 days"
-        )
-      }
+      note={total > 0 ? <Text style={styles.figure}>{`${total} min`}</Text> : undefined}
+      style={styles.section}
     >
-      {zones === undefined || total === 0 ? (
-        <Absent label="No heart-rate minutes recorded this week." />
-      ) : (
-        <>
-          <View
-            style={styles.zoneBar}
-            accessible
-            accessibilityRole="image"
-            accessibilityLabel={`Time in heart-rate zones, last 7 days. ${ZONES.map(
-              (z, i) => `${z.toUpperCase()} ${minutes[i]} minutes`,
-            ).join(", ")}. ${total} minutes total.`}
-          >
-            {ZONES.map((z, i) =>
-              minutes[i] > 0 ? (
-                <View
-                  key={z}
-                  style={{ flex: minutes[i], backgroundColor: EMBER_RAMP[i] }}
-                />
-              ) : null,
-            )}
-          </View>
+      <Card style={styles.zoneCard}>
+        {zones === undefined || total === 0 ? (
+          <Absent label="No heart-rate minutes recorded this week." />
+        ) : (
+          <>
+            <View
+              style={styles.zoneBar}
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel={`Time in heart-rate zones, last 7 days. ${ZONES.map(
+                (z, i) => `${z.toUpperCase()} ${minutes[i]} minutes`,
+              ).join(", ")}. ${total} minutes total.`}
+            >
+              {/* Five segments, contiguous — no gap between them. A zone with
+                  no minutes takes `flex: 0` and so takes no width at all,
+                  rather than being drawn as a sliver of a load that did not
+                  happen. */}
+              {ZONES.map((z, i) => (
+                <View key={z} style={{ flex: minutes[i], backgroundColor: ramp[i] }} />
+              ))}
+            </View>
 
-          {/* The legend IS the readout. Every zone prints its own minutes,
-              welded, because the website's hover title has no phone. */}
-          <View style={styles.legend}>
-            {ZONES.map((z, i) => (
-              <View key={z} style={styles.legendItem}>
-                <View
-                  style={[styles.swatch, { backgroundColor: EMBER_RAMP[i] }]}
-                />
-                <Text style={styles.legendValue}>
-                  {`${z.toUpperCase()} · ${minutes[i]} min`}
-                </Text>
-              </View>
-            ))}
-          </View>
+            {/* The legend IS the readout. Every zone prints its own minutes,
+                welded, because the website's hover title has no phone. */}
+            <View style={styles.legend}>
+              {ZONES.map((z, i) => (
+                <View key={z} style={styles.legendItem}>
+                  <View style={[styles.swatch, { backgroundColor: ramp[i] }]} />
+                  <Text style={styles.legendValue}>
+                    {`${z.toUpperCase()} · ${minutes[i]} min`}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
-          <Text style={styles.note}>
-            <Text style={styles.figure}>Z1</Text> is your easiest running,{" "}
-            <Text style={styles.figure}>Z5</Text> your hardest. Runs synced
-            without heart rate are not counted here.
-          </Text>
-        </>
-      )}
-    </Panel>
+            <Text style={styles.note}>
+              <Text style={styles.figure}>Z1</Text> is your easiest running,{" "}
+              <Text style={styles.figure}>Z5</Text> your hardest. Runs synced
+              without heart rate are not counted here.
+            </Text>
+          </>
+        )}
+      </Card>
+    </Section>
   );
 }
 
@@ -211,6 +222,7 @@ export default function StatsScreen() {
   // Shared `/me`, and with it the single 401 path: a revoked token ends the
   // session from inside the store (lib/profileStore), never from a screen.
   const { profile: shared, state, refreshing, refresh } = useProfile();
+  const actions = useTabHeaderActions();
   const profile: Profile | null = shared;
   const failed = state === "failed";
 
@@ -236,8 +248,12 @@ export default function StatsScreen() {
   if (failed && profile === null) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScreenHeader
+          title="Stats"
+          subtitle="Fitness, load and the year behind them"
+          actions={actions}
+        />
         <View style={styles.page}>
-          <Header />
           <Card>
             <Text style={styles.failed}>
               {"Your stats could not be loaded. The RunGuard server could not be reached."}
@@ -262,19 +278,29 @@ export default function StatsScreen() {
   if (profile === null) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScreenHeader
+          title="Stats"
+          subtitle="Fitness, load and the year behind them"
+          actions={actions}
+        />
         <ScrollView contentContainerStyle={styles.page}>
-          <Header />
           <View style={styles.sections}>
+            {/* The 2×2 grid, both rows. */}
+            <View style={styles.tileGrid}>
+              <View style={styles.tileRow}>
+                <View style={[styles.skeleton, styles.skeletonTile]} />
+                <View style={[styles.skeleton, styles.skeletonTile]} />
+              </View>
+              <View style={styles.tileRow}>
+                <View style={[styles.skeleton, styles.skeletonTile]} />
+                <View style={[styles.skeleton, styles.skeletonTile]} />
+              </View>
+            </View>
+            <View style={[styles.skeleton, styles.skeletonPanel]} />
             {/* The body scan. Its drawn height is the component's own; when
                 components/BodyScan exports one, reserve from that constant
                 rather than from this block. */}
             <View style={[styles.skeleton, styles.skeletonScan]} />
-            <View style={styles.tileGrid}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <View key={i} style={[styles.skeleton, styles.skeletonTile]} />
-              ))}
-            </View>
-            <View style={[styles.skeleton, styles.skeletonPanel]} />
             <View style={[styles.skeleton, styles.skeletonPanel]} />
             <View style={[styles.skeleton, styles.skeletonYear]} />
           </View>
@@ -293,6 +319,11 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <ScreenHeader
+        title="Stats"
+        subtitle="Fitness, load and the year behind them"
+        actions={actions}
+      />
       <ScrollView
         contentContainerStyle={styles.page}
         /* Pull to refetch. Nothing below dims while it runs: a figure that
@@ -304,27 +335,22 @@ export default function StatsScreen() {
         <Header stale={failed} />
 
         <View style={styles.sections}>
-          {/* 1. Body scan — open injuries and today's reported soreness. */}
-          <BodyScan
-            injuries={profile.injuries ?? []}
-            soreness={profile.todaySoreness}
-          />
-
           {/*
-            2. The five headline figures.
+            1. The four headline figures, 2×2 and DELIBERATELY WITHOUT AN
+            EYEBROW — the design opens the screen on the numbers themselves,
+            and a label over them would only repeat the screen title.
 
             Each carries the website's explainer on an `info` dot beside its
-            label (`tabs.tsx:448`, `:454`, `:460`, `:466`, `:471`). The copy is
-            in `components/InfoDot`'s `EXPLAINERS`, not inline here, so the two
-            surfaces can be diffed in one pass. Nothing in this grid moved to
-            make room: the dot is drawn at the micro line height, so the label
-            row is the height it always was.
+            label (`tabs.tsx:448`, `:454`, `:460`, `:466`). The copy is in
+            `components/InfoDot`'s `EXPLAINERS`, not inline here, so the two
+            surfaces can be diffed in one pass.
+
+            Explicit rows rather than a wrapping grid: `Tile` is `flex: 1`, so a
+            row of two is two equal columns that finish at the same height —
+            which a `flexBasis` wrap does not guarantee once one label wraps.
           */}
           <View style={styles.tileGrid}>
-            {/* `Tile` is `flex: 1` and takes no style prop, so the two-up
-                geometry lives in these wrappers: without a flex BASIS all five
-                would share one row. */}
-            <View style={styles.tileCell}>
+            <View style={styles.tileRow}>
               <Tile
                 label="Fitness score"
                 info={EXPLAINERS.fitnessScore}
@@ -339,8 +365,6 @@ export default function StatsScreen() {
                     : undefined
                 }
               />
-            </View>
-            <View style={styles.tileCell}>
               <Tile
                 label="VO₂max"
                 info={EXPLAINERS.vo2max}
@@ -355,17 +379,18 @@ export default function StatsScreen() {
                 sub="Apple Cardio Fitness"
               />
             </View>
-            <View style={styles.tileCell}>
+            <View style={styles.tileRow}>
               <Tile
                 label="Week TRIMP"
                 info={EXPLAINERS.weekTrimp}
                 value={profile.load ? `${profile.load.weekTrimp} TRIMP` : null}
                 sub="training impulse, last 7 days"
               />
-            </View>
-            <View style={styles.tileCell}>
               <Tile
-                label="7-day mi"
+                /* The design names this tile "7-day distance", not "7-day mi".
+                   The unit is already welded to the value, so spelling it in
+                   the label too said it twice. */
+                label="7-day distance"
                 info={EXPLAINERS.sevenDayMi}
                 /* A rolling window, not since Monday.
 
@@ -388,32 +413,24 @@ export default function StatsScreen() {
                 }
               />
             </View>
-            <View style={styles.tileCell}>
-              <Tile
-                label="Longest streak"
-                info={EXPLAINERS.longestStreak}
-                /* Read out of a badge caption — see longestStreak().
-
-                   Gated as well, because the parse cannot tell the two zeros
-                   apart. `computeBadges` (engine.ts:636-643, 656) always ships
-                   four badges, and with no synced running the caption is the
-                   well-formed sentence "Longest streak: 0 days" — which the
-                   digit match reads perfectly and turns into "0 days". That is
-                   the claim "you have never trained two days running" made
-                   about an athlete nothing is known about, which the note on
-                   longestStreak() says this tile must never make. Past the
-                   gate a real 0 stays a 0: no runs in 120 days is a fact. */
-                value={hasHistory ? longestStreak(profile.badges) : null}
-                sub="in a row · last 120 days"
-              />
-            </View>
           </View>
 
-          {/* 3. Heart-rate zones. */}
+          {/* 2. Heart-rate zones. */}
           <HrZones zones={profile.load?.weekZones} />
 
+          {/* 3. Body scan — open injuries and today's reported soreness. It
+                 draws its own head ("Body scan" · "N areas flagged"), which is
+                 the design's eyebrow one rank down and inside the card. See the
+                 report: giving it a Section label here would print the same
+                 words twice and would mean counting the flagged areas a second
+                 time, in a second place, from the same two lists. */}
+          <BodyScan
+            injuries={profile.injuries ?? []}
+            soreness={profile.todaySoreness}
+          />
+
           {/*
-            4. PRs against what the model thinks you would run today.
+            PRs against what the model thinks you would run today.
 
             UNCONDITIONAL. There used to be a fallback Panel here for the empty
             case, and it was worse than nothing twice over: `PrTable` already
@@ -426,7 +443,7 @@ export default function StatsScreen() {
           <PrTable prs={prs} predictions={predictions} />
 
           {/*
-            5. THE CHARTS. Each owns its own Panel — do not wrap them.
+            THE CHARTS. Each owns its own Panel — do not wrap them.
 
             `risk.series` for the last two, NOT the top-level `series`: /me trims
             that copy to `{date, load, km, acwr}`, and a row missing `acute`
@@ -451,8 +468,23 @@ export default function StatsScreen() {
           <AcwrChart series={profile.risk.series} />
           <LoadChart series={profile.risk.series} />
 
-          {/* 6. The training year. */}
+          {/* 4. The training year. Like the body scan it carries its own head
+                 ("Your training year"), so it takes no Section label here.
+                 
+                 The streak sits with it rather than in the tile grid above:
+                 the design's grid is 2×2 and a fifth tile leaves a hole in the
+                 last row, which reads as a tile that failed to load. Beside a
+                 year of days is also where a run of consecutive days means
+                 something. */}
           <YearGrid days={profile.calendar ?? []} restDays={restDays} />
+          <Tile
+            label="Longest streak"
+            info={EXPLAINERS.longestStreak}
+            /* Read out of a badge caption — see longestStreak(). Gated on
+               history so an unread caption renders "not recorded" rather than
+               a zero the athlete never earned. */
+            value={hasHistory ? longestStreak(profile.badges) : null}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -474,10 +506,9 @@ const styles = StyleSheet.create({
     paddingBottom: layout.section,
   },
   sections: { gap: layout.section },
+  section: { gap: space.md },
 
   header: { marginBottom: layout.section },
-  eyebrow: { ...text.micro, color: color.muted },
-  heading: { ...text.title, color: color.ink, marginTop: space.xs },
   note: { ...text.meta, color: color.muted, marginTop: space.sm },
   /**
    * A numeral inside a sentence. FACE ONLY — no size, no colour — so it
@@ -485,7 +516,6 @@ const styles = StyleSheet.create({
    * figure inside it stays mono and tabular (non-negotiable #3).
    */
   figure: { ...tabular, fontFamily: font.mono },
-
 
   failed: { ...text.base, color: color.ink2 },
   /** Ember FILL with an ink glyph on it — `brand` is 2.01:1 and takes no word. */
@@ -501,35 +531,32 @@ const styles = StyleSheet.create({
   },
   retryLabel: { ...text.baseSemi, color: color.ink },
 
-  /** Two columns; the fifth tile takes the last row on its own, as on the web. */
-  tileGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.md,
-  },
-  /**
-   * 47%, not 50%: two of these plus the 12px gap have to fit inside 320pt of
-   * content at the 360pt floor, and 47% leaves the margin to do it. `flexGrow`
-   * then lets a pair fill the row, and the odd fifth tile take a row alone.
-   */
-  tileCell: { flexBasis: "47%", flexGrow: 1 },
+  /** Two rows of two. `Tile` is `flex: 1`, so each row is 1fr 1fr. */
+  tileGrid: { gap: space.md },
+  tileRow: { flexDirection: "row", gap: space.md },
 
   /* ── HR zones ─────────────────────────────────────────────────────── */
+  /** The card's own `gap`, the way `Panel` spaces its children. */
+  zoneCard: { gap: space.md },
   zoneBar: {
     flexDirection: "row",
     height: space.xl,
-    borderRadius: radius.control,
+    /* `radius.chip` — space.ts names this bar as one of its two callers. */
+    borderRadius: radius.chip,
     borderCurve: "continuous",
-    // The unfilled remainder is the sunken well, so a short week reads as a
-    // short bar rather than as a full one at low intensity.
-    backgroundColor: color.well,
+    /*
+     * The unfilled remainder is the iOS neutral fill, so a short week reads as
+     * a short bar rather than as a full one at low intensity. `fill` rather
+     * than `well`: this is an inert track under a control-like bar, which is
+     * exactly what that token is for, and it is the one the design uses.
+     */
+    backgroundColor: color.fill,
     overflow: "hidden",
   },
   legend: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: space.md,
-    marginTop: space.md,
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
   swatch: {
@@ -553,12 +580,8 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
   },
   skeletonScan: { height: space.xxxl * 4 },
-  skeletonTile: {
-    // Matches the tile grid's own two-up geometry: half the row, less the gap.
-    flexBasis: "47%",
-    flexGrow: 1,
-    height: TILE_HEIGHT,
-  },
+  /** Half a row, less the gap — the same geometry the tile grid draws. */
+  skeletonTile: { flex: 1, height: TILE_HEIGHT },
   skeletonPanel: { height: space.xxxl * 3 },
   /** The grid's exact drawn height plus the panel's title row and padding. */
   skeletonYear: {

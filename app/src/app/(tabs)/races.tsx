@@ -1,15 +1,18 @@
 /**
  * Races — what is coming, and what has already been run.
  *
- * Sunrise skin: cream ground, white cards, and the ember reserved for two jobs —
- * the gradient strip on a race that is nearly here, and the split markers in the
- * pacing plan. A PR is still a plain two-letter label, not a badge, a medal or a
- * fill: the screen is a printed results sheet, not a trophy cabinet, and that
- * call survives the re-skin.
+ * Sunrise skin: cream ground, white cards, and the ember reserved for three
+ * jobs — the gradient strip on a race that is nearly here, the countdown tile
+ * on that same race, and the split markers in the pacing plan. All three are
+ * gated on the SAME seven-day window, so a season's worth of scheduled races
+ * still spends the accent exactly once. A PR is still a plain two-letter label,
+ * not a badge, a medal or a fill: the screen is a printed results sheet, not a
+ * trophy cabinet, and that call survives the re-skin.
  *
- * Every block follows the website's Panel hierarchy (`website/src/components/
- * athlete/tabs.tsx:22`): title on the left, a muted note on the right carrying
- * the caveat, then the content.
+ * Groups are labelled with `Section` — the label above the card, at
+ * `text.micro`. `Panel`'s in-card title rank (`website/src/components/athlete/
+ * tabs.tsx:22`) is not used here any more; the last of it was the pacing
+ * block's own heading.
  *
  * HONESTY: `race.predicted` is a model output, not a measurement. With no synced
  * activity it is the model talking to itself, so — exactly as the website does
@@ -59,11 +62,23 @@ import { font, tabular, text } from "../../theme/type";
  */
 const IMMINENT_DAYS = 7;
 
-/** "in 12 days", welded, in one node. Today and tomorrow read as words. */
+/**
+ * "12 days", welded, in ONE node. Today and tomorrow read as words.
+ *
+ * The design's countdown block stacks a bare `700 24px` numeral over a
+ * `600 10px` uppercase "days". That is exactly the shape non-negotiable #3
+ * forbids — "never a bare numeral next to a unit elsewhere in the layout" — so
+ * the two halves stay welded and the tile holds one node. Its hierarchy
+ * survives: the figure is still the largest thing in the block, in the ember,
+ * on the ember wash.
+ *
+ * "in " is dropped, because in the tile the preposition is what a caption would
+ * carry, not the figure.
+ */
 function countdownLabel(daysUntil: number): string {
   if (daysUntil <= 0) return "today";
   if (daysUntil === 1) return "tomorrow";
-  return `in ${daysUntil} days`;
+  return `${daysUntil} days`;
 }
 
 /** 3 → "3rd". The ordinal is welded to the numeral, never rendered apart. */
@@ -110,30 +125,54 @@ function Header({ stale }: { stale?: boolean }) {
   );
 }
 
-/** The Panel hierarchy: title left, caveat right, content below. */
 /**
  * The split-by-split plan. Server-composed sentences, rendered as description —
  * markers are shapes, so the block never reads as a set of orders.
  *
  * Only ever mounted when the prediction is trustworthy; see `UpcomingCard`.
+ * `race.pacing` is the server's; nothing here composes a line, and an empty
+ * array renders nothing at all rather than an invented plan.
+ *
+ * A LABELLED GROUP, on the shared `Section`, where it used to carry a local
+ * `text.baseSemi` title of its own. That rank is a panel title — it names the
+ * one surface it is drawn on — and this names a group of rows, which is
+ * `Section`'s job and the rank the design draws here.
+ *
+ * IT STAYS INSIDE ITS RACE'S CARD. The design's screen has exactly one upcoming
+ * race, so it can put the pacing group between the hero and the PRs; this
+ * screen renders a card per upcoming race, and a screen-level group could only
+ * serve one of them. Lifting it out would silently drop the plan for every race
+ * but the next. So the design's rank is adopted and its position is not.
  */
 function Pacing({ lines, predicted }: { lines: string[]; predicted: string }) {
   return (
-    <View style={styles.pacing}>
-      <View style={styles.panelHead}>
-        <Text style={styles.pacingTitle}>Pacing strategy</Text>
-        <Text style={styles.pacingNote}>{`from your predicted ${predicted}`}</Text>
-      </View>
+    <Section
+      label="Pacing strategy"
+      /* A NODE, because the caveat is a figure: the predicted time is mono and
+         tabular like every other numeral in the app. */
+      note={
+        <>
+          {"from your predicted "}
+          <Text style={styles.figure}>{predicted}</Text>
+        </>
+      }
+      style={styles.pacing}
+    >
       {lines.map((line, i) => (
-        <View key={i} style={styles.splitRow}>
-          {/* A shape, not a glyph: `brand` is a fill token and unreadable as type. */}
-          <View style={styles.splitMarkCol}>
-            <View style={styles.splitMark} />
+        <View key={i}>
+          {/* BETWEEN rows only — a rule above the first or below the last reads
+              as a clipped row. See docs/design-port.md, structure 6. */}
+          {i > 0 ? <View style={styles.splitRule} pointerEvents="none" /> : null}
+          <View style={styles.splitRow}>
+            {/* A shape, not a glyph: `brand` is a fill token and unreadable as type. */}
+            <View style={styles.splitMarkCol}>
+              <View style={styles.splitMark} />
+            </View>
+            <Text style={styles.splitText}>{line}</Text>
           </View>
-          <Text style={styles.splitText}>{line}</Text>
         </View>
       ))}
-    </View>
+    </Section>
   );
 }
 
@@ -159,11 +198,29 @@ function UpcomingCard({
         />
       ) : null}
       <View style={styles.upcomingBody}>
-        <View style={styles.panelHead}>
+        {/*
+          The design's countdown block: a rounded tile holding the figure.
+
+          Its wash and its figure are gated on `soon`, the same window the ember
+          strip above uses. The design paints every countdown in the accent;
+          this screen's own rule is that the ember has two jobs here — the strip
+          on a race that is nearly here, and the split markers — and a third
+          ember on every card in a season's worth of races is exactly the
+          rationing § "Colour is rationed" rules out. A race months away gets
+          the neutral system fill instead, so the tile is still a tile and the
+          colour still means "this one is close".
+
+          `brandText`, never `brand`: the fill is 2.01:1 and this is a word.
+          #976106 on `accentSoft` measures 4.51:1, and on `fill` over `card`
+          `ink2` is far clear of the floor.
+        */}
+        <View style={styles.heroHead}>
           <Text style={styles.title}>{race.name}</Text>
-          <Text style={soon ? styles.countdownSoon : styles.countdown}>
-            {countdownLabel(race.daysUntil)}
-          </Text>
+          <View style={soon ? styles.countdownTileSoon : styles.countdownTile}>
+            <Text style={soon ? styles.countdownSoon : styles.countdown}>
+              {countdownLabel(race.daysUntil)}
+            </Text>
+          </View>
         </View>
         {/*
           Everything known about WHERE and WHEN, joined at render.
@@ -600,31 +657,67 @@ const styles = StyleSheet.create({
     // The squircle iOS draws, matching the Card corner this strip caps.
     borderCurve: "continuous",
   },
-  /** The Panel row: title left, note right, baselines shared, wraps at 360px. */
-  panelHead: {
+  /**
+   * The hero row: the race's name left, the countdown tile right.
+   *
+   * `flex-start`, not the baseline the panel head shared: the right-hand child
+   * is now a tile rather than a line of type, and a baseline-aligned box hangs
+   * its bottom edge off the title's baseline. Still wrapping, so a long name
+   * drops the tile to its own line at 360pt rather than squeezing it.
+   */
+  heroHead: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     flexWrap: "wrap",
     gap: space.md,
     marginTop: space.xs,
   },
   upcomingBody: { padding: layout.cardPadding },
-  countdown: { ...text.micro, color: color.muted },
-  /** brandText, not brand: 5.21:1 on `card`, against 2.01:1 for the fill. */
-  countdownSoon: { ...text.micro, color: color.brandText },
+  /**
+   * The countdown tile. `radius.card` and the 4px scale, not the design's
+   * literal 18 and 18 — the theme is the single source (app/CLAUDE.md), and a
+   * one-off 18 welds this corner to nothing else on the screen.
+   */
+  countdownTile: {
+    backgroundColor: color.fill,
+    borderRadius: radius.card,
+    borderCurve: "continuous",
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  countdownTileSoon: {
+    backgroundColor: color.accentSoft,
+    borderRadius: radius.card,
+    borderCurve: "continuous",
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  /**
+   * `text.stat` — 22 mono, tabular. The design sets this figure at `700 24px`
+   * sans; every numeral in this app is mono and tabular, and `stat` is the rank
+   * the port maps that role onto (docs/design-port.md, type 3).
+   */
+  countdown: { ...text.stat, color: color.ink2 },
+  /** brandText, not brand: 4.51:1 on `accentSoft`, against 2.01:1 for the fill. */
+  countdownSoon: { ...text.stat, color: color.brandText },
   upcomingStats: { flexDirection: "row", gap: space.xxl, marginTop: space.lg },
   predictedAbsent: { marginTop: space.lg },
 
   pacing: {
     marginTop: space.lg,
-    paddingTop: space.xs,
+    paddingTop: space.md,
     borderTopWidth: ruleWidth,
     borderTopColor: color.ruleSoft,
   },
-  pacingTitle: { ...text.baseSemi, color: color.ink },
-  pacingNote: { ...text.micro, color: color.muted, flexShrink: 1 },
-  splitRow: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
+  splitRow: {
+    flexDirection: "row",
+    gap: space.sm,
+    paddingVertical: space.md,
+  },
+  /** BETWEEN split rows only. Full width of the block, which is already inset
+      by the card's own padding. */
+  splitRule: { height: ruleWidth, backgroundColor: color.ruleSoft },
   /** Centres the marker on the first line without hardcoding an offset. */
   splitMarkCol: {
     height: text.meta.lineHeight,

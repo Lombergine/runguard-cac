@@ -9,11 +9,11 @@
  *
  * ── THE SHAPE, FROM THE DESIGN STUDY ────────────────────────────────────────
  *
- * A vertical stack of labelled groups and nothing else: a muted uppercase
- * eyebrow, then a card of rows. Every eyebrow goes through `Section` and every
- * card through `Card` — neither is drawn here, because a hand-drawn heading is
- * exactly how this app ended up with three different section sizes once
- * already (`components/Section.tsx`).
+ * An identity header — avatar, name, one meta line — and then a vertical stack
+ * of labelled groups: a muted uppercase eyebrow, then a card of rows. Every
+ * eyebrow goes through `Section` and every card through `Card` — neither is
+ * drawn here, because a hand-drawn heading is exactly how this app ended up
+ * with three different section sizes once already (`components/Section.tsx`).
  *
  * This REPLACES the `Panel` stack the screen shipped with. `Panel` puts its
  * title INSIDE the card, which is the website's shape and the right one for a
@@ -30,7 +30,15 @@
  *  - Separators run BETWEEN rows only. The design emits one after the last row
  *    too, which reads as a clipped row above the card's bottom edge.
  *  - The screen title lives in the native header (`useScreenHeader`), so the
- *    design's subtitle is the one line of page content that is not a group.
+ *    design's subtitle and its identity header are the only page content that
+ *    is not a labelled group.
+ *  - The design's four groups are five here. Max heart rate and Season goals
+ *    keep their own labels rather than folding into "Training": one carries a
+ *    group-level action and the server's provenance sentence, the other is
+ *    three states per goal. See the "Training" group at the call site.
+ *  - No "Edit" pill, no "Export my data", no "Pair another device", no "Last
+ *    sync", no second "Sign out". Each is a control for something this app
+ *    cannot do; see docs/design-port.md rows 22, 25 and 26.
  *
  * ── THREE DEPARTURES FROM THE WEBSITE'S `ProfileTab` ────────────────────────
  * (website/src/components/athlete/tabs.tsx ~:760)
@@ -73,7 +81,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 
 import {
@@ -88,8 +96,10 @@ import { Section } from "../components/Section";
 import { MentalChart } from "../components/charts/MentalChart";
 import { ApiError, joinTeam, leaveTeam, setHrMax } from "../lib/api";
 import { useProfile } from "../lib/profileStore";
+import { fitnessKnown } from "../lib/readiness";
 import { useSession } from "../lib/session";
 import type { Profile } from "../lib/types";
+import { fmtMiles } from "../lib/units";
 import { useScreenHeader } from "../theme/header";
 import { dim } from "../theme/press";
 import { color } from "../theme/tokens";
@@ -122,6 +132,76 @@ function explain(err: unknown, fallback: string): string {
  * ------------------------------------------------------------------ */
 
 /**
+ * Who this is. The design's header row, and the one thing on this screen that
+ * is not a labelled group.
+ *
+ * The name was a `FactRow` reading "Name / Aria N.", which is how you render a
+ * field and not how you render a person. It is the subject of the screen, so it
+ * gets the display face and the avatar beside it, and the facts that identify
+ * rather than describe — grade and school — drop out of the Athlete group into
+ * the one muted line under it.
+ *
+ * THREE THINGS THE DESIGN PUTS HERE AND THIS DOES NOT:
+ *
+ *  - The "Edit" pill. Nothing on this screen is editable from the phone (see
+ *    `FactRow`), and there is no athlete-facing PATCH for name, grade or school.
+ *    A pill that opens nothing is the same lie as a chevron on an inert row.
+ *  - A 62pt avatar. `target.min + space.md` is 60 — the 4px scale's neighbour,
+ *    and `space.ts` is the single source for a size.
+ *  - A photo, and any per-athlete colour from `athlete.hue`. § Imagery is
+ *    explicit: "initials in circles instead of photos", and colour is rationed
+ *    to about three appearances per screen. A tinted circle would spend one of
+ *    them on decoration and start a second accent system beside the ember.
+ *
+ * The meta line is assembled from the parts that are present and simply omits
+ * the ones that are not. That is not the absent/zero collapse: a strapline
+ * makes no claim to be complete, where a row labelled "Grade" with nothing
+ * beside it does — which is why grade keeps a `—`/"Not recorded" row on the
+ * coach's side of the app and gets no such treatment here.
+ *
+ * `tier` is deliberately NOT in this line, though the design's is. It is a
+ * bucket of a score that is fabricated when there is no qualifying training
+ * (`fitnessKnown`), so it needs a caveat, and a strapline has nowhere to put
+ * one. It is a row in Training instead.
+ */
+function IdentityHeader({ athlete }: { athlete: AppProfile["athlete"] }) {
+  const initials =
+    athlete.name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((word) => word[0] ?? "")
+      .join("")
+      .toUpperCase() || "—";
+
+  return (
+    <View style={styles.identity}>
+      {/* Decorative: the initials restate the name six points to the right. */}
+      <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Text style={styles.initials}>{initials}</Text>
+      </View>
+      <View style={styles.identityBody}>
+        <Text style={styles.name} accessibilityRole="header">
+          {athlete.name}
+        </Text>
+        <Text style={styles.meta}>
+          {/* Non-negotiable #3: the numeral is mono and tabular even one word
+              deep in a sentence. The word "Grade" is prose and stays prose. */}
+          {athlete.grade === null ? null : (
+            <>
+              {"Grade "}
+              <Text style={styles.figure}>{athlete.grade}</Text>
+              {" · "}
+            </>
+          )}
+          {athlete.school}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/**
  * One labelled fact, as a row.
  *
  * This was a hand-drawn `Field` — a stacked label over a value — which is the
@@ -140,31 +220,24 @@ function explain(err: unknown, fallback: string): string {
  * no press flash. None of these facts is editable from the phone, and the
  * design's chevron means "a screen is underneath", not "tappable".
  *
- * `mono` is not styling: the rule is that every numeral is mono and tabular, so
- * a grade is and a school is not.
+ * There was a `mono` flag for a numeric value. It went with the Grade row, into
+ * the header's meta line; every remaining figure on this screen is a `ListRow`
+ * with its own `styles.rowMono` node, because each also welds on a unit.
  */
 function FactRow({
   label,
   value,
-  mono,
   isLast,
 }: {
   label: string;
   value: string | null;
-  mono?: boolean;
   isLast?: boolean;
 }) {
   return (
     <ListRow
       title={label}
       detail={
-        value === null ? (
-          <Text style={styles.rowAbsent}>—</Text>
-        ) : mono ? (
-          <Text style={styles.rowMono}>{value}</Text>
-        ) : (
-          value
-        )
+        value === null ? <Text style={styles.rowAbsent}>—</Text> : value
       }
       sub={value === null ? "Not recorded" : undefined}
       isLast={isLast}
@@ -325,7 +398,7 @@ function TeamSection({
 
   if (athlete.teamName) {
     return (
-      <Section label="Team" note="Your coach can see your training">
+      <Section label="Team" note="What your coach sees">
         <Card padded={false} style={styles.group}>
           <ListRow title="Team" detail={athlete.teamName} isLast={!athlete.joinCode} />
           {/* Only renders once the server sends it — see AppProfile. A code is
@@ -338,6 +411,28 @@ function TeamSection({
             />
           ) : null}
         </Card>
+        {/*
+          THE DESIGN'S FOOTNOTE IS NOT SHIPPED VERBATIM, BECAUSE IT IS FALSE.
+
+          It reads: "Your coach sees your training load, soreness and check-ins.
+          They do not see your messages with RunGuard." The second sentence is a
+          privacy promise to a minor and the coach's dashboard breaks it — it
+          runs `SELECT text … role = 'user' … ORDER BY id DESC LIMIT 5`
+          (website/src/lib/profile.ts:189-192) and prints those five lines in
+          quotes at dashboard/athlete/[id]/page.tsx:330-337. `chat.tsx` already
+          tells the athlete so in the composer; a profile screen that told them
+          the opposite would make the app contradict itself about the one thing
+          they might be deciding whether to type.
+
+          What DOES hold: safety-intercepted exchanges are tagged and stay off
+          the coach's screen entirely (CLAUDE.md → Safety), so the sentence is
+          about ordinary messages and says "you send", not "you exchange".
+        */}
+        <Text style={styles.footnote}>
+          Your coach sees your training load, soreness and check-ins — and the
+          last <Text style={styles.figure}>5</Text> messages you send to
+          RunGuard, word for word.
+        </Text>
         <QuietButton
           label={busy ? "Leaving…" : "Leave team"}
           onPress={leave}
@@ -580,6 +675,45 @@ function DeviceSection() {
 }
 
 /* ------------------------------------------------------------------ *
+ * Your data
+ * ------------------------------------------------------------------ */
+
+/**
+ * The design's fourth group, minus the row that would be a promise.
+ *
+ * IT DOES NOT SHIP "EXPORT MY DATA". There is no export endpoint — not on
+ * `/api/mobile/*`, not anywhere — so the design's row, and its note "A JSON
+ * file of everything RunGuard holds", describe a file the app cannot produce.
+ * Rendering it as the inert-row treatment was the alternative and it is worse
+ * here than omitting it: an inert row is honest when a thing exists and cannot
+ * be changed from the phone, and this thing does not exist.
+ *
+ * The athlete is not left without an answer, which is the only reason omitting
+ * is acceptable. `privacy.tsx` says, verbatim, that a copy of your data or its
+ * deletion is a request by email, so the sub-line points there rather than
+ * inventing a control. That is the one true route and this row is on it.
+ *
+ * A chevron, because a screen IS underneath — that is what the chevron promises
+ * (components/List.tsx), and it is the only row on this screen that keeps it.
+ */
+function YourDataSection() {
+  const router = useRouter();
+  return (
+    <Section label="Your data">
+      <Card padded={false} style={styles.group}>
+        <ListRow
+          title="Privacy"
+          sub="What RunGuard reads, who can see it, and how to ask for a copy of your data or have it deleted."
+          onPress={() => router.push("/privacy")}
+          chevron
+          isLast
+        />
+      </Card>
+    </Section>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Screen
  * ------------------------------------------------------------------ */
 
@@ -633,21 +767,15 @@ export default function ProfileScreen() {
 
           {profile ? (
             <>
+              <IdentityHeader athlete={profile.athlete} />
+
               {/*
-                Identity, as one card of facts. The athlete's name is a row
-                rather than the group's label: `Section`'s label is mono,
-                uppercase and 11.5pt, which is a fine eyebrow and a poor way to
-                render a person's name.
+                Name, grade and school moved UP into the header row — see
+                `IdentityHeader`. What is left in this group is the one fact
+                about the athlete that is neither identity nor training.
               */}
               <Section label="Athlete">
                 <Card padded={false} style={styles.group}>
-                  <FactRow label="Name" value={profile.athlete.name} />
-                  <FactRow label="School" value={profile.athlete.school} />
-                  <FactRow
-                    label="Grade"
-                    value={profile.athlete.grade === null ? null : String(profile.athlete.grade)}
-                    mono
-                  />
                   <FactRow
                     label="Events"
                     value={
@@ -655,13 +783,83 @@ export default function ProfileScreen() {
                         ? profile.athlete.events.join(" · ")
                         : null
                     }
+                    isLast
                   />
-                  <FactRow label="Fitness tier" value={profile.fitness?.tier ?? null} isLast />
                 </Card>
               </Section>
 
-              <TeamSection athlete={profile.athlete} onChanged={invalidate} />
+              {/*
+                The design's "Training" group. It holds four rows there; two of
+                them keep their own groups here and one of those is directly
+                below:
+
+                 - Max heart rate carries a group-level action ("Use automatic")
+                   and the server's own provenance sentence as its note. A row
+                   cannot hold either, so it stays a `Section` and simply sits
+                   next to this one.
+                 - Season goals is three states per goal, not one value — see
+                   `SeasonGoals`. Flattening it to "Season goal / 18:30" is what
+                   turns "not enough training recorded to forecast this" into a
+                   number.
+              */}
+              <Section label="Training">
+                <Card padded={false} style={styles.group}>
+                  {/*
+                    KILOMETRES on the wire, miles on the screen, unit welded in
+                    one node — lib/units.
+
+                    The caveat is permanent because the payload cannot tell the
+                    two cases apart: `profile.ts:344` uses the athlete's own
+                    `weekly_km` if there is one and otherwise INVENTS
+                    `max(round(weekKm * 1.05), 20)`. Printing that as "your
+                    goal" with no note is the same fabricated-from-nothing
+                    failure as readiness scoring 100 with no check-in.
+                  */}
+                  <ListRow
+                    title="Weekly distance goal"
+                    detail={
+                      profile.weeklyTargetKm === undefined ? (
+                        <Text style={styles.rowAbsent}>—</Text>
+                      ) : (
+                        <Text style={styles.rowMono}>{fmtMiles(profile.weeklyTargetKm)}</Text>
+                      )
+                    }
+                    sub={
+                      profile.weeklyTargetKm === undefined
+                        ? "Not recorded"
+                        : "Yours if you set one on the web. If you have not, this is worked out from your recent weeks rather than chosen by you."
+                    }
+                  />
+                  {/*
+                    GATED, and it was not. `fitness.tier` is a bucket of a score
+                    that `computeFitness` falls back to 50 for whenever no week
+                    holds enough running — which buckets to "Intermediate". So
+                    an athlete who has never trained was being told their tier
+                    as a plain labelled fact. `fitnessKnown` is the honest test
+                    (lib/readiness.ts): `weekly` is empty exactly when the
+                    fallback fired.
+                  */}
+                  <ListRow
+                    title="Tier"
+                    detail={
+                      fitnessKnown(profile) && profile.fitness ? (
+                        profile.fitness.tier
+                      ) : (
+                        <Text style={styles.rowAbsent}>—</Text>
+                      )
+                    }
+                    sub={
+                      fitnessKnown(profile) && profile.fitness
+                        ? undefined
+                        : "Not enough qualifying training recorded yet to place you in a tier."
+                    }
+                    isLast
+                  />
+                </Card>
+              </Section>
+
               <HrMaxSection hrMax={profile.risk.hrMax} onChanged={invalidate} />
+              <TeamSection athlete={profile.athlete} onChanged={invalidate} />
 
               {/*
                 Energy & motivation, where the website keeps it. It owns its own
@@ -709,6 +907,7 @@ export default function ProfileScreen() {
           )}
 
           <DeviceSection />
+          <YourDataSection />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -743,6 +942,38 @@ const styles = StyleSheet.create({
   body: { ...text.base, color: color.ink2 },
   /** The design's subtitle, under the header's title. */
   subtitle: { ...text.meta, color: color.muted },
+
+  /* ---- The identity header. See `IdentityHeader`. ---------------------- */
+  identity: { flexDirection: "row", alignItems: "center", gap: layout.cardPadding },
+  /**
+   * 60, not the design's 62: `target.min` plus one step of the 4px scale, so
+   * the size comes out of space.ts like every other one. `radius.pill` is
+   * clamped by RN to half the shorter side, which is what makes it a circle at
+   * any diameter — and it takes no `borderCurve` (see space.ts).
+   */
+  avatar: {
+    width: target.min + space.md,
+    height: target.min + space.md,
+    borderRadius: radius.pill,
+    backgroundColor: color.fill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  /** Initials, in the display face. Never a photo — § Imagery. */
+  initials: { ...text.title, color: color.ink2 },
+  identityBody: { flex: 1, gap: space.xs },
+  /**
+   * The design sets a name at 700/22 sans. `text.title` (19 display 700) is the
+   * app's nearest rank and the scale is roles, not sizes — there is no 22
+   * display step, and adding one for a single string would give the app two
+   * title ranks that differ by 3pt.
+   */
+  name: { ...text.title, color: color.ink },
+  meta: { ...text.meta, color: color.muted },
+  /** A numeral inside a sentence: mono and tabular, wherever it sits. */
+  figure: { fontFamily: font.mono, ...tabular },
+  /** Sits under a card, in the note register — see the Team group. */
+  footnote: { ...text.meta, color: color.ink2 },
   /** The stale-data line. Quiet by construction: the size and colour of a note. */
   stale: { ...text.meta, color: color.muted },
 

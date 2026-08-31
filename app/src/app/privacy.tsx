@@ -13,10 +13,25 @@
  * are carried over verbatim in meaning. Only the voice changed: the website
  * writes about the athlete, this writes to them.
  *
- * Layout is the website's Panel hierarchy (`website/src/components/athlete/
- * tabs.tsx:22`): title left, one muted note right, then the prose. On a policy
- * the note earns its place — it is the caveat you would otherwise have to read
- * the whole panel to find.
+ * ── THE SHAPE: `Section` OVER A `Card`, LIKE EVERY OTHER SCREEN ─────────────
+ *
+ * The design study has no privacy screen, so this one is built out of the app's
+ * own language rather than invented: each part of the policy is a `Section` —
+ * the eyebrow that names a group — over one `Card` of prose, at the page inset
+ * and card radius every other screen uses, under the same `useScreenHeader`
+ * its siblings carry.
+ *
+ * It replaces a local Panel that put the part's name INSIDE the card at 14px
+ * semibold. That was the website's shape, and it is the wrong one here: these
+ * headings name a GROUP of paragraphs, which is exactly the rank `Section`
+ * exists for, and a policy is the last place in the app that should be reading
+ * in a voice of its own.
+ *
+ * The notes moved with it. They were authored in caps ("HEALTH ONLY IF YOU
+ * ALLOW IT") to sit in the old note's uppercase mono; `Section`'s note is 14px
+ * body, where caps read as shouting, so each is sentence-cased. The WORDS are
+ * unchanged and so is the policy — only the case, and only on the notes, which
+ * are the app's own tags rather than the policy's text.
  */
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,6 +39,7 @@ import { Stack } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Card } from "../components/Card";
+import { Section } from "../components/Section";
 import { dayLabel } from "../lib/dates";
 import { useScreenHeader } from "../theme/header";
 import { color } from "../theme/tokens";
@@ -48,68 +64,26 @@ const EMBER_STOPS = [0, 0.45, 1] as const;
 const EMBER_START = { x: 0, y: 0 } as const;
 const EMBER_END = { x: 1, y: 1 } as const;
 
-/**
- * The website's Panel, in React Native: 14 semibold title on the left, an
- * optional micro note on the right, then the content.
- */
-/**
- * DELIBERATELY NOT `components/Panel`, though it looks like it.
- *
- * Nine other files spelled that shape out by hand and drifted into three
- * different title sizes; they have all been migrated to the shared component.
- * This one stays local, and it is not an oversight:
- *
- *  - Its title is ALREADY the shared component's 14px semibold, so it was never
- *    part of that drift.
- *  - Its NOTE is the difference. Every note on this screen is authored in caps
- *    — "HEALTH ONLY IF YOU ALLOW IT", "NEVER FOR ADVERTISING" — because it is a
- *    `text.micro` uppercase-mono section tag, not a sentence. Rendered through
- *    the shared note style (14px body) those same strings stop reading as
- *    micro-labels and start reading as shouting.
- *
- * So this is a legal-document section header that happens to share a silhouette
- * with a Panel, not a copy of one. If the shared component ever grows a note
- * variant AND a node title, fold this in then.
- */
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  /**
-   * A NODE, not a string, for the same reason the shared `Panel`'s note is one:
-   * "Athletes under 18" carries a numeral, and every numeral in this app is
-   * mono and tabular (non-negotiable #3) even one word deep in a heading. The
-   * shared component types this `string`, which is the other half of why this
-   * Panel stays local.
-   */
-  title: React.ReactNode;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <Card>
-        <View style={styles.head}>
-          <Text style={styles.panelTitle} accessibilityRole="header">
-            {title}
-          </Text>
-          {note ? <Text style={styles.note}>{note}</Text> : null}
-        </View>
-        <View style={styles.body}>{children}</View>
-      </Card>
-    </View>
-  );
-}
-
 export default function PrivacyScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <Stack.Screen options={useScreenHeader("Privacy")} />
 
       <ScrollView contentContainerStyle={styles.page}>
-        <View style={styles.panel}>
-          <Card>
+        {/*
+          The document head. Its eyebrow is the policy's own name rather than
+          the screen's — the native header already says "Privacy" — and its note
+          is the effective date, which every other section is dated against.
+        */}
+        <Section
+          label="RunGuard privacy policy"
+          note={
+            <>
+              Effective <Text style={styles.figure}>{EFFECTIVE_LABEL}</Text>
+            </>
+          }
+        >
+          <Card style={styles.body}>
             <LinearGradient
               colors={color.ember}
               locations={EMBER_STOPS}
@@ -117,202 +91,218 @@ export default function PrivacyScreen() {
               end={EMBER_END}
               style={styles.mark}
             />
-            <View style={styles.head}>
-              <Text style={styles.panelTitle} accessibilityRole="header">
-                RunGuard privacy policy
+            <Text style={styles.p}>
+              RunGuard is an injury-prevention tool for runners. It reads your training
+              and recovery data, works out an injury-risk reading, and shows that
+              reading to you and to the coach of your team.
+            </Text>
+            <Text style={styles.p}>
+              This covers the RunGuard iPhone app and the RunGuard web dashboard: what
+              is collected, what it is used for, who sees it, and what you can change.
+              Many RunGuard athletes are under <Text style={styles.figure}>18</Text>; the
+              section for them is below and worth reading.
+            </Text>
+          </Card>
+        </Section>
+
+        <Section label="What is collected" note="Health only if you allow it">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              <Text style={styles.lead}>Your account. </Text>
+              Name, email, password (kept only as a hash), team or school, class year, the
+              events you run, and the pairing token that links this phone to your account.
+            </Text>
+            <Text style={styles.p}>
+              <Text style={styles.lead}>Apple Health, only with your permission. </Text>
+              Running and related workouts: start time, duration, distance, average and
+              maximum heart rate, active calories, cadence. Daily recovery figures: resting
+              heart rate, heart-rate variability, sleep duration and stages, VO2max,
+              respiratory rate, blood oxygen, wrist temperature. When a workout has a GPS
+              track, the route as well, so your activity map can show where you ran. You can
+              change or withdraw this at any time in Settings, under Privacy & Security,
+              then Health, then RunGuard.
+            </Text>
+            <Text style={styles.p}>
+              <Text style={styles.lead}>Your check-ins, if you fill them in. </Text>
+              Session effort, where you are sore and how much, energy, motivation, and
+              whether school is stressful right now. Check-ins are optional.
+            </Text>
+            <Text style={styles.p}>
+              <Text style={styles.lead}>Chat messages. </Text>
+              The questions you type in the chat tab, and the replies. They are stored so
+              you and your coach can see the conversation. They are not sent to any outside
+              company &mdash; answers are worked out on our own servers from your training
+              data.
+            </Text>
+            <Text style={styles.p}>
+              No payment details are collected. RunGuard carries no advertising SDKs and no
+              cross-app tracking.
+            </Text>
+          </Card>
+        </Section>
+
+        <Section label="What it is used for" note="Never for advertising">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              Only to run RunGuard and make it better: to work out your training load and
+              injury-risk reading, to show you your readiness, plan, mileage, maps and
+              history, to show your coach the same information for the athletes on their
+              team, to answer the coaching chat, and to keep the service secure and working.
+            </Text>
+            <View style={styles.commitment}>
+              <Text style={styles.commitmentTitle}>Health-data commitments</Text>
+              <Text style={styles.commitmentLine}>
+                Your health and recovery data is never used for advertising or marketing.
               </Text>
-              <Text style={styles.note}>{`EFFECTIVE ${EFFECTIVE_LABEL}`}</Text>
-            </View>
-            <View style={styles.body}>
-              <Text style={styles.p}>
-                RunGuard is an injury-prevention tool for runners. It reads your training
-                and recovery data, works out an injury-risk reading, and shows that
-                reading to you and to the coach of your team.
+              <Text style={styles.commitmentLine}>It is never sold.</Text>
+              <Text style={styles.commitmentLine}>
+                It is never shared with third parties such as data brokers.
               </Text>
-              <Text style={styles.p}>
-                This covers the RunGuard iPhone app and the RunGuard web dashboard: what
-                is collected, what it is used for, who sees it, and what you can change.
-                Many RunGuard athletes are under <Text style={styles.figure}>18</Text>; the
-                section for them is below and worth reading.
+              <Text style={styles.commitmentLine}>
+                It is used only to provide the injury-prevention service described here, to
+                you and to your coach. This is what Apple requires of any app that reads
+                Health, and what we hold ourselves to regardless.
               </Text>
             </View>
           </Card>
-        </View>
+        </Section>
 
-        <Panel title="What is collected" note="HEALTH ONLY IF YOU ALLOW IT">
-          <Text style={styles.p}>
-            <Text style={styles.lead}>Your account. </Text>
-            Name, email, password (kept only as a hash), team or school, class year, the
-            events you run, and the pairing token that links this phone to your account.
-          </Text>
-          <Text style={styles.p}>
-            <Text style={styles.lead}>Apple Health, only with your permission. </Text>
-            Running and related workouts: start time, duration, distance, average and
-            maximum heart rate, active calories, cadence. Daily recovery figures: resting
-            heart rate, heart-rate variability, sleep duration and stages, VO2max,
-            respiratory rate, blood oxygen, wrist temperature. When a workout has a GPS
-            track, the route as well, so your activity map can show where you ran. You can
-            change or withdraw this at any time in Settings, under Privacy & Security,
-            then Health, then RunGuard.
-          </Text>
-          <Text style={styles.p}>
-            <Text style={styles.lead}>Your check-ins, if you fill them in. </Text>
-            Session effort, where you are sore and how much, energy, motivation, and
-            whether school is stressful right now. Check-ins are optional.
-          </Text>
-          <Text style={styles.p}>
-            <Text style={styles.lead}>Chat messages. </Text>
-            The questions you type in the chat tab, and the replies. They are stored so
-            you and your coach can see the conversation. They are not sent to any outside
-            company &mdash; answers are worked out on our own servers from your training
-            data.
-          </Text>
-          <Text style={styles.p}>
-            No payment details are collected. RunGuard carries no advertising SDKs and no
-            cross-app tracking.
-          </Text>
-        </Panel>
-
-        <Panel title="What it is used for" note="NEVER FOR ADVERTISING">
-          <Text style={styles.p}>
-            Only to run RunGuard and make it better: to work out your training load and
-            injury-risk reading, to show you your readiness, plan, mileage, maps and
-            history, to show your coach the same information for the athletes on their
-            team, to answer the coaching chat, and to keep the service secure and working.
-          </Text>
-          <View style={styles.commitment}>
-            <Text style={styles.commitmentTitle}>Health-data commitments</Text>
-            <Text style={styles.commitmentLine}>
-              Your health and recovery data is never used for advertising or marketing.
+        <Section label="Who can see it" note="Your coach">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              Your risk reading, training history, activity maps and check-ins are visible
+              to the coach of your team. That is the point of the product rather than a side
+              effect of it.
             </Text>
-            <Text style={styles.commitmentLine}>It is never sold.</Text>
-            <Text style={styles.commitmentLine}>
-              It is never shared with third parties such as data brokers.
+            <Text style={styles.p}>
+              Beyond that, information is shared only as far as running the service
+              requires: with the providers listed below who host and operate RunGuard for
+              us, if the law requires it, and, if RunGuard were ever transferred to another
+              owner, under this same policy. Your personal information and health data are
+              not sold, and are not shared with data brokers or advertisers.
             </Text>
-            <Text style={styles.commitmentLine}>
-              It is used only to provide the injury-prevention service described here, to
-              you and to your coach. This is what Apple requires of any app that reads
-              Health, and what we hold ourselves to regardless.
+          </Card>
+        </Section>
+
+        <Section label="Who processes it" note="Two providers">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              <Text style={styles.lead}>Supabase </Text>
+              stores the database and handles sign-in and backend hosting.
             </Text>
-          </View>
-        </Panel>
+            <Text style={styles.p}>
+              <Text style={styles.lead}>Vercel </Text>
+              hosts the web app and the API.
+            </Text>
+            <Text style={styles.p}>
+              Each of them handles the data only to provide their service to us. No
+              third-party AI service receives your data.
+            </Text>
+          </Card>
+        </Section>
 
-        <Panel title="Who can see it" note="YOUR COACH">
-          <Text style={styles.p}>
-            Your risk reading, training history, activity maps and check-ins are visible
-            to the coach of your team. That is the point of the product rather than a side
-            effect of it.
-          </Text>
-          <Text style={styles.p}>
-            Beyond that, information is shared only as far as running the service
-            requires: with the providers listed below who host and operate RunGuard for
-            us, if the law requires it, and, if RunGuard were ever transferred to another
-            owner, under this same policy. Your personal information and health data are
-            not sold, and are not shared with data brokers or advertisers.
-          </Text>
-        </Panel>
+        <Section label="Keeping and deleting" note="Ask any time">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              Your information is kept while your account is active and for as long as
+              providing the service needs it.
+            </Text>
+            <Text style={styles.p}>
+              To have your account and data deleted, or to get a copy of your data, email{" "}
+              <Text style={styles.email} selectable accessibilityRole="text">
+                {CONTACT_EMAIL}
+              </Text>{" "}
+              from your account email address. For an athlete under{" "}
+              <Text style={styles.figure}>18</Text>, a parent or guardian can write
+              instead. You can stop RunGuard reading Apple Health at any time in Settings,
+              which stops all further collection.
+            </Text>
+          </Card>
+        </Section>
 
-        <Panel title="Who processes it" note="FOUR PROVIDERS">
-          <Text style={styles.p}>
-            <Text style={styles.lead}>Supabase </Text>
-            stores the database and handles sign-in and backend hosting.
-          </Text>
-          <Text style={styles.p}>
-            <Text style={styles.lead}>Vercel </Text>
-            hosts the web app and the API.
-          </Text>
-          <Text style={styles.p}>
-            Each of them handles the data only to provide their service to us. No
-            third-party AI service receives your data.
-          </Text>
-        </Panel>
+        <Section label="Athletes under 18" note="COPPA and FERPA">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              RunGuard is built for school and club teams, and many of its athletes are
+              minors. It is meant to be used with a coach or school involved and, for
+              athletes under <Text style={styles.figure}>18</Text>, with a parent or
+              guardian's permission. Coaches and schools who invite athletes are
+              responsible for getting whatever consent their
+              institution and the law require before an athlete's data is collected. Parents
+              and guardians can contact us to review, correct or delete their child's
+              information, or to withdraw consent.
+            </Text>
+            <Text style={styles.p}>
+              RunGuard is not directed at children under <Text style={styles.figure}>13</Text>,
+              and we do not knowingly collect personal information from a child under{" "}
+              <Text style={styles.figure}>13</Text> without the verifiable parental consent
+              COPPA requires. If you believe a child under <Text style={styles.figure}>13</Text>{" "}
+              gave us information without that consent, contact us and it will be deleted.
+              Where a school uses
+              RunGuard, the data may also fall under school-privacy obligations such as
+              FERPA. Health data belonging to a minor gets exactly the protections above:
+              never sold, never used for advertising, never given to data brokers.
+            </Text>
+          </Card>
+        </Section>
 
-        <Panel title="Keeping and deleting" note="ASK ANY TIME">
-          <Text style={styles.p}>
-            Your information is kept while your account is active and for as long as
-            providing the service needs it.
-          </Text>
-          <Text style={styles.p}>
-            To have your account and data deleted, or to get a copy of your data, email{" "}
-            <Text style={styles.email} selectable accessibilityRole="text">
-              {CONTACT_EMAIL}
-            </Text>{" "}
-            from your account email address. For an athlete under{" "}
-            <Text style={styles.figure}>18</Text>, a parent or guardian can write
-            instead. You can stop RunGuard reading Apple Health at any time in Settings,
-            which stops all further collection.
-          </Text>
-        </Panel>
+        <Section label="Security" note="Not a guarantee">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              Data is encrypted in transit over HTTPS. Passwords are stored only as salted
+              hashes. Each athlete's phone has its own pairing token, sessions use signed
+              cookies, and an athlete's data is limited to that athlete and their coach. The
+              infrastructure underneath is run by established providers.
+            </Text>
+            <Text style={styles.p}>
+              No method of sending or storing data is completely secure, so absolute
+              security is not something anyone can promise, including us.
+            </Text>
+          </Card>
+        </Section>
 
-        <Panel
-          title={<>Athletes under <Text style={styles.figure}>18</Text></>}
-          note="COPPA AND FERPA"
+        <Section label="Your choices" note="GDPR and CCPA">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              You choose which Apple Health data types RunGuard may read, and can change any
+              of them in Settings. You choose whether to submit a check-in. You can ask to see, correct or delete your data by
+              emailing us.
+            </Text>
+            <Text style={styles.p}>
+              Depending on where you live you may have further rights, under laws such as
+              the GDPR or CCPA/CPRA. Contact us to use them.
+            </Text>
+          </Card>
+        </Section>
+
+        <Section
+          label="Changes to this policy"
+          note={
+            <>
+              Since <Text style={styles.figure}>{EFFECTIVE_LABEL}</Text>
+            </>
+          }
         >
-          <Text style={styles.p}>
-            RunGuard is built for school and club teams, and many of its athletes are
-            minors. It is meant to be used with a coach or school involved and, for
-            athletes under <Text style={styles.figure}>18</Text>, with a parent or
-            guardian's permission. Coaches and schools who invite athletes are
-            responsible for getting whatever consent their
-            institution and the law require before an athlete's data is collected. Parents
-            and guardians can contact us to review, correct or delete their child's
-            information, or to withdraw consent.
-          </Text>
-          <Text style={styles.p}>
-            RunGuard is not directed at children under <Text style={styles.figure}>13</Text>,
-            and we do not knowingly collect personal information from a child under{" "}
-            <Text style={styles.figure}>13</Text> without the verifiable parental consent
-            COPPA requires. If you believe a child under <Text style={styles.figure}>13</Text>{" "}
-            gave us information without that consent, contact us and it will be deleted.
-            Where a school uses
-            RunGuard, the data may also fall under school-privacy obligations such as
-            FERPA. Health data belonging to a minor gets exactly the protections above:
-            never sold, never used for advertising, never given to data brokers.
-          </Text>
-        </Panel>
-
-        <Panel title="Security" note="NOT A GUARANTEE">
-          <Text style={styles.p}>
-            Data is encrypted in transit over HTTPS. Passwords are stored only as salted
-            hashes. Each athlete's phone has its own pairing token, sessions use signed
-            cookies, and an athlete's data is limited to that athlete and their coach. The
-            infrastructure underneath is run by established providers.
-          </Text>
-          <Text style={styles.p}>
-            No method of sending or storing data is completely secure, so absolute
-            security is not something anyone can promise, including us.
-          </Text>
-        </Panel>
-
-        <Panel title="Your choices" note="GDPR AND CCPA">
-          <Text style={styles.p}>
-            You choose which Apple Health data types RunGuard may read, and can change any
-            of them in Settings. You choose whether to submit a check-in. You can ask to see, correct or delete your data by
-            emailing us.
-          </Text>
-          <Text style={styles.p}>
-            Depending on where you live you may have further rights, under laws such as
-            the GDPR or CCPA/CPRA. Contact us to use them.
-          </Text>
-        </Panel>
-
-        <Panel title="Changes to this policy" note={`SINCE ${EFFECTIVE_LABEL}`}>
-          <Text style={styles.p}>
-            This policy may be updated from time to time. When a change is material the
-            effective date above is updated and, where it makes sense, you are told.
-            Continuing to use RunGuard after an update means the revised policy applies.
-          </Text>
-        </Panel>
-
-        <Panel title="Contact" note="EMAIL">
-          <Text style={styles.p}>
-            Questions, requests or concerns about privacy go to{" "}
-            <Text style={styles.email} selectable accessibilityRole="text">
-              {CONTACT_EMAIL}
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              This policy may be updated from time to time. When a change is material the
+              effective date above is updated and, where it makes sense, you are told.
+              Continuing to use RunGuard after an update means the revised policy applies.
             </Text>
-            .
-          </Text>
-        </Panel>
+          </Card>
+        </Section>
+
+        <Section label="Contact" note="Email">
+          <Card style={styles.body}>
+            <Text style={styles.p}>
+              Questions, requests or concerns about privacy go to{" "}
+              <Text style={styles.email} selectable accessibilityRole="text">
+                {CONTACT_EMAIL}
+              </Text>
+              .
+            </Text>
+          </Card>
+        </Section>
       </ScrollView>
     </SafeAreaView>
   );
@@ -320,46 +310,34 @@ export default function PrivacyScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
+  /**
+   * The page inset every other screen uses — `settings.tsx`, which is the
+   * screen this one is pushed from, is the same three lines. The section gap
+   * replaces the per-panel `marginBottom` this used to carry, so the spacing
+   * between two parts is now the app's one section step rather than a card
+   * padding borrowed as a margin.
+   */
   page: {
     paddingHorizontal: layout.page,
-    paddingTop: layout.cardPadding,
-    paddingBottom: layout.section,
+    paddingVertical: layout.section,
+    gap: layout.section,
   },
-  panel: { marginBottom: layout.cardPadding },
-
-  /** The one ember mark on the screen: a short gradient rule over the title. */
+  /**
+   * The one ember mark on the screen: a short gradient rule over the opening
+   * paragraph. No `marginBottom` — it is a child of the card's own `gap` now,
+   * and carrying both would space it twice as far as every paragraph below it.
+   */
   mark: {
     width: space.xxxl,
     height: space.xs,
     borderRadius: radius.pill,
-    marginBottom: layout.cardPadding,
   },
 
   /**
-   * Title and note share a baseline and wrap independently, so a long note drops
-   * under the title rather than squeezing it to one word per line.
-   */
-  head: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  /** 14 semibold, matching the website's Panel heading. */
-  panelTitle: {
-    ...text.meta,
-    fontFamily: font.bodySemi,
-    color: color.ink,
-    flexShrink: 1,
-  },
-  /** The note is always the caveat. Muted: 5.17:1 on card. */
-  note: { ...text.micro, color: color.muted },
-
-  /**
-   * Paragraphs are spaced by the container's `gap`, not a trailing margin, so
-   * the last one does not add invisible padding to the bottom of the card.
+   * Paragraph spacing, passed to `Card` as its layout style: `CardProps.style`
+   * is merged last and is for exactly this. A gap rather than a trailing
+   * margin, so the last paragraph does not add invisible padding to the bottom
+   * of the card.
    */
   body: { gap: space.md },
   p: { ...text.base, color: color.ink2 },

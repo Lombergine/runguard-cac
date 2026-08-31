@@ -17,6 +17,23 @@
  *  - `grade` must be an integer or null — `Number.isInteger(body.grade)`, so
  *    "10th" or "" would be dropped without a word. The input only accepts
  *    digits so it cannot produce anything else.
+ *
+ * NO "I AM A — ATHLETE / COACH" SEGMENTED CONTROL, deliberately. The design
+ * opens this screen with one, and there is no coach signup on the phone for its
+ * second segment to reach: `POST /api/athlete-signup` is the only account route
+ * the app can call, `_layout.tsx` declares no coach group, and coaches are
+ * created on the website. A two-segment control with one live segment is a
+ * choice that is not one, and picking the dead half would have to fail with a
+ * sentence explaining that the control should not have been there.
+ *
+ * THE FORM IS LONGER THAN THE DESIGN'S. The design draws four fields; the route
+ * also takes `grade` and `eventGroup`, and it DEFAULTS `eventGroup` to
+ * "distance", so leaving the control off would not leave the value unset — it
+ * would store a guess the athlete never saw. Each field keeps its label and its
+ * caveat above the input rather than collapsing into the design's
+ * placeholder-only card: a placeholder disappears the moment you type, and
+ * "optional" and the password floor are exactly the things you want to re-read
+ * while the field is full.
  */
 import { useState, type ReactNode } from "react";
 import {
@@ -299,28 +316,16 @@ export default function SignupScreen() {
             </Text>
             <Text style={styles.body}>Two minutes, then it syncs itself</Text>
 
-            <Field
-              label="Team code"
-              note="optional"
-              value={joinCode}
-              onChangeText={setJoinCode}
-              editable={!busy}
-              placeholder="Leave blank to train solo"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              autoComplete="off"
-              spellCheck={false}
-              returnKeyType="next"
-              // A code, not prose: mono so a misread character costs no retry.
-              style={styles.codeInput}
-            />
-
+            {/* The design's order — who you are, then how to reach you, then
+                the secret, and the team code LAST. The team code used to lead
+                this form, which opened the account on the one field that is
+                optional and that an athlete signing up alone does not have. */}
             <Field
               label="Full name"
               value={name}
               onChangeText={setName}
               editable={!busy}
-              placeholder="First and last"
+              placeholder="Full name"
               autoCapitalize="words"
               autoComplete="name"
               textContentType="name"
@@ -352,12 +357,29 @@ export default function SignupScreen() {
               value={password}
               onChangeText={setPassword}
               editable={!busy}
+              placeholder="Choose a password"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="new-password"
               textContentType="newPassword"
               returnKeyType="next"
+            />
+
+            <Field
+              label="Team code"
+              note="optional"
+              value={joinCode}
+              onChangeText={setJoinCode}
+              editable={!busy}
+              placeholder="Team code from your coach"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoComplete="off"
+              spellCheck={false}
+              returnKeyType="next"
+              // A code, not prose: mono so a misread character costs no retry.
+              style={styles.codeInput}
             />
 
             <Field
@@ -459,6 +481,33 @@ export default function SignupScreen() {
                 {explain(problem)}
               </Text>
             ) : null}
+
+            {/*
+              The design's note under the button, with one clause corrected.
+
+              It reads there: "They see your training load, soreness and
+              check-ins — not your messages with RunGuard." That is not true of
+              this product. `website/src/lib/profile.ts:200` selects the
+              athlete's last five chat messages and the coach dashboard renders
+              them verbatim, in quotes, under "What they've been asking"
+              (`website/src/app/dashboard/athlete/[id]/page.tsx:414`); the only
+              exclusion is the safety-intercepted ones. `privacy.tsx` already
+              says so in the athlete's own words — "They are stored so you and
+              your coach can see the conversation."
+              A false privacy promise made to a minor at the moment they hand
+              over an email and a password is the worst place in the app to put
+              one, so the clause states what the coach actually sees.
+
+              It sits BELOW the error line rather than directly under the button
+              as the design draws it: a failure has to be adjacent to the
+              control that produced it, and this note is a standing condition on
+              the whole form rather than a response to anything.
+            */}
+            <Text style={styles.note}>
+              Under 18? Your coach&apos;s team code links you to their roster.
+              They see your training load, soreness, check-ins and the questions
+              you ask RunGuard.
+            </Text>
           </Card>
 
           {/* The other two doors. `replace`, not `push`, because the three
@@ -659,6 +708,14 @@ const styles = StyleSheet.create({
   actionLabel: { ...text.baseSemi, color: color.ink },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
+  /**
+   * The standing note about what a team code shares. The design sets it at
+   * 12.5; `text.meta` (14) is the app's note rank and there is no step between
+   * it and `micro`, which is an uppercase mono eyebrow and not prose. Muted, so
+   * it reads as a condition rather than as a warning — nothing in this app is
+   * styled to shout.
+   */
+  note: { ...text.meta, color: color.muted, marginTop: space.lg },
   /**
    * A figure sitting inside a body-face sentence — the password floor, an HTTP
    * status, the event codes in a radio label, the LAN address. Non-negotiable

@@ -2,21 +2,48 @@
  * Settings. A STACK route, not a tab — the tab bar's five items are the daily
  * surfaces and this is not one of them.
  *
- * This screen is not a port: the website has no settings page, so it is designed
- * here. The design brief it is held to is a short one — SAY WHAT IS TRUE. Three
- * of the five things an athlete would look for in a settings screen do not exist
- * in this product yet:
+ * The groups and their order come from the design study. Its CONTROLS mostly do
+ * not, and that is the whole story of this file — the brief it is held to is a
+ * short one: SAY WHAT IS TRUE.
  *
- *   - a kilometres/miles switch  (lib/units.ts hard-codes miles per formatter;
- *     there is no preference to read, so a switch would have nothing to set)
- *   - a check-in reminder        (no APNs credentials, no expo-notifications;
- *     the app cannot deliver one)
- *   - anything to do with the device token beyond deleting it
+ * ── THE DESIGN'S FOUR TOGGLES, AND WHY NONE OF THEM SHIPS ───────────────────
  *
- * Each is therefore rendered as a plain, un-tappable row that names the reason.
- * A settings screen full of switches that do nothing is worse than a short one
- * that is true, and a dead switch is a lie the athlete only discovers at 6am
- * when the reminder they thought they enabled never arrives.
+ * The design draws Data and Check-in as switch rows. A switch is a promise that
+ * something is stored and honoured. Nothing in this build can keep any of these
+ * four, so all four ship as plain, un-tappable rows that name the reason, and
+ * `Switch` is not imported at all:
+ *
+ *   - Apple Health sync      There is no sync PREFERENCE. `lib/health.ts` keeps
+ *                            a permission timestamp and a last-sync record and
+ *                            nothing else; syncing is an act the athlete
+ *                            performs on the Connect screen, not a state they
+ *                            set. Storing a new flag would mean a new key in
+ *                            SecureStore, and every stored key has to be in
+ *                            `lib/auth.ts`'s erase list or sign-out leaks it.
+ *   - Share with my coach    There is no endpoint. A coach seeing their own
+ *                            athlete's load is what the product IS, and the one
+ *                            call that changes it — `leaveTeam()` — is leaving
+ *                            the team, not a sharing preference. Wiring a
+ *                            switch to it would make a destructive act look
+ *                            like a setting.
+ *   - Morning reminder       No APNs credentials and no expo-notifications, so
+ *                            nothing in this build can deliver one. This is the
+ *                            one an athlete would actually rely on, and it is
+ *                            the one a dead switch would hurt most: they would
+ *                            find out at 6am, when the reminder never came.
+ *   - Weekly summary email   Refused rather than shown dead. A dead row is
+ *                            honest about a setting that is MISSING; there is
+ *                            no weekly email anywhere in this product, on any
+ *                            surface, so a row for it would not be admitting a
+ *                            gap, it would be advertising a feature.
+ *
+ * The units rows are the same shape for the same reason: `lib/units.ts`
+ * hard-codes miles per formatter and welds "mi" on itself, so there is no
+ * preference to read and nothing for a switch to set.
+ *
+ * Appearance is the one row where the design's control became real, by becoming
+ * a value instead: the app follows the phone, so the row REPORTS what it is
+ * currently drawing rather than offering a choice it does not have.
  *
  * The token rule from lib/auth.ts applies here in full: this file never reads,
  * renders, logs or hints at the device token. Signing out deletes it without
@@ -52,14 +79,36 @@
  * every other head in the app.
  *
  * Dropping the caveats was never an option — "not available in this build" is
- * the honest half of the Notifications group, not decoration.
+ * the honest half of the Check-in group, not decoration.
  *
- * The two prose-and-a-button sections at the bottom stay `Panel`s. They are not
- * lists and forcing them into one would cost the paragraph that explains what
- * the red button actually does.
+ * ── THE WAY OUT: A SLAB OF CENTRED ROWS, NOT A PANEL AND A BUTTON ───────────
+ *
+ * The bottom of the screen used to be a `Panel` — a paragraph and one outlined
+ * red button. It is now the design's shape: a slab of centred destructive rows
+ * with a full-bleed hairline between them, and the paragraph demoted to the
+ * screen's closing footnote.
+ *
+ * Nothing was lost by dropping the prose. What it said — that the server keeps
+ * your runs and check-ins, and that you can sign back in — is said by the
+ * confirmation Alert, BEFORE anything happens, which is the only moment it is
+ * actually being read.
+ *
+ * `List` supplies the slab; the rows are its children rather than `ListRow`s,
+ * because a `ListRow` puts its title on the left and these are centred. The
+ * hairline between them is local for the same reason: `ListRow`'s separator is
+ * inset from the left so it starts under a title, and under a centred label
+ * that inset reads as a mistake.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import Constants from "expo-constants";
@@ -71,11 +120,10 @@ import { getHome, isUnauthorized } from "../lib/api";
 import { isDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
 import { useScreenHeader } from "../theme/header";
-import { Panel } from "../components/Panel";
-import { dim } from "../theme/press";
+import { rowPress } from "../theme/press";
 import { color } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
-import { layout, radius, ruleWidth, space, target } from "../theme/space";
+import { layout, ruleWidth, space, target } from "../theme/space";
 
 /**
  * From app.json. Null in any runtime that does not embed the config rather than
@@ -83,6 +131,21 @@ import { layout, radius, ruleWidth, space, target } from "../theme/space";
  * someone is reporting a bug against it.
  */
 const APP_VERSION = Constants.expoConfig?.version ?? null;
+
+/**
+ * The screen's closing footnote, from the design, verbatim.
+ *
+ * It survives the fact that nothing on this screen deletes anything: it
+ * describes what deletion COSTS, which is exactly what someone about to ask for
+ * it needs, and the last clause is the one that matters — the runs an athlete
+ * cares most about were never RunGuard's only copy.
+ */
+const DELETE_NOTE =
+  "Deleting removes your check-ins and soreness history. Runs stay in Apple Health on your phone — RunGuard never had the only copy.";
+
+/** The demo has no account to delete and nothing on the server to lose. */
+const DEMO_NOTE =
+  "You are looking at a real seeded runner's training as an athlete would see it. Anything you changed stayed on this phone and is never sent — the roster on the server is untouched.";
 
 /**
  * The athlete's name is the only server value on this screen. Three states, not
@@ -105,6 +168,12 @@ export default function SettingsScreen() {
   const [unpairing, setUnpairing] = useState(false);
   // Read once per render: the value only changes on sign-out, which unmounts this.
   const demo = isDemo();
+  /*
+   * What the app is CURRENTLY drawing, not what the athlete picked — there is
+   * nothing to pick. Every colour in theme/tokens.ts is a `DynamicColorIOS`
+   * pair, so the appearance is the phone's and the row reports it.
+   */
+  const scheme = useColorScheme();
 
   useEffect(() => {
     let alive = true;
@@ -162,6 +231,27 @@ export default function SettingsScreen() {
     })();
   }, [signOut]);
 
+  /**
+   * Deletion, which this build cannot perform.
+   *
+   * There is no delete endpoint — `lib/api.ts` has no call for it and
+   * `/api/mobile/*` has no route — so the row cannot delete anything, and a red
+   * row that silently does nothing is the worst version of that. What it can do
+   * is the one real thing there is: say so, and open the policy that carries the
+   * address to write to and the list of what is removed. The address is NOT
+   * repeated here; privacy.tsx already notes that a second copy of it is a bug.
+   */
+  const askDelete = useCallback(() => {
+    Alert.alert(
+      "Deleting is done by email",
+      "RunGuard cannot delete an account from inside the app yet. The privacy policy has the address to write to, and says what is removed when you do.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Read the policy", onPress: () => router.push("/privacy") },
+      ]
+    );
+  }, [router]);
+
   const confirmUnpair = useCallback(() => {
     if (unpairing) return;
     Alert.alert(
@@ -193,7 +283,7 @@ export default function SettingsScreen() {
         */}
         <Text style={styles.lede}>Sync, sharing and units</Text>
 
-        {/* ---- Account ------------------------------------------------- */}
+        {/* ---- Account ----------------------------------------------- */}
         <Section label="Account" note="This phone">
           <List>
             {name.kind === "known" ? (
@@ -224,18 +314,56 @@ export default function SettingsScreen() {
               sub="School, events, team and max heart rate"
               onPress={() => router.push("/profile")}
               chevron
-            />
-            <ListRow
-              title="Connect data"
-              sub="Where your runs, sleep and heart rate come from"
-              onPress={() => router.push("/connect")}
-              chevron
               isLast
             />
           </List>
         </Section>
 
-        {/* ---- Units --------------------------------------------------- */}
+        {/* ---- Data ---------------------------------------------------- */}
+        {/*
+          The design's first group, with its two switches turned back into the
+          things they actually are: a screen you go to, and a fact about the
+          product. See the toggle table at the top of this file.
+        */}
+        <Section label="Data" note="Read only">
+          <List>
+            <ListRow
+              title="Apple Health"
+              sub="Where your runs, sleep and heart rate come from. Syncing is something you do on that screen, not a switch that runs on its own."
+              onPress={() => router.push("/connect")}
+              chevron
+            />
+            {/*
+              The design labels this "Share with my coach" and draws it switched
+              on, noted "Load, soreness and check-ins — not your messages".
+
+              The switch is refused because there is nothing behind it. The NOTE
+              is refused for a second, worse reason: it is not true. The privacy
+              policy — this app's screen and the website's page, which must not
+              disagree about the same data — says chat is stored so that you and
+              your coach can both see the conversation. The one exception is the
+              one the athlete cannot be told about here: a safety-tagged exchange
+              never reaches the coach at all.
+            */}
+            <ListRow
+              title="Shared with your coach"
+              sub="Your runs, load, soreness and check-ins. A coach seeing their own athlete's training is what RunGuard is for, so it is not a switch — the privacy policy lists exactly what is shared."
+              isLast
+            />
+          </List>
+
+          {/*
+            The design's group footnote, minus its second sentence — "Turning
+            sync off stops new runs arriving; it does not delete what is already
+            here." There is no off. A sentence that describes a control which
+            does not exist is the same lie as the control, told in prose.
+          */}
+          <Text style={styles.footnote}>
+            RunGuard reads from Apple Health and writes nothing back.
+          </Text>
+        </Section>
+
+        {/* ---- Display ------------------------------------------------- */}
         {/*
           Read-only on purpose. lib/units.ts is display-only and the server is
           metric throughout, but each formatter has miles written into it and
@@ -248,7 +376,7 @@ export default function SettingsScreen() {
           No `onPress`, so `ListRow` renders a plain View: no chevron promising
           a screen underneath, and no flash promising an effect.
         */}
-        <Section label="Units" note="Display only">
+        <Section label="Display" note="Nothing here is a choice yet">
           <List>
             <ListRow
               title="Distance"
@@ -259,12 +387,25 @@ export default function SettingsScreen() {
               title="Pace"
               detail="Minutes per mile"
               sub="Kilometres are not a setting yet — the conversion is written into the app rather than read from a preference, so there is nothing here to switch."
+            />
+            {/*
+              The design's "Appearance / Light" — the one row of its four
+              controls that is real, because it is a REPORT rather than a
+              choice. `useColorScheme()` is what the app is drawing right now.
+              `null` (an appearance the OS will not name) draws light, so
+              "Light" is a description of the screen either way rather than a
+              claim about a setting.
+            */}
+            <ListRow
+              title="Appearance"
+              detail={scheme === "dark" ? "Dark" : "Light"}
+              sub="Follows your phone, under Display & Brightness. RunGuard has no appearance of its own to set."
               isLast
             />
           </List>
         </Section>
 
-        {/* ---- Notifications ------------------------------------------- */}
+        {/* ---- Check-in ------------------------------------------------ */}
         {/*
           The single biggest open problem in the product — 10 of 14 athletes do
           not report — and the honest row is still the empty one. There are no
@@ -272,11 +413,14 @@ export default function SettingsScreen() {
           cannot deliver a reminder by any route. A switch here would be the one
           setting an athlete would actually rely on, and it would silently do
           nothing.
+
+          The design's second row here, "Weekly summary email", is not rendered
+          at all — see the top of this file.
         */}
-        <Section label="Notifications" note="Not available in this build">
+        <Section label="Check-in" note="Not available in this build">
           <List>
             <ListRow
-              title="Check-in reminder"
+              title="Morning reminder"
               detail="Off"
               sub="RunGuard cannot send notifications yet — nothing in this build can deliver one, so there is no switch to turn on. Until then the check-in waits for you on the home screen."
               isLast
@@ -287,30 +431,34 @@ export default function SettingsScreen() {
         {/* ---- About --------------------------------------------------- */}
         <Section label="About" note="RunGuard">
           <List>
+            <ListRow
+              title="Privacy"
+              sub="What RunGuard collects, and who can see it"
+              onPress={() => router.push("/privacy")}
+              chevron
+            />
+
             {APP_VERSION ? (
               /*
                 A numeral, so mono and tabular (non-negotiable #3). Nested inside
                 the row's own detail `Text`, which supplies the size and the
                 muted colour — only the FACE changes, so a version can never
                 drift a point away from the value beside it on another row.
+
+                Last in the group, as the design places it — which also puts the
+                `Absent` fallback last, where a block that draws no separator of
+                its own cannot leave a gap in the middle of the slab.
               */
               <ListRow
                 title="Version"
                 detail={<Text style={styles.figure}>{APP_VERSION}</Text>}
+                isLast
               />
             ) : (
               <View style={styles.blockRow}>
                 <Absent eyebrow="VERSION" label="Not recorded in this build." />
               </View>
             )}
-
-            <ListRow
-              title="Privacy policy"
-              sub="What RunGuard collects, and who can see it"
-              onPress={() => router.push("/privacy")}
-              chevron
-              isLast
-            />
           </List>
 
           {/*
@@ -320,74 +468,65 @@ export default function SettingsScreen() {
             intercepted chat replies alone, and spending its shape on a footer
             would blunt it where it matters.
           */}
-          <Text style={styles.disclaimer}>
+          <Text style={styles.footnote}>
             RunGuard is a monitoring signal, not medical advice. It describes what
             your runs, sleep and check-ins show. It does not diagnose anything, and
             it is not a substitute for your coach, an athletic trainer or a doctor.
           </Text>
         </Section>
 
-        {/* ---- Danger zone --------------------------------------------- */}
+        {/* ---- Leaving ------------------------------------------------- */}
         {/*
-          Prose plus one button, so a `Panel` and not a `List`. A grouped list
-          would render the red action as a bare centred row, which is the iOS
-          idiom but costs the paragraph — and "your data stays on the server" is
-          the reassurance that actually matters before tapping it.
-
-          "Unpair this device" was the old title, and it asked the athlete to
-          know what pairing is. It is the app's word for its own plumbing — the
-          device token in the keychain — not a thing a 16-year-old came here to
-          do. They came to sign out. The mechanism is still described in the
-          body, where it belongs.
+          The design's destructive card: centred rows, a full-bleed hairline
+          between them, and one footnote underneath.
 
           In the demo it is a different act entirely: nothing was paired, there
           is nothing to sign out of, and everything the visitor typed lived on
           this phone. Saying "sign out" there would imply an account they never
-          made.
+          made — and there is no account to delete either, so that row is not
+          drawn at all.
         */}
-        {demo ? (
-          <Panel title="Athlete demo" note="Nothing here is saved">
-            <Text style={styles.body}>
-              You are looking at a real seeded runner&apos;s training as an
-              athlete would see it. Anything you change stays on this phone and
-              is never sent — the roster on the server is untouched. The coach
-              side of the demo lives on the RunGuard website.
-            </Text>
-
+        <View style={styles.group}>
+          <List>
             <Pressable
               onPress={confirmUnpair}
               disabled={unpairing}
               accessibilityRole="button"
               accessibilityState={{ disabled: unpairing }}
-              style={({ pressed }) => [styles.danger, dim(pressed)]}
+              /*
+                `rowPress`, not `dim`: this is a row in a slab, so it flashes a
+                fill across its full width like every other row in the app.
+                theme/press.ts draws that line.
+              */
+              style={({ pressed }) => [styles.dangerRow, rowPress({ pressed })]}
             >
               <Text style={styles.dangerLabel}>
-                {unpairing ? "Leaving…" : "Leave the demo"}
+                {demo
+                  ? unpairing
+                    ? "Leaving…"
+                    : "Leave the demo"
+                  : unpairing
+                    ? "Signing out…"
+                    : "Sign out"}
               </Text>
             </Pressable>
-          </Panel>
-        ) : (
-          <Panel title="Sign out" note="Affects this phone only">
-            <Text style={styles.body}>
-              Signing out removes this phone&apos;s pairing from its keychain.
-              Nothing on the RunGuard server changes — your runs, check-ins and
-              history stay exactly as they are. To use the app again you will
-              need your email and password, or a pairing code from the web app.
-            </Text>
 
-            <Pressable
-              onPress={confirmUnpair}
-              disabled={unpairing}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: unpairing }}
-              style={({ pressed }) => [styles.danger, dim(pressed)]}
-            >
-              <Text style={styles.dangerLabel}>
-                {unpairing ? "Signing out…" : "Sign out"}
-              </Text>
-            </Pressable>
-          </Panel>
-        )}
+            {demo ? null : (
+              <>
+                <View style={styles.dangerRule} pointerEvents="none" />
+                <Pressable
+                  onPress={askDelete}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.dangerRow, rowPress({ pressed })]}
+                >
+                  <Text style={styles.dangerLabel}>Delete my account</Text>
+                </Pressable>
+              </>
+            )}
+          </List>
+
+          <Text style={styles.footnote}>{demo ? DEMO_NOTE : DELETE_NOTE}</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -425,7 +564,6 @@ const styles = StyleSheet.create({
    */
   figure: { fontFamily: font.mono, ...tabular },
 
-  body: { ...text.base, color: color.ink2 },
   /**
    * A group footer, at the slab's own row inset so the caveat lines up with the
    * titles it qualifies rather than floating at the page edge.
@@ -434,32 +572,39 @@ const styles = StyleSheet.create({
    * every child from the one above it. The padding this used to carry was for a
    * bare `View`, and laying it on top of the gap would double the distance.
    */
-  disclaimer: {
+  footnote: {
     ...text.meta,
     color: color.ink2,
     paddingHorizontal: layout.cardPadding,
   },
 
   /**
-   * Destructive, and therefore NOT the ember: the ember is the brand's yes, and
-   * this is the one action in the app that undoes the athlete's setup. An
-   * outline in `unusual` with the `unusualText` glyph (5.18:1 on card) reads as
-   * serious without shouting, and carries no fill that a mis-tap could ride.
-   *
-   * Pressed state is `dim`, not the row wash it used to paint. This is an
-   * OBJECT, not a surface: theme/press.ts draws that line, and a button that
-   * fills on press is the row language borrowed by something that is not a row.
+   * The last group has no label — the design gives the destructive card none,
+   * and an eyebrow over it would name the obvious. It still needs `Section`'s
+   * own gap so its footnote sits under the slab rather than a section away
+   * from it.
    */
-  danger: {
-    minHeight: target.min,
+  group: { gap: space.sm },
+
+  /**
+   * A destructive row, centred, filling the slab's width.
+   *
+   * NOT the ember: the ember is the brand's yes, and these are the two actions
+   * that undo the athlete's setup. `unusualText` measures 5.18:1 on card and
+   * carries no fill a mis-tap could ride — the red is on the word alone.
+   */
+  dangerRow: {
+    minHeight: target.row,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: space.lg,
-    marginTop: space.sm,
-    borderWidth: ruleWidth,
-    borderColor: color.unusual,
-    borderRadius: radius.control,
-    borderCurve: "continuous",
+    paddingHorizontal: layout.cardPadding,
+    paddingVertical: space.sm,
   },
+  /**
+   * Full-bleed, unlike `ListRow`'s separator, which is inset from the left so
+   * that it starts under a title. Under a centred label there is no title to
+   * start under, and the inset would read as a misdrawn line.
+   */
+  dangerRule: { height: ruleWidth, backgroundColor: color.ruleSoft },
   dangerLabel: { ...text.baseSemi, color: color.unusualText },
 });

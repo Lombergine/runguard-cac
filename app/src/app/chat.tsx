@@ -90,7 +90,7 @@ function Row({ message }: { message: ChatMessage }) {
  *
  * Shape: the inset grouped list — `List`/`ListRow`, the iOS structure, five
  * rows pooled into ONE slab under a section eyebrow. Nothing a `ChatBubble` has
- * (84% width, a side, card radius, elevation) and nothing `SafetyNotice` has
+ * (82% width, a side, card radius, elevation) and nothing `SafetyNotice` has
  * (full-bleed, flat, a heavy left rule). Five sentences on a chat screen must
  * not read as a transcript, so the eyebrow says what they are and the slab
  * makes them one object rather than five loose boxes. No chevron — nothing is
@@ -509,25 +509,46 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   composerRow: { flexDirection: "row", alignItems: "flex-end", gap: target.gap },
+  /**
+   * The design's composer field: a PILL on `--fill`, and no border.
+   *
+   * `color.fill` is iOS's own field ground and `tokens.ts` names it for exactly
+   * this — "the ground under a text field". It was `well` plus a rule, which is
+   * the pre-restyle web shape: a translucent system fill already separates the
+   * field from the white composer, and a border on top of it reads as a drawn
+   * rectangle rather than a native field.
+   *
+   * `radius.pill` and therefore NO `borderCurve` — space.ts pairs the squircle
+   * with every radius EXCEPT the capsule, where it is a no-op. RN clamps the
+   * radius to half the shorter side, so the field stays a capsule at one line
+   * and rounds off honestly as it grows to three.
+   *
+   * The design's 11/15 padding lands on the 4px scale as 12/16. The horizontal
+   * step is the larger one because a capsule eats its own corners.
+   */
   input: {
     flex: 1,
     ...text.base,
     color: color.ink,
-    /** Sunken against the white composer, so the field reads as a field. */
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.control,
-    borderCurve: "continuous",
-    paddingHorizontal: space.md,
+    backgroundColor: color.fill,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
     paddingVertical: space.md,
     minHeight: target.min,
     maxHeight: target.min * 3,
   },
   /**
    * Clips the gradient to the control radius. It carries the padding and the
-   * centring itself now: the gradient is an `absoluteFill` behind the label,
-   * so there is no inner fill view left to hold them.
+   * centring itself: the gradient is an `absoluteFill` behind the label, so
+   * there is no inner fill view left to hold them.
+   *
+   * ROUND, as the design draws it — `radius.pill`, so the button is a capsule
+   * beside a capsule field.
+   *
+   * NOT the design's 38pt. The visual-spec's quality floor is a 48×48 minimum
+   * tap target, and this is the control an athlete hits one-handed in gloves at
+   * 6am; `target.min` is that floor. The label stays a word rather than becoming
+   * an icon, which is also what keeps 48 from looking oversized.
    */
   send: {
     minWidth: target.min,
@@ -535,18 +556,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.control,
-    borderCurve: "continuous",
+    borderRadius: radius.pill,
     overflow: "hidden",
   },
   /** The flat ground the gradient sits on, and what a press reveals. */
   sendEmber: { backgroundColor: color.brandStrong },
-  /** Disabled: no ember at all, so "cannot send" is not a dimmed brand. */
-  sendOff: {
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-  },
+  /**
+   * Disabled: no ember at all, so "cannot send" is not a dimmed brand. The same
+   * system fill as the field beside it — `tokens.ts` names it for an inert
+   * control, and two different greys touching in one composer read as a bug.
+   */
+  sendOff: { backgroundColor: color.fill },
   sendLabel: { ...text.baseSemi, color: color.ink },
   sendLabelOff: { ...text.baseSemi, color: color.muted },
   sendFailed: { ...text.meta, color: color.ink2 },

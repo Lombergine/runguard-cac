@@ -39,15 +39,22 @@
  * "Not recorded" for a null night, never "0 h" and never a bare dash.
  * ══════════════════════════════════════════════════════════════════════════
  *
- * ── This component renders its own panel head ──────────────────────────────
- * Title and note included, because the note is a LEGEND for marks this file
- * draws and nothing else on the screen knows they exist. A caller drops it in
- * bare — `<SleepChart sleep30={profile.sleep30} />` — and must not add a
- * heading of its own.
+ * ── This component renders its own labelled group ──────────────────────────
+ * Label and caption included, because the caption is a LEGEND for marks this
+ * file draws and nothing else on the screen knows they exist. A caller drops it
+ * in bare — `<SleepChart sleep30={profile.sleep30} />` — and must not wrap it
+ * in a `Section` of its own.
+ *
+ * The head used to be a local panel title at `text.title` (19 display). It is
+ * now the shared `Section`, which is what the design draws here and what every
+ * other group on this screen already uses — a label above the card, not a title
+ * inside it. Its rank is `text.micro`, not the design's 13px sans: see
+ * docs/design-port.md, type 1.
  */
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 import { Card } from "../Card";
+import { Section } from "../Section";
 import { AbsentMarks, Bars, RefLine } from "../chart/marks";
 import { isAbsent } from "../chart/scales";
 import { ChartAbsent, Plot } from "../chart/Plot";
@@ -55,7 +62,10 @@ import { SLEEP_TARGET_H, sleepSeries } from "../../lib/chartData";
 import type { SleepDay } from "../../lib/types";
 import { space } from "../../theme/space";
 import { color, staticColor } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { font, tabular, text } from "../../theme/type";
+
+/** The design's wording for this group. */
+const LABEL = "Sleep · last 30 nights";
 
 export type SleepChartProps = {
   /**
@@ -78,16 +88,6 @@ export type SleepChartProps = {
   sleep30?: SleepDay[];
 };
 
-/** Panel head, matching `recovery.tsx`'s local `SectionHeading` exactly. */
-function Head({ note }: { note?: string }) {
-  return (
-    <View style={styles.head}>
-      <Text style={styles.title}>Sleep — last 30 nights</Text>
-      {note ? <Text style={styles.note}>{note}</Text> : null}
-    </View>
-  );
-}
-
 export function SleepChart({ sleep30 }: SleepChartProps) {
   /*
    * Deliberately NOT memoised, for the reason `MentalChart` states at its own
@@ -108,22 +108,16 @@ export function SleepChart({ sleep30 }: SleepChartProps) {
 
   if (!series.enough) {
     return (
-      <View style={styles.section}>
-        <Head />
+      <Section label={LABEL} style={styles.section}>
         <Card>
           <ChartAbsent label={series.absentLabel} />
         </Card>
-      </View>
+      </Section>
     );
   }
 
   return (
-    <View style={styles.section}>
-      {/* The website's note, with "8 h" welded (non-negotiable #3). The rule is
-          dashed because it sits behind the data, not because it is unknown —
-          it is a horizontal line spanning the frame at a value we chose, never
-          the closed 12px box an absence draws (`chart/marks.tsx:236-242`). */}
-      <Head note="dashed rule = 8 h target" />
+    <Section label={LABEL} style={styles.section}>
       <Card>
         <Plot
           data={series.points}
@@ -168,32 +162,46 @@ export function SleepChart({ sleep30 }: SleepChartProps) {
           )}
         </Plot>
       </Card>
-      {/* Named only when there is something to name. A legend for a mark that
-          is not on screen would be the inverse mistake: claiming absence where
-          there is none. */}
-      {missing > 0 ? (
-        <Text style={styles.legend}>
-          The dashed boxes are nights nothing was recorded — not nights of no
-          sleep.
-        </Text>
-      ) : null}
-    </View>
+      {/*
+        The design's caption, under the plot it describes.
+
+        Its first sentence is CONDITIONAL, where the design prints both
+        unconditionally. A legend for a mark that is not on screen is the
+        inverse of the mistake this chart exists to avoid: it claims absence
+        where there is none. On a fully recorded month the caption is the
+        target sentence alone.
+
+        The 8 h figure is a nested mono node, not a substring: every numeral in
+        this app is mono and tabular with its unit welded on (non-negotiable
+        #3), and a figure inside a body sentence is the easiest place to break
+        that, because the sentence is a string until someone looks.
+
+        The rule is dashed because it sits behind the data, not because it is
+        unknown — a horizontal line spanning the frame at a value we chose,
+        never the closed 12pt box an absence draws (chart/marks.tsx:236-242).
+        The columns are the other way round, and the caption names both so the
+        two dashes cannot be read as one thing.
+      */}
+      <Text style={styles.caption}>
+        {missing > 0
+          ? "Dashed columns are nights with no reading. The line is the "
+          : "The line is the "}
+        <Text style={styles.figure}>8 h</Text>
+        {" target."}
+      </Text>
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  /** `recovery.tsx`'s `styles.section` — the gap between head and content. */
+  /** `recovery.tsx`'s `styles.section` — the gap between label and content. */
   section: { gap: space.md },
-  head: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: space.md,
-  },
-  title: { ...text.title, color: color.ink },
-  note: { ...text.meta, color: color.muted, flexShrink: 1 },
-  legend: { ...text.meta, color: color.muted },
+  caption: { ...text.meta, color: color.muted },
+  /**
+   * A numeral nested in prose. Contributes ONLY the mono face and tabular
+   * figures — size and colour are inherited from the caption around it.
+   */
+  figure: { fontFamily: font.mono, ...tabular },
 });
 
 export default SleepChart;

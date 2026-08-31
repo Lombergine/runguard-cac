@@ -1,17 +1,25 @@
 /**
- * The week's mileage against its target.
+ * The week's mileage against its target — the design's "This week" card.
  *
- * Mirrors the web portal's "Weekly mileage" panel
+ * One card: a row naming the figure and carrying it on the right, the bar, and
+ * the caption. The eyebrow above it is NOT drawn here; it belongs to `Section`,
+ * which the screen owns, so that the screen can swap this card for an `Absent`
+ * under the same label. That is why this is a `Card` and no longer a `Panel` —
+ * a panel puts its title INSIDE, which is the shape for a card that is one
+ * object with a caveat, and the design has moved the label outside.
+ *
+ * The figures still mirror the web portal's "Weekly mileage" panel
  * (`website/src/components/athlete/tabs.tsx`, `Panel` + the bar at 241–258):
- * same figures, same 115% threshold, same warning sentence, so the two surfaces
+ * same numbers, same 115% threshold, same warning sentence, so the two surfaces
  * never disagree about what the athlete is looking at.
  *
- * Under sunrise the bar IS the web bar: the `color.ember` gradient (the CSS
- * `linear-gradient(135deg, …)` at 0/45/100%, drawn corner to corner) on a
- * `surface3` track. This is the screen's one ember signature — the brand doing
- * the energy work on the one element that is genuinely about effort. The web
- * panel's `box-shadow` glow still does not come across: a glow is emphasis, and
- * the only elevation in this app is `shadow.card` on a card.
+ * The bar IS the web bar: the `color.ember` gradient (the CSS
+ * `linear-gradient(135deg, …)` at 0/45/100%, drawn corner to corner) on the
+ * design's `--fill-strong` track. This is the screen's one ember signature
+ * besides the check-in card — the brand doing the energy work on the one
+ * element that is genuinely about effort. The web panel's `box-shadow` glow
+ * still does not come across: a glow is emphasis, and the only elevation in
+ * this app is `shadow.card` on a card.
  *
  * Past the threshold the gradient is replaced by a FLAT `watch` fill. Flat
  * versus graded is a difference in shape, not only in hue, so the two states
@@ -28,7 +36,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { Panel } from "./Panel";
+import { Card } from "./Card";
 import { Absent } from "./Nothing";
 import { fmtMiles } from "../lib/units";
 import { radius, space } from "../theme/space";
@@ -42,7 +50,11 @@ import { font, tabular, text } from "../theme/type";
  */
 const WATCH_PCT = 115;
 
-/** Track height, from the 4px scale. */
+/**
+ * Track height. The design draws 10; `space.md` is the 4px scale's step next to
+ * it, and `app/CLAUDE.md` makes the theme the single source — a one-off 10
+ * would weld a bar's geometry to nothing.
+ */
 const BAR_HEIGHT = space.md;
 
 /**
@@ -80,33 +92,26 @@ export function WeekProgress({ weekKm, weeklyTargetKm }: WeekProgressProps) {
   const over = rawPct !== null && rawPct > WATCH_PCT;
 
   return (
-    <Panel
-      title="Weekly mileage"
-      /* Both figures carry "mi" in their own node. The website prints the unit
-         once, after the target; here the first numeral would be left bare,
-         which non-negotiable #3 forbids. */
-      note={
-        <>
-          <Text style={styles.noteFigure}>{fmtMiles(weekKm)}</Text>
-          {hasTarget ? (
-            <>
-              {" of "}
-              <Text style={styles.noteFigure}>
-                {fmtMiles(weeklyTargetKm as number)}
-              </Text>
-              {" target"}
-            </>
-          ) : null}
-        </>
-      }
-    >
+    <Card style={styles.card}>
+      <View style={styles.head}>
+        <Text style={styles.title}>Weekly mileage</Text>
+        {/*
+          The design sets this "14.9 / 21.7 mi", with the unit spent once at the
+          end. Both figures carry their own "mi" here: non-negotiable #3 forbids
+          a bare numeral beside a unit that lives elsewhere in the layout, and
+          the first figure would be exactly that.
+        */}
+        <Text style={styles.figures}>
+          {hasTarget
+            ? `${fmtMiles(weekKm)} / ${fmtMiles(weeklyTargetKm as number)}`
+            : fmtMiles(weekKm)}
+        </Text>
+      </View>
 
       {rawPct === null ? (
-        <View>
-          <Absent label="No weekly target set" />
-        </View>
+        <Absent label="No weekly target set" />
       ) : (
-        <View>
+        <>
           <View
             style={styles.track}
             accessibilityElementsHidden
@@ -138,30 +143,52 @@ export function WeekProgress({ weekKm, weeklyTargetKm }: WeekProgressProps) {
               ? " — well over plan, this is the spike RunGuard is flagging"
               : ""}
           </Text>
-        </View>
+        </>
       )}
-    </Panel>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  /** Nested in prose: inherits the meta size and colour, contributes the mono
-   *  face and tabular figures every numeral in this app is required to have. */
-  noteFigure: { fontFamily: font.mono, ...tabular },
+  /** Layout only — `Card` owns the ground, the corner, the rule and the shadow. */
+  card: { gap: space.md },
+  /**
+   * `alignItems: "baseline"` so the label and its figure sit on one line at
+   * different sizes, and `flexWrap` so a long pair drops rather than crushing
+   * the label — the website's flex rules, and `Panel`'s.
+   */
+  head: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  title: { ...text.base, color: color.ink },
+  /**
+   * The design's 15px tabular figure. `text.statInline` (14 mono) is the app's
+   * rank for a figure that sits subordinate to the words beside it; mono runs
+   * wider than sans, so matching the design's size rather than its measure
+   * would overshoot the label it has to stay under. See type.ts.
+   */
+  figures: { ...text.statInline, color: color.muted, flexShrink: 1 },
   track: {
     height: BAR_HEIGHT,
-    backgroundColor: color.surface3,
-    borderRadius: radius.control,
+    /* The design's `--fill-strong` — one of Apple's neutral system fills, which
+       is what makes an inert track read as a system control rather than a drawn
+       rectangle. See the note on `color.fill` in tokens.ts. */
+    backgroundColor: color.fillStrong,
+    borderRadius: radius.pill,
     overflow: "hidden",
   },
   /** Geometry only — the ground is the ember gradient, or `fillOver` below. */
   fill: {
     height: "100%",
-    borderRadius: radius.control,
+    borderRadius: radius.pill,
   },
   /** Flat, so over-plan differs from the gradient in more than hue. */
   fillOver: { backgroundColor: color.watch },
-  caption: { ...text.meta, color: color.muted, marginTop: space.sm },
+  caption: { ...text.meta, color: color.muted },
   /** `watchText`, not `watch`: this is a glyph. 5.17:1 on card, vs 2.98:1. */
   captionOver: { color: color.watchText },
   captionFigure: { fontFamily: font.mono, ...tabular },
