@@ -18,12 +18,19 @@ Rules that outrank the design, in order:
 
 ## Type and colour
 
+**The bar changed.** These rows were written when the standard was "port
+faithfully and ledger the awkward bits". It is now: *match the design unless a
+non-negotiable in `visual-spec.md` or a measured contrast floor makes it
+impossible.* Taste and internal consistency are no longer reasons to differ, so
+rows that rested on them are struck through — their reasons kept only as a
+record of what was thought at the time.
+
 | # | Design | Ships | Why |
 |---|---|---|---|
-| 1 | Section eyebrow `600 13px` sans, `+0.06em` | `text.micro` — 11.5 mono, uppercase, `+0.12em` | Every other eyebrow in the app is already the mono micro role. Taking the design's sans here would give the app two eyebrow voices — the drift commit `470cddc` removed. The design's intent (small, uppercase, muted, tracked) survives. |
+| 1 | ~~Section eyebrow `600 13px` sans~~ | **RETIRED — the design's rank ships:** sans 600 13, +0.06em, uppercase. | Every other eyebrow in the app is already the mono micro role. Taking the design's sans here would give the app two eyebrow voices — the drift commit `470cddc` removed. The design's intent (small, uppercase, muted, tracked) survives. |
 | 2 | `--muted: #94897b` | `#756C5F` light | The design value is **3.21:1** on the cream ground, under the 4.5:1 floor. Same hue and saturation, lower lightness. Recorded in `tokens.ts`. |
-| 3 | Stat-tile figures `700 24px` sans, `-0.4px` | `text.stat` — 22 mono, tabular | Every numeral in this app is mono and tabular (`type.ts`). The design's *hierarchy* is kept; its typeface is not. |
-| 4 | Large title `-0.6px` tracking | `text.largeTitle`, `+0.4` | Documented in `type.ts`: `+0.4` is iOS's own value for a large title, and Archivo at 34 is tighter than SF Pro Display. Negative tracking would make it read as a headline rather than navigation. |
+| 3 | Stat-tile figures `700 24px` sans | `text.stat` — **24** mono, tabular | Every numeral in this app is mono and tabular (`type.ts`). The design's *hierarchy* is kept; its typeface is not. |
+| 4 | ~~Large title `-0.6px` tracking~~ | **RETIRED — `-0.6` ships.** | Documented in `type.ts`: `+0.4` is iOS's own value for a large title, and Archivo at 34 is tighter than SF Pro Display. Negative tracking would make it read as a headline rather than navigation. |
 | 5 | Accent text on `--accent` | `brandText`, now a PAIR — `#976106` light, `#C98A12` dark | `brand` is 2.01:1 — a fill, never a glyph, and `tokens.ts` keeps the two apart for that reason. The dark branch is new: as one static value `#976106` measured **3.11:1 on the dark well**, under the floor, on the one token whose whole job is "the ember you may write in". Forty-odd call sites had each measured it against the cream and none was wrong, so the light branch could not move — the dark one is the same hue lifted until it clears 4.5:1 on `#242019` (5.50 / 5.76 / 6.34 on well / card / bg), and stopped there rather than run up to `brand`. |
 | 17 | Chat's "Try asking" eyebrow at `600 12px`, where every other eyebrow on the page is 13px | `text.micro` for both, as row 1 | An inconsistency in the design rather than a distinction: nothing makes the suggestion group a smaller rank than the groups around it. This app has ONE eyebrow rank; taking the design's two would have shipped its typo as a third voice. |
 | 18 | Ordinary bubble text `400 15.5px / 1.45`; the profile name at `700 22px` sans | `text.base` (16.5 body) and `text.title` (19 display) | The scale is roles, not sizes (`type.ts`), and it is deliberately one step larger than a normal mobile app — 6am, one hand, arm's length. Minting a 15.5 body rank and a 22 display rank for two strings would leave the app with two body ranks 1pt apart and two title ranks 3pt apart. |
@@ -57,6 +64,9 @@ Rules that outrank the design, in order:
 | 30 | Focused tab in one `--accent` for glyph and label; stroke 2.1 vs 1.6; label 600 vs 400 | All three, as drawn | Not a concession — a correction. The app painted the label `brandText` and the glyph `brandStrong`, two embers one step apart, which reads as a rendering fault; and it changed neither weight, so focus rested on hue alone. `visual-spec.md` §5 rules that out: colour last, never colour only. The design had the answer already. Registering `SplineSansMono_600SemiBold` is the cost. |
 | 31 | Athlete tabs: Today · Training · Stats · Recovery · Races | The same | Stats and Recovery were transposed, and tab one was named "Home" while the screen it opens is titled "Today" — the app disagreeing with itself about its own front page. |
 | 32 | Coach nav: Alerts and Settings, no Ask RunGuard | The same | `useTabHeaderActions()` was role-blind, so a coach got a chat button that opens the athlete's chat — `/me`-shaped, refused for a coach credential before the request leaves the phone. The design's omission is right twice over: RunGuard's chat answers questions about *your* training, and a coach has none here. |
+| 33 | Body `400 17px`; secondary `400 13.5px` | The same | The app had 16.5 and 14, chosen to be "one step larger than a normal mobile app". The design agrees with the principle and is half a point larger still — it confirms the app's instinct rather than overruling it. Note row 18 recorded the body as 15.5; that is the CHAT BUBBLE's size, not the app's body rank. Counting the design's own declarations gives `400 17px` 31 times, more than anything else it sets. |
+| 34 | Nav and tab bar translucent over `blur(18px) saturate(180%)` | The same, via `expo-blur` | Both docblocks argued for opaque and both were right at the time: with no real blur, an 0.86-alpha strip over scrolling content is muddy, and "nothing floats". Installing the dependency removes the premise. A blurred bar is not floating above the page — it is the page seen through frosted glass, still held by a hairline rather than a shadow. |
+| 35 | Tab label `10px` | The same | Less a design difference than a collision: the label borrowed `text.micro`, so when the eyebrow took the design's 13 the tab labels grew with it. They are separate ranks in the design and now in the app. |
 
 ## Not implemented at all
 
