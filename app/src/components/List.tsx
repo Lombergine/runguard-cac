@@ -50,7 +50,7 @@ import {
 import Svg, { Path } from "react-native-svg";
 
 import { rowPress } from "../theme/press";
-import { color } from "../theme/tokens";
+import { chevronStroke, color } from "../theme/tokens";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
 import { text } from "../theme/type";
 
@@ -69,7 +69,11 @@ import { text } from "../theme/type";
  * anywhere.
  */
 const GRID = 24;
-const CHEVRON_SIZE = 20;
+/**
+ * 18, from the design, which draws every disclosure chevron at that size.
+ * Was 20 — set before there was a design to match.
+ */
+const CHEVRON_SIZE = 18;
 const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
 
 function Chevron() {
@@ -78,7 +82,17 @@ function Chevron() {
       <Path
         d={CHEVRON}
         fill="none"
-        stroke={color.muted}
+        /*
+         * `chevronStroke`, not `color.muted`: this is chrome pointing at a
+         * row, not information about it, so it stays one neutral grey in both
+         * appearances rather than tracking the ink. The design carries the
+         * same value for the same reason.
+         *
+         * The WIDTH keeps the app's formula rather than the design's fixed 2.2
+         * viewBox units — dividing by the render size holds the line at
+         * exactly `ruleWidth` device pixels whatever the glyph is scaled to.
+         */
+        stroke={chevronStroke}
         strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
       />
     </Svg>

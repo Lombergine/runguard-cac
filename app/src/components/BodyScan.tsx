@@ -38,14 +38,49 @@
  *
  * NO CARD OF ITS OWN: this is a section, and the screen that composes it owns
  * the surface it sits on.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THE DESIGN'S ROW, AND WHAT THE GLYPH ALREADY WAS
+ *
+ * The design study draws each flagged area as a list row — a severity glyph, a
+ * 17px label, a tabular meta figure — divided by a separator inset from the
+ * left, with a tinted action row under the group.
+ *
+ * ITS GLYPH IS ALREADY WHAT SHIPS, exactly, and not by coincidence: the design's
+ * 18×18 rect at radius 6, `0.45 + severity/10 * 0.55` fill opacity (1 for an
+ * injury), a core of `3 + severity/10 * 4`, stroked at 3 for an injury and 1.5
+ * otherwise, and the crit ≥7 / mid ≥4 / warn banding, are `Mark` in
+ * `BodyMap.tsx` line for line. `MarkSwatch` draws the legend with that same
+ * function, so the key cannot drift from the marks it explains. Nothing about
+ * the glyph is restated here.
+ *
+ * It survives greyscale, which is the test that matters (§ "Status and
+ * advisory": shape carries the meaning). Desaturate a row and three channels
+ * still separate the states — an injury is a DIAMOND core on a double-weight
+ * outline, a severe soreness is a large dense disc, a mild one a small faint
+ * disc. Colour repeats what the drawing has already said; it is never the only
+ * difference.
+ *
+ * WHAT CHANGED IS THE CHROME AROUND IT. The rows were an 8pt-gapped stack
+ * inside a padded panel; they are now full-bleed divided rows (`padded={false}`,
+ * the shape `PrTable` and `ProfilePanels` already use), at the design's row
+ * metrics rounded onto the app's 4px scale — 12/16 for the design's 13/16 — and
+ * with the app's `ruleWidth` separator rather than the design's 0.5px hairline
+ * (docs/design-port.md #7: a line that has to survive sunlight on a track needs
+ * more than a hairline). The separator is inset from the left and full-bleed
+ * right, positioned the way `ListRow` does it, because a border cannot be inset.
+ * ─────────────────────────────────────────────────────────────────────────
  */
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import Svg, { Path } from "react-native-svg";
 
 import { BodyMap, MarkSwatch } from "./BodyMap";
 import { Panel } from "./Panel";
 import { parseStoredPart } from "../lib/bodyParts";
 import { BodyMark, Injury, SorenessEntry } from "../lib/types";
-import { space } from "../theme/space";
+import { dim } from "../theme/press";
+import { layout, ruleWidth, space, target } from "../theme/space";
 import { color } from "../theme/tokens";
 import { font, text } from "../theme/type";
 
@@ -58,6 +93,32 @@ export type BodyScanProps = {
 
 /** The scale every soreness figure is reported on. */
 const MAX_SEVERITY = 10;
+
+/**
+ * The action row's disclosure chevron.
+ *
+ * Same 24-unit grid, same path and same `ruleWidth` stroke as `List`'s — the
+ * icon vocabulary is one system or it is noise — drawn at the design's 18
+ * rather than that file's 20, and tinted with the label rather than left grey,
+ * because here the arrow and the word are one tinted object. `List` does not
+ * export its copy; if it ever does, delete this one rather than keep both.
+ */
+const GRID = 24;
+const CHEVRON_SIZE = 18;
+const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
+
+function Chevron() {
+  return (
+    <Svg width={CHEVRON_SIZE} height={CHEVRON_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
+      <Path
+        d={CHEVRON}
+        fill="none"
+        stroke={color.brandText}
+        strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
+      />
+    </Svg>
+  );
+}
 
 /** One flagged area, already resolved to a spot on the figure. */
 type Row = {
@@ -111,6 +172,7 @@ function areaCount(n: number): string {
 }
 
 export function BodyScan({ injuries, soreness }: BodyScanProps) {
+  const router = useRouter();
   const injuryRows: Row[] = [];
   const sorenessRows: Row[] = [];
   /** Flagged, but outside the vocabulary, so the diagram cannot place it. */
@@ -175,60 +237,102 @@ export function BodyScan({ injuries, soreness }: BodyScanProps) {
           "Nothing flagged"
         )
       }
+      /* The rows are a full-bleed divided list, so the card cannot own their
+         inset — see `PanelProps.padded`. Everything that is NOT a row carries
+         `styles.inset` instead. */
+      padded={false}
     >
-
       <BodyMap marks={marks} accessibilityLabel={summary} />
 
       {flagged ? (
-        <View style={styles.legend}>
-          {rows.map((row, i) => (
-            <View key={`${row.mark.key}-${row.mark.side}-${i}`} style={styles.row}>
-              <MarkSwatch kind={row.mark.kind} severity={row.mark.severity} />
-              <Text style={styles.rowLabel}>{row.label}</Text>
-              {row.mark.kind === "injury" ? (
-                <Text style={styles.rowMeta}>injury</Text>
-              ) : (
-                <Text style={styles.rowSeverity}>
-                  {row.mark.severity}/{MAX_SEVERITY}
-                </Text>
-              )}
+        <>
+          {/* No `gap`: the rows are contiguous and the separator is the only
+              thing between them, the way a grouped list draws it. Rendered only
+              when there ARE rows — an empty one is still a flex child and would
+              spend the Panel's gap on nothing, which happens whenever every
+              flagged area landed in `unplaced`. */}
+          {rows.length ? (
+            <View>
+              {rows.map((row, i) => (
+                <View key={`${row.mark.key}-${row.mark.side}-${i}`} style={styles.row}>
+                  <MarkSwatch kind={row.mark.kind} severity={row.mark.severity} />
+                  <Text style={styles.rowLabel}>{row.label}</Text>
+                  {row.mark.kind === "injury" ? (
+                    <Text style={styles.rowMeta}>injury</Text>
+                  ) : (
+                    <Text style={styles.rowSeverity}>
+                      {row.mark.severity}/{MAX_SEVERITY}
+                    </Text>
+                  )}
+                  {/* Between rows only — never under the last one, which would
+                      read as a clipped row (docs/design-port.md #6). The action
+                      row below draws its own, above itself. */}
+                  {i === rows.length - 1 ? null : (
+                    <View style={styles.separator} pointerEvents="none" />
+                  )}
+                </View>
+              ))}
             </View>
-          ))}
-
-          {unplaced.length ? (
-            <Text style={styles.rowMeta}>
-              {`Also flagged, not shown on the diagram: ${unplaced.join(", ")}.`}
-            </Text>
           ) : null}
 
-          {/*
-            The key. Shape and weight carry the meaning — a diamond on a heavier
-            outline is an injury, a disc is soreness, and the disc grows and
-            fills as the reported figure rises — so the tones only repeat what
-            the drawing already says and the scan survives greyscale.
-          */}
-          <View style={styles.key}>
-            <View style={styles.keyItem}>
-              <MarkSwatch kind="injury" />
-              <Text style={styles.rowMeta}>injury</Text>
-            </View>
-            <View style={styles.keyItem}>
-              <MarkSwatch kind="soreness" severity={9} />
-              <Text style={styles.rowMeta}>severe</Text>
-            </View>
-            <View style={styles.keyItem}>
-              <MarkSwatch kind="soreness" severity={5} />
-              <Text style={styles.rowMeta}>moderate</Text>
-            </View>
-            <View style={styles.keyItem}>
-              <MarkSwatch kind="soreness" severity={2} />
-              <Text style={styles.rowMeta}>mild</Text>
+          <View style={[styles.notes, styles.inset]}>
+            {unplaced.length ? (
+              <Text style={styles.rowMeta}>
+                {`Also flagged, not shown on the diagram: ${unplaced.join(", ")}.`}
+              </Text>
+            ) : null}
+
+            {/*
+              The key. Shape and weight carry the meaning — a diamond on a heavier
+              outline is an injury, a disc is soreness, and the disc grows and
+              fills as the reported figure rises — so the tones only repeat what
+              the drawing already says and the scan survives greyscale.
+            */}
+            <View style={styles.key}>
+              <View style={styles.keyItem}>
+                <MarkSwatch kind="injury" />
+                <Text style={styles.rowMeta}>injury</Text>
+              </View>
+              <View style={styles.keyItem}>
+                <MarkSwatch kind="soreness" severity={9} />
+                <Text style={styles.rowMeta}>severe</Text>
+              </View>
+              <View style={styles.keyItem}>
+                <MarkSwatch kind="soreness" severity={5} />
+                <Text style={styles.rowMeta}>moderate</Text>
+              </View>
+              <View style={styles.keyItem}>
+                <MarkSwatch kind="soreness" severity={2} />
+                <Text style={styles.rowMeta}>mild</Text>
+              </View>
             </View>
           </View>
-        </View>
+        </>
       ) : (
-        <Text style={styles.rowMeta}>{emptyLine}</Text>
+        <Text style={[styles.rowMeta, styles.inset]}>{emptyLine}</Text>
       )}
+
+      {/*
+        The design's action row. It goes to Home, which is where soreness is
+        added or changed — the scan is a reading, and the one thing an athlete
+        can do about what it shows is on the other tab. A component owning its
+        own `router` follows `RunCard`, and the row is a real destination: a row
+        that wore a chevron and did nothing would be the lie `List`'s header
+        describes.
+      */}
+      <Pressable
+        onPress={() => router.navigate("/")}
+        accessibilityRole="link"
+        accessibilityLabel="Add or change soreness"
+        /* `dim`, not `rowPress`: a row flashes a fill across its full width, and
+           `Card` does not clip its corners, so a flash on the card's last child
+           would paint square corners over the radius. See theme/press. */
+        style={({ pressed }) => [styles.action, dim(pressed)]}
+      >
+        <View style={styles.separatorTop} pointerEvents="none" />
+        <Text style={styles.actionLabel}>Add or change soreness</Text>
+        <Chevron />
+      </Pressable>
     </Panel>
   );
 }
@@ -248,21 +352,79 @@ const styles = StyleSheet.create({
   /** Every numeral is mono, including one sitting inside a sentence. */
   count: { fontFamily: font.mono, color: color.ink },
 
-  legend: { gap: space.sm },
-  row: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  /**
+   * The design's 13/16 row padding on the app's 4px scale, with its 12pt gap.
+   * No `minHeight`: these rows are not tap targets, and 12 + a 24pt line + 12
+   * already clears 48.
+   */
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: layout.cardPadding,
+  },
   rowLabel: { ...text.base, color: color.ink, flex: 1 },
   rowMeta: { ...text.meta, color: color.muted },
-  /** Welded to its scale — a bare "6" is not a severity. */
-  rowSeverity: { ...text.meta, fontFamily: font.mono, color: color.ink2 },
+  /**
+   * Welded to its scale — a bare "6" is not a severity — and `statInline`
+   * rather than `meta` in the mono face, so the figure is tabular. Same `muted`
+   * as the word "injury" beside it: the two are one meta column and must not
+   * read as two ranks.
+   */
+  rowSeverity: { ...text.statInline, color: color.muted },
+  /**
+   * Absolutely positioned, and inset from the left with a full-bleed right, the
+   * way `ListRow` draws it: a `borderWidth` is all-or-nothing across the row.
+   */
+  separator: {
+    position: "absolute",
+    left: layout.cardPadding,
+    right: 0,
+    bottom: 0,
+    height: ruleWidth,
+    backgroundColor: color.ruleSoft,
+  },
+  /** The same rule, above the action row rather than below a data row. */
+  separatorTop: {
+    position: "absolute",
+    left: layout.cardPadding,
+    right: 0,
+    top: 0,
+    height: ruleWidth,
+    backgroundColor: color.ruleSoft,
+  },
+
+  /** Everything in the card that is NOT a full-bleed row. */
+  inset: { paddingHorizontal: layout.cardPadding },
+  notes: { gap: space.sm },
 
   key: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
     gap: space.md,
-    marginTop: space.xs,
   },
   keyItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+
+  /**
+   * The action row. `target.min`, because unlike the rows above this one is
+   * actually tapped.
+   */
+  action: {
+    minHeight: target.min,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: layout.cardPadding,
+  },
+  /**
+   * `brandText`, never `brand`: the ember hex is 2.01:1 and is a fill, so a
+   * word wearing it would be unreadable in the light this app is used in. This
+   * is the tinted-action tint the rest of the app uses for the same job.
+   */
+  actionLabel: { ...text.base, color: color.brandText, flex: 1 },
 });
 
 export default BodyScan;

@@ -367,7 +367,7 @@ function PlanRow({ day, dateLabel, expanded, onToggle }: PlanRowProps) {
               renders no badge instead of the wrong one. */}
           {day.source === "coach" ? (
             <View style={styles.coachPill}>
-              <Text style={styles.coachPillLabel}>from your coach</Text>
+              <Text style={styles.coachPillLabel}>coach</Text>
             </View>
           ) : null}
           {day.isTaper ? (
@@ -675,6 +675,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },
+  /**
+   * One word, lowercase — the same register as the `taper` pill beside it.
+   *
+   * It read "from your coach" before. Four words made the quietest thing in
+   * the row its widest object: on a week the coach wrote, seven of them
+   * stacked down the card and outweighed the sessions they were annotating.
+   * The design marks this with a single word for that reason, and in a plan
+   * row next to a date "coach" can only mean one thing.
+   */
   coachPillLabel: { ...text.meta, color: color.brandText },
 
   type: { ...text.base, color: color.ink, marginTop: space.xs },

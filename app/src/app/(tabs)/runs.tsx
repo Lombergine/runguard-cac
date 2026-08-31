@@ -302,12 +302,26 @@ export default function RunsScreen() {
          * a property of one day; it can never be a property of the log.
          */
         ListEmptyComponent={<Absent label="No runs synced yet." />}
-        renderItem={({ item }) => (
-          <RunCard
-            run={item}
-            dateLabel={dayLabel(item.date)}
-            sessionLabel={planTypeByDate.get(item.date)}
-          />
+        /*
+         * The slab lives here, not in `RunCard`. The rows are one grouped
+         * surface with the corners doing the grouping, so the card cannot wrap
+         * them — a FlatList's items are siblings, not children. Each row paints
+         * the ground and the first and last round their own outer corners.
+         */
+        renderItem={({ item, index }) => (
+          <View
+            style={[
+              styles.row,
+              index === 0 && styles.rowFirst,
+              index === runs.length - 1 && styles.rowLast,
+            ]}
+          >
+            <RunCard
+              run={item}
+              dateLabel={dayLabel(item.date)}
+              sessionLabel={planTypeByDate.get(item.date)}
+            />
+          </View>
         )}
       />
     </Screen>
@@ -341,7 +355,26 @@ const styles = StyleSheet.create({
   },
   /** Matches the FlatList separator, so loading and loaded rhythm agree. */
   rows: { gap: space.md },
-  separator: { height: space.md },
+  /**
+   * A hairline between rows inside the slab, not a gap between cards.
+   *
+   * It was `height: space.md` when every run drew its own `Card`. `RunCard` is
+   * a row now, so the rule has to sit on the card ground and inset from the
+   * left the way every other grouped list in the app does — flush right, so it
+   * runs to the slab's edge.
+   */
+  separator: {
+    height: ruleWidth,
+    backgroundColor: color.rule,
+    marginLeft: layout.cardPadding,
+  },
+  /** The grouped surface the rows sit on. Corners come from the ends. */
+  row: { backgroundColor: color.card },
+  rowFirst: { borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card },
+  rowLast: {
+    borderBottomLeftRadius: radius.card,
+    borderBottomRightRadius: radius.card,
+  },
 
   header: { marginBottom: layout.section },
   /**

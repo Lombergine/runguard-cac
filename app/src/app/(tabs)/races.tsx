@@ -500,10 +500,15 @@ export default function RacesScreen() {
             ) : (
               <Card padded={false}>
                 {history.map((result, i) => (
-                  <View
-                    key={result.id}
-                    style={i > 0 ? styles.divided : undefined}
-                  >
+                  <View key={result.id}>
+                    {/* BETWEEN rows only, and inset from the left so it starts
+                        under the row's own text — the way iOS draws a list and
+                        the way `components/List` already does it. It ran corner
+                        to corner here, which reads as a table rule rather than
+                        as one list. */}
+                    {i > 0 ? (
+                      <View style={styles.separator} pointerEvents="none" />
+                    ) : null}
                     <ResultRow result={result} />
                   </View>
                 ))}
@@ -512,12 +517,18 @@ export default function RacesScreen() {
             <LogResultForm onChanged={invalidate} />
           </Section>
 
-          {/* PR progression. Owns its own Card and head — do not wrap it.
-              Below History on purpose: the times themselves come first, and
-              this says how they moved. */}
-          <View style={styles.section}>
+          {/*
+            The third group, and the only one that was still unlabelled — its
+            card simply began. `PrChart` owns its own Card and its own per-event
+            heads, which its styles call "one step down from the screen's
+            section heading"; this is that heading.
+
+            Below History on purpose: the times themselves come first, and this
+            says how they moved.
+          */}
+          <Section label="PR progression" style={styles.section}>
             <PrChart progression={profile.races?.prProgression} />
-          </View>
+          </Section>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -533,16 +544,13 @@ const styles = StyleSheet.create({
   },
   sections: { gap: layout.section },
   section: { gap: space.md },
-  splits: {
-    ...text.meta,
-    fontFamily: font.mono,
-    // Mandatory on any mono numeral (theme/type.ts) — `text.meta` is a body
-    // role and does not carry it, so overriding the family has to bring it
-    // along. Without it a wrapped run of splits mis-aligns line to line.
-    ...tabular,
-    color: color.ink2,
-    marginTop: space.xs,
-  },
+  /**
+   * `text.statInline` — the 14 mono tabular rank, which is exactly what this
+   * was building by hand out of `text.meta` plus the mono family plus
+   * `tabular`. A figure sitting under the thing it describes now has a named
+   * role, so this stops being a fourth place the app spells one out.
+   */
+  splits: { ...text.statInline, color: color.ink2, marginTop: space.xs },
   raceNote: { ...text.meta, color: color.muted, marginTop: space.xs },
   /** Ember-coloured meta on the card ground — the pairing `countdown` uses.
       A word about the race, not a badge that rates it. */
@@ -647,7 +655,12 @@ const styles = StyleSheet.create({
   },
   resultLeft: { flexShrink: 1, gap: space.xs },
   resultRight: { alignItems: "flex-end", gap: space.xs },
-  divided: { borderTopWidth: ruleWidth, borderTopColor: color.ruleSoft },
+  /** Inset left, full-bleed right — `List.separator`'s geometry, as a bar. */
+  separator: {
+    height: ruleWidth,
+    marginLeft: layout.cardPadding,
+    backgroundColor: color.ruleSoft,
+  },
 
   time: { ...text.stat, color: color.ink },
   place: { ...text.stat, color: color.ink },

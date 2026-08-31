@@ -257,6 +257,25 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/*
+          The screen's subtitle. It belongs to the TITLE, so it is pinned here
+          under the native header rather than scrolling away with the
+          transcript: `useScreenHeader` takes a title and nothing else (see
+          theme/header.ts on why the native header is deliberately thin), so
+          this is the closest honest port of "title, then subtitle".
+
+          Permanent, and that is the point rather than an accident of layout.
+          It is the one sentence that says what an answer on this screen IS —
+          a description of the athlete's own data, never an instruction — and
+          non-negotiable #5 is not a thing that stops applying once the
+          conversation is three replies long. It is the same reasoning that
+          pins the coach note in the composer instead of leaving it in the
+          empty state, where the website's copy of it used to vanish forever
+          after the first message.
+        */}
+        <Text style={styles.caption}>
+          Describes what your data shows — never what to do
+        </Text>
+        {/*
           The failure sits ABOVE the list rather than replacing it, in both
           cases: a message that DID send must stay on screen — if it tripped an
           intercept the reply was fetched and logged server-side, so it can
@@ -270,7 +289,7 @@ export default function ChatScreen() {
         */}
         {signedOut ? (
           <View style={styles.loadFailed}>
-            <Panel style={styles.panelInset} title="Ask RunGuard" note="Signed out">
+            <Panel style={styles.panelInset} title="Signed out">
               <Text style={styles.plain}>
                 This device is no longer signed in, so nothing can be sent from
                 here. Sign in again to use it.
@@ -306,7 +325,7 @@ export default function ChatScreen() {
             // about the athlete, and "Nothing sent yet" would assert one.
             messages === null || historyDiscarded ? null : (
               <View style={styles.opener}>
-                <Panel style={styles.panelInset} title="Ask RunGuard" note="Nothing sent yet">
+                <Panel style={styles.panelInset} title="Nothing sent yet">
                   <Text style={styles.plain}>
                     Ask about a run, a workout, or how you have been feeling.
                   </Text>
@@ -442,6 +461,19 @@ function Separator() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
   fill: { flex: 1 },
+  /**
+   * The subtitle, on the page ground and under no rule of its own: it is part
+   * of the header's block, not a card and not the first thing in the
+   * transcript. `muted` and `meta` keep it subordinate to the title above it —
+   * a subtitle that competed with its title would read as the app's opening
+   * line in the conversation, which is exactly what it must not be.
+   */
+  caption: {
+    ...text.meta,
+    color: color.muted,
+    paddingHorizontal: layout.page,
+    paddingTop: space.md,
+  },
   /** No horizontal inset — SafetyNotice is full-bleed. */
   list: { paddingVertical: space.xl },
   bubbleRow: { paddingHorizontal: layout.page },

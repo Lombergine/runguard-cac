@@ -30,6 +30,7 @@ import { Stack, useRouter } from "expo-router";
 
 import { Card } from "../components/Card";
 import { List, ListRow } from "../components/List";
+import { Section } from "../components/Section";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
@@ -208,8 +209,9 @@ export default function PairScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Card>
-            <Text style={styles.eyebrow}>PAIR THIS DEVICE</Text>
-            <Text style={styles.title}>Paste your device token</Text>
+            <Text style={styles.title} accessibilityRole="header">
+              Paste your device token
+            </Text>
             <Text style={styles.body}>
               On the RunGuard web app, open Profile → Pair the RunGuard iPhone app and
               copy the token shown there.
@@ -302,25 +304,27 @@ export default function PairScreen() {
               The `checking` guard moved inside each handler because `ListRow`
               takes no `disabled` — a tap mid-verification is ignored either
               way, and the rows never looked disabled to begin with. */}
-          <List header="Other ways in" style={styles.alternatives}>
-            <ListRow
-              title="Sign in with email instead"
-              chevron
-              onPress={() => {
-                if (checking) return;
-                router.replace("/login");
-              }}
-            />
-            <ListRow
-              title="Create an account"
-              chevron
-              isLast
-              onPress={() => {
-                if (checking) return;
-                router.replace("/signup");
-              }}
-            />
-          </List>
+          <Section label="Other ways in" style={styles.alternatives}>
+            <List>
+              <ListRow
+                title="Sign in with email instead"
+                chevron
+                onPress={() => {
+                  if (checking) return;
+                  router.replace("/login");
+                }}
+              />
+              <ListRow
+                title="Create an account"
+                chevron
+                isLast
+                onPress={() => {
+                  if (checking) return;
+                  router.replace("/signup");
+                }}
+              />
+            </List>
+          </Section>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -336,9 +340,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.page,
     paddingVertical: layout.section,
   },
-  eyebrow: { ...text.micro, color: color.muted },
-  title: { ...text.title, color: color.ink, marginTop: space.md },
-  body: { ...text.base, color: color.ink2, marginTop: space.md },
+  title: { ...text.title, color: color.ink },
+  body: { ...text.base, color: color.ink2, marginTop: space.sm },
   /** Mono because it is a code, not prose, and misread characters cost a retry. */
   input: {
     ...text.base,

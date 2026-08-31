@@ -36,6 +36,7 @@ import { Stack, useRouter } from "expo-router";
 
 import { Card } from "../components/Card";
 import { List, ListRow } from "../components/List";
+import { Section } from "../components/Section";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
@@ -293,12 +294,10 @@ export default function SignupScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Card>
-            <Text style={styles.eyebrow}>CREATE ACCOUNT</Text>
-            <Text style={styles.title}>Set up RunGuard</Text>
-            <Text style={styles.body}>
-              This creates your account and signs this device in. You can join a team
-              now or on your own later.
+            <Text style={styles.title} accessibilityRole="header">
+              Create account
             </Text>
+            <Text style={styles.body}>Two minutes, then it syncs itself</Text>
 
             <Field
               label="Team code"
@@ -476,20 +475,28 @@ export default function SignupScreen() {
               No `onPress` while `busy` renders the rows genuinely inert — no
               chevron, no flash, no role — which is what `disabled` used to say
               here. A row that keeps its chevron while it cannot be followed is
-              the lie `List`'s header describes. */}
-          <List style={styles.footer}>
-            <ListRow
-              title="Already have an account? Log in"
-              onPress={busy ? undefined : () => router.replace("/login")}
-              chevron
-            />
-            <ListRow
-              title="Use a pairing code"
-              onPress={busy ? undefined : () => router.replace("/pair")}
-              chevron
-              isLast
-            />
-          </List>
+              the lie `List`'s header describes.
+
+              The eyebrow is a `Section` label rather than `List`'s own `header`,
+              so every eyebrow on the four signed-out screens is the same node at
+              the same rank. Sentence case in source: `text.micro` uppercases it,
+              and a hand-typed "SIGN IN" would be the app's one eyebrow that does
+              not. */}
+          <Section label="Sign in" style={styles.footer}>
+            <List>
+              <ListRow
+                title="Log in with email"
+                onPress={busy ? undefined : () => router.replace("/login")}
+                chevron
+              />
+              <ListRow
+                title="Use a pairing code"
+                onPress={busy ? undefined : () => router.replace("/pair")}
+                chevron
+                isLast
+              />
+            </List>
+          </Section>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -549,9 +556,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.page,
     paddingVertical: layout.section,
   },
-  eyebrow: { ...text.micro, color: color.muted },
-  title: { ...text.title, color: color.ink, marginTop: space.md },
-  body: { ...text.base, color: color.ink2, marginTop: space.md },
+  title: { ...text.title, color: color.ink },
+  body: { ...text.base, color: color.ink2, marginTop: space.sm },
 
   field: { marginTop: space.xl, gap: space.sm },
   panelHead: {

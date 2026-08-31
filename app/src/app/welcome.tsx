@@ -24,8 +24,8 @@
  * VOICE. The website sells the coach "See the injury coming before it happens."
  * That is a prediction, and `CLAUDE.md` is explicit that RunGuard is a
  * monitoring signal and never phrases output as diagnosis or forecast — doubly
- * so on the athlete's own screen, where the athlete is a minor. The three lines
- * below are the site's athlete-facing claims, kept because they are true and
+ * so on the athlete's own screen, where the athlete is a minor. The three cards
+ * below carry the site's athlete-facing claims, kept because they are true and
  * checkable, in the app's descriptive voice.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,7 +40,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import Svg, { Path } from "react-native-svg";
 
+import { Card } from "../components/Card";
+import { List, ListRow } from "../components/List";
+import { Section } from "../components/Section";
 import { ApiError, getDemoPairing } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { enterDemo } from "../lib/demo";
@@ -131,16 +135,80 @@ function useEntrance(steps: number, reduced: boolean) {
 }
 
 /**
+ * The onboarding glyphs, on the same 24-unit grid and at the same rule weight
+ * as the tab bar's — the icon vocabulary is one system or it is noise. Stroked,
+ * never filled, so a glyph and a card border are the same line.
+ */
+const GRID = 24;
+/**
+ * Drawn at exactly `text.title`'s line box, so the glyph sits on the card
+ * title's own line without a nudge. Derived rather than guessed, and NOT taken
+ * from the spacing scale — `space.ts` is explicit that welding a size to a
+ * spacing step means a padding change silently reshapes something else.
+ */
+const GLYPH_SIZE = text.title.lineHeight as number;
+
+/** A tick. The check-in is two taps and nothing else. */
+const CHECK = "M4 12.5 L9.5 18 L20 6.5";
+/** Two arcs chasing each other — the workout arriving on its own. */
+const SYNC =
+  "M4.5 12 A7.5 7.5 0 0 1 18.4 8.2 M18.9 5 L18.4 8.2 L15.2 8.6 " +
+  "M19.5 12 A7.5 7.5 0 0 1 5.6 15.8 M5.1 19 L5.6 15.8 L8.8 15.4";
+/** Two figures, one of them half out of frame: a team, or just you. */
+const TEAM =
+  "M9 10 A3 3 0 1 0 9 4 A3 3 0 1 0 9 10 " +
+  "M3.5 19.5 C3.5 15.8 6 14 9 14 C12 14 14.5 15.8 14.5 19.5 " +
+  "M16.5 6.5 A2.5 2.5 0 1 1 16.5 11.5 " +
+  "M17.5 14.3 C19.7 14.9 20.5 16.8 20.5 19.5";
+
+/**
+ * `brandStrong`, not `brand`: a 1.5pt stroke needs the 3:1 floor a drawn
+ * element is held to, and `brand` measures 2.01:1. The same split the tab bar
+ * makes between its glyph and its label.
+ */
+function Glyph({ d }: { d: string }) {
+  return (
+    <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
+      <Path
+        d={d}
+        fill="none"
+        stroke={color.brandStrong}
+        strokeWidth={(ruleWidth * GRID) / GLYPH_SIZE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
  * What the athlete gets, in the order they will meet it.
  *
  * Three, not five: this screen is read standing up, once. Each is a fact the
  * app can be held to rather than a promise — you can join solo, the figures
  * come from Health, the coach sees the same numbers you do.
+ *
+ * A CARD each, with a glyph, a title and one body line, rather than the ruled
+ * bullet list this used to be: the design's onboarding sequence is three cards,
+ * and a title the eye can land on is what makes the sequence skimmable at
+ * arm's length. The claims themselves are unchanged.
  */
 const POINTS = [
-  "Check in before practice — two taps, no typing.",
-  "Your runs and overnight recovery, read from Apple Health.",
-  "Join a team with a code, or train on your own.",
+  {
+    glyph: CHECK,
+    title: "Two taps before practice",
+    body: "Check in with how you slept and where you are sore. No typing.",
+  },
+  {
+    glyph: SYNC,
+    title: "Syncs itself",
+    body: "Runs arrive from Apple Health the moment a workout ends.",
+  },
+  {
+    glyph: TEAM,
+    title: "Team or solo",
+    body: "Join a team with a code, or train on your own.",
+  },
 ] as const;
 
 export default function WelcomeScreen() {
@@ -220,13 +288,16 @@ export default function WelcomeScreen() {
 
           <Animated.View style={[styles.points, risePoints]}>
             {POINTS.map((point) => (
-              <View key={point} style={styles.point}>
-                {/* A mark, not an icon set. The one ember on the screen that is
-                    not the button, drawn at the same rule weight as every card
-                    border so it reads as part of the page. */}
-                <View style={styles.pointMark} />
-                <Text style={styles.pointText}>{point}</Text>
-              </View>
+              // `Card` carries the radius, the hairline and the one elevation
+              // token, so these three cannot drift from every other card in the
+              // app. The row layout is the only thing set here.
+              <Card key={point.title} style={styles.point}>
+                <Glyph d={point.glyph} />
+                <View style={styles.pointBody}>
+                  <Text style={styles.pointTitle}>{point.title}</Text>
+                  <Text style={styles.pointText}>{point.body}</Text>
+                </View>
+              </Card>
             ))}
           </Animated.View>
 
@@ -259,19 +330,24 @@ export default function WelcomeScreen() {
               )}
             </Pressable>
 
-            {/* `dim`, not `rowPress`: these are OBJECTS — a bordered button and
-                two links — not list surfaces. The whole control dims, border
-                and label together, rather than the label alone. */}
-            <Pressable
-              style={({ pressed }) => [styles.secondary, dim(pressed)]}
-              onPress={() => router.push("/login")}
-              accessibilityRole="button"
-            >
-              <Text style={styles.secondaryLabel}>I already have an account</Text>
-            </Pressable>
+            {/* The other two doors, each a grouped card under its own muted
+                eyebrow — the design's shape, and `Section` so the eyebrow keeps
+                the app's `text.micro` rank rather than growing a second voice.
+                `List` owns the row's press flash and the chevron that promises
+                a screen underneath, so neither is hand-drawn here. */}
+            <Section label="Sign in">
+              <List>
+                <ListRow
+                  title="I already have an account"
+                  onPress={() => router.push("/login")}
+                  chevron
+                  isLast
+                />
+              </List>
+            </Section>
 
             {/*
-              The demo. Third, and quiet: it is the least committing thing on the
+              The demo. Last, and quiet: it is the least committing thing on the
               screen, not the recommended one.
 
               It opens a REAL seeded athlete's record read-only — every write the
@@ -282,19 +358,27 @@ export default function WelcomeScreen() {
               Hidden entirely when the server has no demo configured, rather than
               shown and then failing: `getDemoPairing()` 404s when `DEMO_TEAM_ID`
               is unset, and a button that cannot work is worse than no button.
+
+              While it is opening the row loses its `onPress`, which makes it
+              genuinely inert — no chevron, no flash, no role — rather than a row
+              that still looks followable and is not. That is `List`'s rule, and
+              it is what `disabled` used to approximate here.
             */}
             {demoState !== "off" ? (
-              <Pressable
-                style={({ pressed }) => [styles.quiet, dim(pressed)]}
-                onPress={openDemo}
-                disabled={demoState === "opening"}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: demoState === "opening" }}
-              >
-                <Text style={styles.quietLabel}>
-                  {demoState === "opening" ? "Opening the demo…" : "Look around first"}
-                </Text>
-              </Pressable>
+              <Section label="Or open a demo">
+                <List>
+                  <ListRow
+                    title={
+                      demoState === "opening"
+                        ? "Opening the demo…"
+                        : "Look around first"
+                    }
+                    onPress={demoState === "opening" ? undefined : openDemo}
+                    chevron
+                    isLast
+                  />
+                </List>
+              </Section>
             ) : null}
 
             {demoError ? (
@@ -351,25 +435,23 @@ const styles = StyleSheet.create({
   lede: { ...text.base, color: color.ink2 },
 
   points: { gap: space.md },
-  point: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
   /**
-   * Nudged down by the difference between the line box and the mark, so it sits
-   * on the first line's optical centre instead of its top edge. Derived, not a
-   * guessed offset.
-   *
-   * `radius.pill` takes no `borderCurve`: a capsule has no corner for the
-   * squircle to shape, so continuous is a no-op there by definition.
+   * Layout only — `Card` has already set the ground, the radius, the hairline
+   * and the shadow, and its `style` is merged last so this cannot fight them.
+   * The glyph is drawn at exactly `text.title`'s 24pt line box, so it sits on
+   * the title's own line without a nudge.
    */
-  pointMark: {
-    width: space.sm,
-    height: space.sm,
-    borderRadius: radius.pill,
-    backgroundColor: color.brand,
-    marginTop: ((text.base.lineHeight as number) - space.sm) / 2,
-  },
-  pointText: { ...text.base, color: color.ink2, flex: 1 },
+  point: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  pointBody: { flex: 1, gap: space.xs },
+  pointTitle: { ...text.title, color: color.ink },
+  pointText: { ...text.base, color: color.ink2 },
 
-  actions: { gap: target.gap },
+  /**
+   * `layout.section`, not `target.gap`: the primary action and the two eyebrow'd
+   * groups below it are sections now, not three buttons in a stack, and the
+   * design separates sections rather than crowding them into a tap-target gap.
+   */
+  actions: { gap: layout.section },
   primary: {
     minHeight: target.min,
     alignItems: "center",
@@ -382,20 +464,6 @@ const styles = StyleSheet.create({
   },
   primaryLabel: { ...text.baseSemi, color: color.ink },
 
-  secondary: {
-    minHeight: target.min,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
-    borderRadius: radius.control,
-    borderCurve: "continuous",
-  },
-  secondaryLabel: { ...text.baseSemi, color: color.ink },
-
-  /** The third action: no border, no fill — plainly the quietest way in. */
-  quiet: { minHeight: target.min, justifyContent: "center", alignItems: "center" },
-  quietLabel: { ...text.baseSemi, color: color.muted },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2 },
 

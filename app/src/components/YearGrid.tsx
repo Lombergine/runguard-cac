@@ -32,36 +32,46 @@
  * between "not recorded" and "recorded, and it was nothing".
  *
  * ─────────────────────────────────────────────────────────────────────────
- * SUNRISE: WHY THE RAMP NO LONGER STARTS PALE
+ * THE RAMP IS A TOKEN NOW, AND IT FOLLOWS THE APPEARANCE
  *
- * The old ramp ran `accentSoft → accent`, and its palest rung was safe only
- * because the old ground was a cool grey. On the cream ground it collapses:
+ * The five rungs used to be mixed in this file, `brand` deepening toward `ink`.
+ * They are `emberRamp` in theme/tokens instead — byte-identical values, plus an
+ * `emberRampDark` counterpart this file could not have produced. That token
+ * carries the reasoning for why the palest rung is `brand` itself and not
+ * something paler: on the cream ground `accentSoft` and `well` measure 1.02:1,
+ * so an absent day and the athlete's easiest recorded day were the same object,
+ * which is the one failure this grid cannot have. `brand` on `well` is 1.88:1,
+ * ΔL* 22.4, and the rungs step 8.5 / 9.1 / 9.0 / 9.6 ΔL* apart — monotonic in
+ * greyscale, so the banding survives colour-blindness and glare.
  *
- *     well #F4EFE6  vs  accentSoft #FDECC8   1.02:1,  ΔL* 0.7
+ * A rung is a real `rgb()` string, so unlike every `color.*` token it cannot be
+ * a `DynamicColorIOS` value and cannot resolve per appearance on its own — the
+ * caveat `staticColor` records in tokens.ts. The charts pay that cost because
+ * their paint lands in SVG and there is nowhere else to put it. This grid does
+ * not have to: every cell is an ordinary `View`, so the appearance is resolved
+ * once, here, with `useColorScheme()`. Without that the hottest rung stays
+ * ember carried down into the LIGHT ink — a dark brown square on a near-black
+ * page, i.e. the athlete's hardest day drawn as an empty one.
  *
- * An absent day and the athlete's easiest recorded day became the same object.
- * That is the one failure this grid cannot have, so the ramp was re-anchored
- * rather than merely re-hued: its palest rung is now `brand` itself, and it
- * deepens by mixing toward `ink` (the website's IntensityCalendar does the same
- * thing with a red heat ramp, but it can afford a pale foot because every one
- * of its cells prints its load as a numeral — here the fill IS the datum).
- *
- *     well #F4EFE6  vs  rung 0 #F59E0B      1.88:1,  ΔL* 22.4
- *     rungs step 8.5 / 9.1 / 9.0 / 9.6 ΔL* apart — monotonic in greyscale
- *
- * Nothing in the ramp is a colour of its own: every rung is a mix of `brand`,
- * `emberHot` and `ink`. No glyph is ever placed on one.
+ * No glyph is ever placed on a rung.
  * ─────────────────────────────────────────────────────────────────────────
  */
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+} from "react-native";
 
 import { Absent, NoRun, Zero } from "./Nothing";
 import { dayLabel, localDay, parseLocalDay } from "../lib/dates";
 import { formatDistance } from "../lib/units";
 import { ruleWidth, space } from "../theme/space";
 import { Panel } from "./Panel";
-import { color, staticColor } from "../theme/tokens";
+import { color, emberRamp, emberRampDark } from "../theme/tokens";
 import { text } from "../theme/type";
 
 /** One day of `calendar`, which rides along outside the `Profile` slice. */
@@ -128,41 +138,24 @@ const CELL_RADIUS = space.xs;
 const GUTTER = space.xxl;
 
 /* ------------------------------------------------------------------ *
- * The intensity ramp — five rungs, `brand` deepening toward `ink`, mixed from
- * tokens so no colour is introduced that is not already in the system. Five
- * because that is what the website's IntensityCalendar uses, and the two
- * surfaces should band an athlete's year identically.
+ * The intensity ramp. Five rungs because that is what the website's
+ * IntensityCalendar uses, and the two surfaces should band an athlete's year
+ * identically. The values themselves live in theme/tokens — see the header.
  * ------------------------------------------------------------------ */
 
-type Channels = [number, number, number];
-
-function channels(token: string): Channels {
-  const n = parseInt(token.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function mix(from: Channels, to: Channels, t: number): Channels {
-  return [0, 1, 2].map((i) => Math.round(from[i] + (to[i] - from[i]) * t)) as Channels;
-}
-
-const RUNGS = 5;
-/** The palest rung — see the header note on why it is not paler than this. */
-const RAMP_LOW = channels(color.brand);
-/** The hottest rung: emberHot carried down into ink. */
-const RAMP_HIGH = mix(channels(color.emberHot), channels(staticColor.ink), 0.55);
-
 /**
- * Five rungs, palest first. EXPORTED for the HR-zone bar on the Stats screen,
- * which sits a few hundred pixels above this grid and encodes the same idea —
- * five steps of intensity, hotter is harder. Two different five-step encodings
- * on one screen would be two visual languages for one concept; sharing this one
- * also means the zone bar inherits the ramp's greyscale monotonicity, so it
- * survives colour-blindness and glare exactly as the grid does.
+ * The light-mode rungs, palest first. EXPORTED for the HR-zone bar on the Stats
+ * screen, which sits a few hundred pixels above this grid and encodes the same
+ * idea — five steps of intensity, hotter is harder. Two different five-step
+ * encodings on one screen would be two visual languages for one concept;
+ * sharing this one also means the zone bar inherits the ramp's greyscale
+ * monotonicity, so it survives colour-blindness and glare exactly as the grid
+ * does.
+ *
+ * A re-export, not a definition: the ramp is `emberRamp` in theme/tokens, which
+ * also carries the dark counterpart. Import it from there in new code.
  */
-export const EMBER_RAMP: string[] = Array.from({ length: RUNGS }, (_, step) => {
-  const [r, g, b] = mix(RAMP_LOW, RAMP_HIGH, step / (RUNGS - 1));
-  return `rgb(${r}, ${g}, ${b})`;
-});
+export const EMBER_RAMP: readonly string[] = emberRamp;
 
 /**
  * The website's thresholds (IntensityCalendar `level()`), against the athlete's
@@ -391,6 +384,12 @@ export function YearGrid({
   const grid = useMemo(() => buildGrid(days, restDays), [days, restDays]);
 
   /**
+   * A rung is a real string and cannot adapt on its own, but a cell is a plain
+   * `View`, so the appearance is resolved rather than faked. See the header.
+   */
+  const ramp = useColorScheme() === "dark" ? emberRampDark : emberRamp;
+
+  /**
    * Pre-filled with the most recent day that has a run on it, as the charts
    * pre-fill with their latest point: tappability is undiscoverable, so the
    * first read has to be free.
@@ -492,7 +491,7 @@ export function YearGrid({
                                 cell.kind === "zero" && styles.cellZero,
                                 cell.kind === "load" && styles.cellLoad,
                                 cell.kind === "load" && {
-                                  backgroundColor: EMBER_RAMP[cell.level],
+                                  backgroundColor: ramp[cell.level],
                                 },
                                 // The selected day. A ring, not a fill: the fill
                                 // is the datum and overwriting it would hide the
@@ -545,6 +544,25 @@ export function YearGrid({
               This grid starts at {dayLabel(grid.firstRecorded)}. Anything
               earlier is outside it.
             </Text>
+            <Text style={styles.footnote}>
+              {/*
+                The design's own caption reads "dashed is nothing recorded" and
+                names nothing else, which leaves its other two empty squares —
+                the pre-data one and the recorded-but-no-run one — unexplained
+                and therefore free to be read as each other. Non-negotiable #4
+                exists to stop exactly that, so the legend names all three.
+
+                It says what THIS grid draws, which is the visual-spec mapping
+                (Absent dashed / NoRun dotted / Zero solid) rather than the
+                design's: in the design dotted is the unrecorded day, which
+                would put "we don't know" on a border style that means rest
+                everywhere else in the app. Spec outranks design, so dashed
+                keeps its one meaning and the sentence follows the cells.
+              */}
+              Dashed is a day with nothing recorded, dotted is a rest day the
+              plan scheduled, and a solid cell with no ember is a day we have
+              that had no run on it.
+            </Text>
           </>
         )}
       </Panel>
@@ -554,7 +572,7 @@ export function YearGrid({
           <View>
             <Text style={styles.legendLabel}>Ember cell · a day that was run</Text>
             <View style={styles.rampRow}>
-              {EMBER_RAMP.map((fill, i) => (
+              {ramp.map((fill, i) => (
                 <View
                   key={i}
                   style={[styles.cell, styles.cellLoad, { backgroundColor: fill }]}

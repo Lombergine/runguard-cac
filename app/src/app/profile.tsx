@@ -7,11 +7,35 @@
  * is not one of them; `chat.tsx` is the precedent for a pushed route with its
  * own header. `settings.tsx` links here.
  *
- * Ported from the website's `ProfileTab`
- * (website/src/components/athlete/tabs.tsx ~:760), with three deliberate
- * departures:
+ * ── THE SHAPE, FROM THE DESIGN STUDY ────────────────────────────────────────
  *
- *  1. THE PAIRING PANEL DOES NOT CROSS. The web shows the device token with a
+ * A vertical stack of labelled groups and nothing else: a muted uppercase
+ * eyebrow, then a card of rows. Every eyebrow goes through `Section` and every
+ * card through `Card` — neither is drawn here, because a hand-drawn heading is
+ * exactly how this app ended up with three different section sizes once
+ * already (`components/Section.tsx`).
+ *
+ * This REPLACES the `Panel` stack the screen shipped with. `Panel` puts its
+ * title INSIDE the card, which is the website's shape and the right one for a
+ * card that is a single object with a caveat. The design's profile is the other
+ * shape throughout: the label names a GROUP and sits outside and above the card,
+ * and the card underneath is a list of facts rather than one fact. The Panel
+ * note survives as `Section`'s note — same role, same right-hand slot.
+ *
+ * Where the design and this file differ, and why:
+ *
+ *  - Eyebrows are `text.micro` (11.5 mono, uppercase), not the design's 13px
+ *    sans. `Section` owns that decision for the whole app; see docs/design-port.md.
+ *  - A row's trailing figure is mono and tabular. The design sets it in sans.
+ *  - Separators run BETWEEN rows only. The design emits one after the last row
+ *    too, which reads as a clipped row above the card's bottom edge.
+ *  - The screen title lives in the native header (`useScreenHeader`), so the
+ *    design's subtitle is the one line of page content that is not a group.
+ *
+ * ── THREE DEPARTURES FROM THE WEBSITE'S `ProfileTab` ────────────────────────
+ * (website/src/components/athlete/tabs.tsx ~:760)
+ *
+ *  1. THE PAIRING GROUP DOES NOT CROSS. The web shows the device token with a
  *     copy button, because the browser is not the paired device and the token
  *     has to get to the phone somehow. Here the phone IS the paired device, so
  *     there is nothing to copy and everything to lose: the token never expires
@@ -21,7 +45,7 @@
  *     Keychain for display — the token is read only to sign a request, and
  *     `signOut()` erases it without ever holding it — and `lib/api` has already
  *     stripped `athlete.deviceToken` from the payload before it arrives. What
- *     replaces the panel is a statement of fact (paired, or not) and a way out
+ *     replaces it is a statement of fact (paired, or not) and a way out
  *     (Unpair).
  *
  *  2. The school name is shown in full. The web renders
@@ -33,7 +57,7 @@
  *     about this: an "age" or "default" figure is an estimate about the athlete
  *     rather than a measurement of them, and the enum is a database value, not
  *     an explanation. `source` is read here only to decide whether "Use
- *     automatic" is offered and whether the estimate caveat is shown.
+ *     automatic" is offered and which caveat the row carries.
  */
 import { useState } from "react";
 import {
@@ -58,8 +82,9 @@ import {
   InjuryHistory,
   SeasonGoals,
 } from "../components/ProfilePanels";
+import { Card } from "../components/Card";
 import { ListRow } from "../components/List";
-import { Panel } from "../components/Panel";
+import { Section } from "../components/Section";
 import { MentalChart } from "../components/charts/MentalChart";
 import { ApiError, joinTeam, leaveTeam, setHrMax } from "../lib/api";
 import { useProfile } from "../lib/profileStore";
@@ -79,7 +104,7 @@ import { layout, radius, ruleWidth, space, target } from "../theme/space";
  * different: `teams.join_code` is surfaced only on the COACH dashboard
  * (website/src/app/dashboard/page.tsx:73), and `buildProfile()` does not put it
  * in the athlete payload at all — so this key is always undefined today and the
- * code line simply does not render. It is declared rather than dropped because
+ * code row simply does not render. It is declared rather than dropped because
  * turning it on is a one-line server change (`joinCode: team?.join_code ?? null`
  * in website/src/lib/profile.ts:341), and because a fabricated code is worse
  * than an absent one: it would be typed into a form that rejects it.
@@ -97,7 +122,7 @@ function explain(err: unknown, fallback: string): string {
  * ------------------------------------------------------------------ */
 
 /**
- * One labelled fact, as a grouped-list row.
+ * One labelled fact, as a row.
  *
  * This was a hand-drawn `Field` — a stacked label over a value — which is the
  * web shape. On iOS a key/value fact is a ROW: label left, value right, a
@@ -106,13 +131,14 @@ function explain(err: unknown, fallback: string): string {
  *
  * A missing value renders as an inline dash in `color.unknown` with "Not
  * recorded" as the row's sub-line — the same treatment `Tile` uses, and for the
- * same reason: absence must be distinguishable, not prominent, and four dashed
+ * same reason: absence must be distinguishable, not prominent, and five dashed
  * boxes stacked down a profile would make not knowing someone's grade the
  * loudest thing on the screen. It is still never a blank and never a zero, and
  * the dash is never left alone to carry the meaning.
  *
  * The row is inert on purpose — no `onPress`, so `ListRow` draws no chevron and
- * no press flash. None of these facts is editable from the phone.
+ * no press flash. None of these facts is editable from the phone, and the
+ * design's chevron means "a screen is underneath", not "tappable".
  *
  * `mono` is not styling: the rule is that every numeral is mono and tabular, so
  * a grade is and a school is not.
@@ -204,6 +230,9 @@ function EmberButton({
 /**
  * A bordered, unfilled control. Leaving, clearing, unpairing.
  *
+ * It sits UNDER its group's card rather than inside it, which is where the
+ * design puts an action that belongs to a group rather than to one of its rows.
+ *
  * `dim` and not `rowPress`: this is an OBJECT, not a surface, so it dims as a
  * whole rather than flashing a fill behind its own label (see theme/press). It
  * had no pressed state at all, which on "Leave team" and "Unpair this device"
@@ -246,11 +275,14 @@ function QuietButton({
  * The web finishes each with `router.refresh()`, which re-runs the server
  * component. There is no equivalent here: membership changes what `/me` returns
  * for `teamName`, so the screen invalidates the shared profile instead. Until
- * that refetch lands the panel stays in its old state rather than optimistically
+ * that refetch lands the group stays in its old state rather than optimistically
  * claiming a team — `setAthleteTeam` is the server's write, and this screen does
  * not know it happened until the server says so.
+ *
+ * The joined state is a card of rows; the solo state is a card of prose, a field
+ * and a button, because "enter a code" is not a fact and cannot be a row.
  */
-function TeamPanel({
+function TeamSection({
   athlete,
   onChanged,
 }: {
@@ -293,17 +325,19 @@ function TeamPanel({
 
   if (athlete.teamName) {
     return (
-      <Panel title="Team" note="Your coach can see your training">
-        <Text style={styles.body}>
-          You are on <Text style={styles.bodyStrong}>{athlete.teamName}</Text>.
-        </Text>
-        {/* Only renders once the server sends it — see AppProfile. */}
-        {athlete.joinCode ? (
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Join code</Text>
-            <Text style={styles.codeValue}>{athlete.joinCode}</Text>
-          </View>
-        ) : null}
+      <Section label="Team" note="Your coach can see your training">
+        <Card padded={false} style={styles.group}>
+          <ListRow title="Team" detail={athlete.teamName} isLast={!athlete.joinCode} />
+          {/* Only renders once the server sends it — see AppProfile. A code is
+              read back character by character, so it is mono like a numeral. */}
+          {athlete.joinCode ? (
+            <ListRow
+              title="Join code"
+              detail={<Text style={styles.rowMono}>{athlete.joinCode}</Text>}
+              isLast
+            />
+          ) : null}
+        </Card>
         <QuietButton
           label={busy ? "Leaving…" : "Leave team"}
           onPress={leave}
@@ -314,44 +348,46 @@ function TeamPanel({
             {problem}
           </Text>
         ) : null}
-      </Panel>
+      </Section>
     );
   }
 
   return (
-    <Panel title="Team" note="You are solo">
-      <Text style={styles.body}>
-        Nobody is coaching you here yet. If a coach gave you a team code, enter it and
-        you will show up on their roster.
-      </Text>
-      <TextInput
-        style={styles.codeInput}
-        value={code}
-        // Uppercased on every keystroke as well as by the keyboard: the
-        // keyboard hint is a suggestion, and a pasted code bypasses it
-        // entirely. `getTeamByCode` compares case-insensitively, so this is
-        // for the athlete reading back what they typed, not for the server.
-        onChangeText={(t) => setCode(t.toUpperCase())}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        autoComplete="off"
-        spellCheck={false}
-        editable={!busy}
-        placeholder="TEAM CODE"
-        placeholderTextColor={color.placeholder}
-        accessibilityLabel="Team code"
-      />
-      <EmberButton
-        label={busy ? "Joining…" : "Join team"}
-        onPress={join}
-        disabled={busy || code.trim().length === 0}
-      />
-      {problem ? (
-        <Text style={styles.problem} accessibilityLiveRegion="polite">
-          {problem}
+    <Section label="Team" note="You are solo">
+      <Card style={styles.stack}>
+        <Text style={styles.body}>
+          Nobody is coaching you here yet. If a coach gave you a team code, enter it and
+          you will show up on their roster.
         </Text>
-      ) : null}
-    </Panel>
+        <TextInput
+          style={styles.codeInput}
+          value={code}
+          // Uppercased on every keystroke as well as by the keyboard: the
+          // keyboard hint is a suggestion, and a pasted code bypasses it
+          // entirely. `getTeamByCode` compares case-insensitively, so this is
+          // for the athlete reading back what they typed, not for the server.
+          onChangeText={(t) => setCode(t.toUpperCase())}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          autoComplete="off"
+          spellCheck={false}
+          editable={!busy}
+          placeholder="TEAM CODE"
+          placeholderTextColor={color.placeholder}
+          accessibilityLabel="Team code"
+        />
+        <EmberButton
+          label={busy ? "Joining…" : "Join team"}
+          onPress={join}
+          disabled={busy || code.trim().length === 0}
+        />
+        {problem ? (
+          <Text style={styles.problem} accessibilityLiveRegion="polite">
+            {problem}
+          </Text>
+        ) : null}
+      </Card>
+    </Section>
   );
 }
 
@@ -366,12 +402,16 @@ function TeamPanel({
  * live HeartRate HealthKit scope and `readSince()` computes a real peak per
  * workout, so `hrmax.ts`'s `detected` resolution (an athlete's own workout
  * history) is a better source than a figure typed once and never revisited.
- * The one write this panel still offers is `send(null)` — reverting a
+ * The one write this group still offers is `send(null)` — reverting a
  * previously-entered manual/calibrated value back to automatic — because a
  * number an athlete already set stays authoritative (`resolveHrMax` prefers a
  * stored choice over anything detected) until they choose to let it go.
+ *
+ * The figure is a row's trailing detail rather than the 22pt `text.stat` it used
+ * to be. That is the design's shape and it is also the truer weight: this is one
+ * fact among the profile's facts, not the number a screen is about.
  */
-function HrMaxPanel({
+function HrMaxSection({
   hrMax,
   onChanged,
 }: {
@@ -397,15 +437,14 @@ function HrMaxPanel({
 
   if (!hrMax) {
     return (
-      // `padded={false}`: the panel's whole content is one full-bleed row, so
-      // the row supplies its own inset rather than sitting inside the card's.
-      <Panel
-        title="Max heart rate"
+      <Section
+        label="Max heart rate"
         note="Every run's intensity is scored against this"
-        padded={false}
       >
-        <FactRow label="Current" value={null} isLast />
-      </Panel>
+        <Card padded={false} style={styles.group}>
+          <FactRow label="Current" value={null} isLast />
+        </Card>
+      </Section>
     );
   }
 
@@ -416,26 +455,22 @@ function HrMaxPanel({
   const isEstimate = hrMax.source === "age" || hrMax.source === "default";
 
   return (
-    <Panel title="Max heart rate" note={hrMax.label}>
-      {/* One text node — the unit is welded to the numeral, never adjacent. */}
-      <Text style={styles.hrValue}>{`${hrMax.value} bpm`}</Text>
-      {isEstimate ? (
-        <Text style={styles.body}>
-          This is an estimate, not something measured on you. It updates on its own once
-          enough workouts have synced from Apple Health — every run&apos;s intensity, your
-          training load and your workload ratio are all scored against it.
-        </Text>
-      ) : isSet ? (
-        <Text style={styles.body}>
-          Every run&apos;s intensity is scored against this number, so it feeds your
-          training load and your workload ratio.
-        </Text>
-      ) : (
-        <Text style={styles.body}>
-          Read from your own workout history in Apple Health, and it feeds your training
-          load and your workload ratio.
-        </Text>
-      )}
+    <Section label="Max heart rate" note={hrMax.label}>
+      <Card padded={false} style={styles.group}>
+        {/* One text node — the unit is welded to the numeral, never adjacent. */}
+        <ListRow
+          title="Current"
+          detail={<Text style={styles.rowMono}>{`${hrMax.value} bpm`}</Text>}
+          sub={
+            isEstimate
+              ? "An estimate, not something measured on you. It updates on its own once enough workouts have synced from Apple Health."
+              : isSet
+                ? "Every run's intensity is scored against this number, so it feeds your training load and your workload ratio."
+                : "Read from your own workout history in Apple Health, and it feeds your training load and your workload ratio."
+          }
+          isLast
+        />
+      </Card>
       {isSet ? (
         <QuietButton
           label={busy ? "Saving…" : "Use automatic"}
@@ -448,7 +483,7 @@ function HrMaxPanel({
           {problem}
         </Text>
       ) : null}
-    </Panel>
+    </Section>
   );
 }
 
@@ -462,7 +497,7 @@ function HrMaxPanel({
  *
  * The statement is CONDITIONAL on `useSession()`, which is the only thing in the
  * app that knows. It used to read "Paired" unconditionally, so a phone with no
- * token was told it was paired directly beneath the panel that had just said it
+ * token was told it was paired directly beneath the group that had just said it
  * was not. Note that "in" means the keychain holds a pairing, not that the
  * server accepts it — a rejected token is still a token, and a device holding
  * one is exactly the device that needs the control below, so this renders
@@ -482,7 +517,7 @@ function HrMaxPanel({
  * unmounts this entire screen on the very next render, so a message rendered
  * here would never be read.
  */
-function DevicePanel() {
+function DeviceSection() {
   const { status, signOut } = useSession();
 
   function confirm() {
@@ -511,24 +546,36 @@ function DevicePanel() {
 
   if (status !== "in") {
     return (
-      <Panel title="This device" note={status === "out" ? "Not paired" : "Checking"}>
-        <Text style={styles.body}>
-          {status === "out"
-            ? "This phone isn't paired to a RunGuard account, so nothing is syncing from it and there is no pairing here to remove."
-            : "Checking whether this phone is paired."}
-        </Text>
-      </Panel>
+      <Section label="This device">
+        <Card padded={false} style={styles.group}>
+          <ListRow
+            title="Pairing"
+            detail={status === "out" ? "Not paired" : "Checking"}
+            sub={
+              status === "out"
+                ? "This phone isn't paired to a RunGuard account, so nothing is syncing from it and there is no pairing here to remove."
+                : "Checking whether this phone is paired."
+            }
+            isLast
+          />
+        </Card>
+      </Section>
     );
   }
 
   return (
-    <Panel title="This device" note="Paired">
-      <Text style={styles.body}>
-        This phone is paired to your RunGuard account and syncs on its own. The pairing
-        token is held in this device&apos;s keychain and is never shown.
-      </Text>
+    <Section label="This device">
+      <Card padded={false} style={styles.group}>
+        {/* A STATEMENT, never the token itself. See the file header. */}
+        <ListRow
+          title="Pairing"
+          detail="Paired"
+          sub="This phone is paired to your RunGuard account and syncs on its own. The pairing token is held in this device's keychain and is never shown."
+          isLast
+        />
+      </Card>
       <QuietButton label="Unpair this device" onPress={confirm} />
-    </Panel>
+    </Section>
   );
 }
 
@@ -541,7 +588,7 @@ export default function ProfileScreen() {
    * The shared `/me` (lib/profileStore). It is the only endpoint carrying
    * `events`, `fitness.tier` and `risk.hrMax`, and it is 57 KB — a cost the
    * whole app now pays once rather than once per screen. Every write below
-   * finishes with `invalidate()`, which refetches it in place: the panels keep
+   * finishes with `invalidate()`, which refetches it in place: the groups keep
    * their old values until the server says what the new ones are.
    *
    * There is no "unpaired" branch any more. A 401 signs out from inside the
@@ -567,7 +614,15 @@ export default function ProfileScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
           }
         >
-          {/* One quiet line, and nothing else changes: the panels below are
+          {/*
+            The design's subtitle. The title itself is the native header's
+            ("Profile"), so this is the only line on the screen that is not a
+            labelled group — putting the word "Profile" here as well would give
+            the screen two titles.
+          */}
+          <Text style={styles.subtitle}>Goals, zones and pairing</Text>
+
+          {/* One quiet line, and nothing else changes: the groups below are
               still showing what the server last said, which is still true. */}
           {failed && profile ? (
             <Text style={styles.stale}>
@@ -579,22 +634,15 @@ export default function ProfileScreen() {
           {profile ? (
             <>
               {/*
-                Identity, as a grouped list of facts rather than three stacked
-                label-over-value blocks. `padded={false}` so the rows run edge
-                to edge and draw their own inset separators, the way `PrTable`
-                and the race history do.
+                Identity, as one card of facts. The athlete's name is a row
+                rather than the group's label: `Section`'s label is mono,
+                uppercase and 11.5pt, which is a fine eyebrow and a poor way to
+                render a person's name.
               */}
-              <Panel
-                title={profile.athlete.name}
-                note={profile.athlete.school}
-                padded={false}
-              >
-                {/*
-                  ONE child on purpose. `Panel` puts `gap: space.md` between its
-                  children, so three rows passed directly would sit 12pt apart
-                  and stop being a list.
-                */}
-                <View>
+              <Section label="Athlete">
+                <Card padded={false} style={styles.group}>
+                  <FactRow label="Name" value={profile.athlete.name} />
+                  <FactRow label="School" value={profile.athlete.school} />
                   <FactRow
                     label="Grade"
                     value={profile.athlete.grade === null ? null : String(profile.athlete.grade)}
@@ -609,15 +657,16 @@ export default function ProfileScreen() {
                     }
                   />
                   <FactRow label="Fitness tier" value={profile.fitness?.tier ?? null} isLast />
-                </View>
-              </Panel>
+                </Card>
+              </Section>
 
-              <TeamPanel athlete={profile.athlete} onChanged={invalidate} />
-              <HrMaxPanel hrMax={profile.risk.hrMax} onChanged={invalidate} />
+              <TeamSection athlete={profile.athlete} onChanged={invalidate} />
+              <HrMaxSection hrMax={profile.risk.hrMax} onChanged={invalidate} />
 
               {/*
                 Energy & motivation, where the website keeps it. It owns its own
-                panel head — do not wrap it.
+                panel head — do not wrap it in a Section, or the group is named
+                twice.
 
                 Worth knowing: on the web this chart plots two things the athlete
                 has no control to enter, so it is always half empty there. The
@@ -627,37 +676,39 @@ export default function ProfileScreen() {
               */}
               <MentalChart mental30={profile.mental30} />
 
-              <Panel title="How your data syncs" note="Read from your watch">
+              <Section label="How your data syncs" note="Read from your watch">
                 <ConnectedApps sources={profile.connectedSources} />
-              </Panel>
+              </Section>
 
-              <Panel title="Season goals" note="Target against today's forecast" padded={false}>
+              <Section label="Season goals" note="Target against today's forecast">
                 <SeasonGoals goals={profile.goals} />
-              </Panel>
+              </Section>
 
-              <Panel title="Achievements" note="What you have done so far" padded={false}>
+              <Section label="Achievements" note="What you have done so far">
                 <Achievements badges={profile.badges} />
-              </Panel>
+              </Section>
 
               {/* Read-only: writing an injury is a coach action, and
                   POST/PATCH /api/injury are mounted only on the dashboard. */}
-              <Panel title="Injury history" note="Recorded by your coach" padded={false}>
+              <Section label="Injury history" note="Recorded by your coach">
                 <InjuryHistory injuries={profile.injuries} />
-              </Panel>
+              </Section>
             </>
           ) : !failed ? (
             // Nothing to say while the first fetch is in flight. No spinner:
-            // the panels below it must not shift when the data lands.
+            // the groups below it must not shift when the data lands.
             null
           ) : (
-            <Panel title="Your profile" note="Could not load">
-              <Text style={styles.body}>
-                Your profile couldn&apos;t be loaded. Nothing here has changed.
-              </Text>
-            </Panel>
+            <Section label="Your profile" note="Could not load">
+              <Card>
+                <Text style={styles.body}>
+                  Your profile couldn&apos;t be loaded. Nothing here has changed.
+                </Text>
+              </Card>
+            </Section>
           )}
 
-          <DevicePanel />
+          <DeviceSection />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -667,22 +718,33 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
   fill: { flex: 1 },
+  /**
+   * `layout.section` between groups — the design's 22, on the app's 4px scale.
+   * `Section` supplies the 8 between an eyebrow and its own card.
+   */
   page: {
     paddingHorizontal: layout.page,
     paddingVertical: layout.section,
     gap: layout.section,
   },
 
-  /* Panel: title left, note right, content under. */
+  /**
+   * A card whose content is rows.
+   *
+   * `overflow: "hidden"` is the design's, and it is load-bearing rather than
+   * cosmetic: it clips a row's press flash and its separator to the card's
+   * corner. Layout only, so it belongs in the caller's style — `Card` owns the
+   * ground, the corner and the shadow (see `CardProps.style`).
+   */
+  group: { overflow: "hidden" },
+  /** A card whose content is prose, a field and a button rather than rows. */
+  stack: { gap: space.md },
 
   body: { ...text.base, color: color.ink2 },
-  bodyStrong: { ...text.baseSemi, color: color.ink },
+  /** The design's subtitle, under the header's title. */
+  subtitle: { ...text.meta, color: color.muted },
   /** The stale-data line. Quiet by construction: the size and colour of a note. */
   stale: { ...text.meta, color: color.muted },
-
-  /** The join-code fact, which is not a row — see `TeamPanel`. */
-  field: { gap: space.xs },
-  fieldLabel: { ...text.micro, color: color.muted },
 
   /**
    * Nested inside `ListRow`'s own `detail` node, so these carry the FACE only
@@ -690,36 +752,17 @@ const styles = StyleSheet.create({
    * one screen's key/value pairs read a size apart from every other screen's.
    *
    * `text.stat` is deliberately not used here: it is 22pt, which is a figure a
-   * screen is about, not a value sitting at the right-hand end of a 52pt row.
+   * screen is about, not a value sitting at the right-hand end of a row.
    */
   rowMono: { fontFamily: font.mono, ...tabular },
   /** `unknown` #6F675C: 5.21:1 on card. Distinguishable, not prominent. */
   rowAbsent: { fontFamily: font.mono, ...tabular, color: color.unknown },
 
-  /** A code, not prose: mono, tracked out, so O and 0 are told apart. */
-  codeValue: { ...text.stat, color: color.ink, letterSpacing: 2 },
-  codeInput: {
-    ...text.base,
-    fontFamily: font.mono,
-    letterSpacing: 2,
-    color: color.ink,
-    // Sunken against the white panel, so the field reads as a field.
-    backgroundColor: color.well,
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
-    borderRadius: radius.control,
-    // The squircle iOS draws itself. See space.ts: every non-pill radius in
-    // this app is paired with it.
-    borderCurve: "continuous",
-    paddingHorizontal: space.md,
-    minHeight: target.min,
-  },
-
-  /**
-   * `text.stat`, not `text.prompt`: prompt is the check-in question and nothing
-   * else, and it is a display face — every numeral in this app is mono.
+  /*
+   * Dead before this port and left alone by it: `HrMaxPanel` dropped its
+   * manual-entry field when HealthKit started detecting a real peak, and these
+   * two are what dressed it. Not this change's to remove.
    */
-  hrValue: { ...text.stat, color: color.ink },
   hrRow: { flexDirection: "row", alignItems: "center", gap: target.gap },
   hrInput: {
     ...text.stat,
@@ -732,6 +775,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     minHeight: target.min,
     minWidth: target.min * 2,
+  },
+
+  codeInput: {
+    ...text.base,
+    fontFamily: font.mono,
+    letterSpacing: 2,
+    color: color.ink,
+    // Sunken against the white card, so the field reads as a field.
+    backgroundColor: color.well,
+    borderWidth: ruleWidth,
+    borderColor: color.rule,
+    borderRadius: radius.control,
+    // The squircle iOS draws itself. See space.ts: every non-pill radius in
+    // this app is paired with it.
+    borderCurve: "continuous",
+    paddingHorizontal: space.md,
+    minHeight: target.min,
   },
 
   ember: {

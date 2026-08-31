@@ -81,6 +81,26 @@ export const text = {
   } as TextStyle,
 
   /**
+   * 16.5 mono — a figure that IS the line, at body rank.
+   *
+   * The mono ladder had a hole in the middle: `statInline` (14) sits under
+   * something, `stat` (22) is the figure a screen is about, and a list row
+   * whose primary line is entirely figures — "8.7 mi · 1:12:40 · 8:21/mi" —
+   * is neither. Borrowing `statInline` shrank the row's own subject below the
+   * date beneath it; borrowing `stat` made every run in a scrolling log shout.
+   *
+   * 16.5 is `base`'s size, so a mono row and a prose row sit on one optical
+   * rank. The design sets this line at 17 sans; mono runs wider, so matching
+   * its size rather than its measure would overshoot.
+   */
+  statBase: {
+    fontFamily: font.mono,
+    fontSize: 16.5,
+    lineHeight: 24,
+    ...tabular,
+  } as TextStyle,
+
+  /**
    * 14 mono — a figure that sits UNDER the thing it describes.
    *
    * The gap this fills: between `micro` (11.5, uppercase, an eyebrow) and

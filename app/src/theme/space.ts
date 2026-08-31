@@ -48,11 +48,19 @@ export const layout = {
  */
 export const radius = {
   /** Legend swatches and small square marks — a softened corner, not a round one. */
-  mark: 4,
-  /** Chips and severity buttons. */
+  mark: 3,
+  /** Chips and severity buttons. Also the HR-zone bar's track. */
   chip: 8,
   control: 10,
-  card: 12,
+  /**
+   * Content cards. 14, from the design study, which uses it for every card
+   * surface on every screen. It was 12 here before the port — chosen before
+   * there was a design to match, and 2pt tighter than every mock.
+   *
+   * `group` below already came from the same source, so the two now agree
+   * about where they got their corners.
+   */
+  card: 14,
   /**
    * The inset grouped list — `IOSList` in the design study's `ios-frame.jsx`.
    *

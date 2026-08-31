@@ -43,6 +43,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 
 import { Card } from "../components/Card";
+import { List, ListRow } from "../components/List";
+import { Section } from "../components/Section";
 import { BASE_URL } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
@@ -363,8 +365,9 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Card>
-            <Text style={styles.eyebrow}>SIGN IN</Text>
-            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.title} accessibilityRole="header">
+              Welcome back
+            </Text>
             <Text style={styles.body}>
               {pairing
                 ? "On the RunGuard web app, open Profile → Pair the RunGuard iPhone app and copy the code shown there."
@@ -508,17 +511,29 @@ export default function LoginScreen() {
                 <Text style={styles.quietLabel}>Use development token</Text>
               </Pressable>
             ) : null}
-
-            <Pressable
-              style={({ pressed }) => [styles.alt, dim(pressed)]}
-              onPress={() => router.replace("/signup")}
-              disabled={busy}
-              accessibilityRole="link"
-              accessibilityState={{ disabled: busy }}
-            >
-              <Text style={styles.altLabel}>Create an account</Text>
-            </Pressable>
           </Card>
+
+          {/* The other door, as a grouped card under a muted eyebrow — the same
+              shape `signup` and `pair` use for theirs, rather than the tinted
+              text link this was. Three reasons it moved OUTSIDE the card: it is
+              not part of the form it sits under, iOS says "another screen is
+              beneath this" with a chevron rather than with colour, and `List`
+              owns the row's press flash so it stops being a bare tappable.
+
+              `replace`, not `push` — the three entry points are equivalent
+              rather than nested, and a back stack of half-filled sign-in forms
+              is not worth preserving. No `onPress` while `busy` renders the row
+              genuinely inert, which is what `disabled` used to say here. */}
+          <Section label="New here" style={styles.footer}>
+            <List>
+              <ListRow
+                title="Create an account"
+                onPress={busy ? undefined : () => router.replace("/signup")}
+                chevron
+                isLast
+              />
+            </List>
+          </Section>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -561,9 +576,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.page,
     paddingVertical: layout.section,
   },
-  eyebrow: { ...text.micro, color: color.muted },
-  title: { ...text.title, color: color.ink, marginTop: space.md },
-  body: { ...text.base, color: color.ink2, marginTop: space.md },
+  title: { ...text.title, color: color.ink },
+  body: { ...text.base, color: color.ink2, marginTop: space.sm },
 
   /**
    * The app's only segmented control, and the one place it has to read as a
@@ -685,10 +699,9 @@ const styles = StyleSheet.create({
     marginTop: target.gap,
   },
   quietLabel: { ...text.baseSemi, color: color.muted },
-  alt: {
-    minHeight: target.min,
-    justifyContent: "center",
-    marginTop: target.gap,
-  },
-  altLabel: { ...text.baseSemi, color: color.brandText },
+  /**
+   * The other door, one section below the card. The row carries its own 52pt
+   * height, so nothing here spaces it — this is only the gap BETWEEN sections.
+   */
+  footer: { marginTop: layout.section },
 });

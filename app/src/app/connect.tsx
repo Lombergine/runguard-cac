@@ -47,8 +47,9 @@ import { Stack } from "expo-router";
 
 import { useScreenHeader } from "../theme/header";
 import { Absent } from "../components/Nothing";
-import { ListRow } from "../components/List";
+import { List, ListRow } from "../components/List";
 import { Panel } from "../components/Panel";
+import { Section } from "../components/Section";
 import { Stat } from "../components/Stat";
 import { dayLabel, localDay, timeLabel } from "../lib/dates";
 import {
@@ -160,12 +161,10 @@ export default function ConnectScreen() {
   /**
    * The sources that are real names, or null.
    *
-   * Derived once because the panel below asks the same question twice: which
-   * branch to render, and whether the card should carry its own padding (rows
-   * are full-bleed and bring their own; an <Absent/> slot is not and does not).
-   * Two spellings of "is there anything to list" is how one of them ends up
-   * disagreeing with the other. `NO_SOURCES` is a placeholder, not a name — see
-   * its declaration — so a list containing it is an empty list.
+   * Derived rather than spelled out at the branch, because "is there anything
+   * to list" is the kind of question that ends up asked twice in two slightly
+   * different ways. `NO_SOURCES` is a placeholder, not a name — see its
+   * declaration — so a list containing it is an empty list.
    */
   const listedSources =
     sources && sources.length > 0 && !sources.includes(NO_SOURCES) ? sources : null;
@@ -444,56 +443,57 @@ export default function ConnectScreen() {
         </View>
 
         {/* ── Connected sources ────────────────────────────────────────── */}
-        <View style={styles.section}>
-          {/*
-            `padded` follows the CONTENT, the way PrTable does it: a list of
-            sources is full-bleed rows that inset their own separators and set
-            their own 52pt height, while every other state here is a single
-            <Absent/> slot that needs the card's normal padding around it.
-          */}
-          <Panel
-            title="Connected sources"
-            note="As your server sees them"
-            padded={listedSources === null}
-          >
-            {!signedIn ? (
-              // Not "nothing has reported data" — that would be a claim about an
-              // athlete we are not entitled to describe. Dashed: we don't know.
-              <Absent label="Not signed in on this phone" />
-            ) : sources === null ? (
-              <Absent
-                label={
-                  sourcesFailed
-                    ? "Could not reach your server"
-                    : "Checking with your server"
-                }
-              />
-            ) : listedSources === null ? (
-              <Absent label="Nothing has reported data yet" />
-            ) : (
-              /*
-                Wrapped in ONE view rather than returned as loose children:
-                `Panel` puts a 12pt gap between its children, which would strand
-                each row's separator in the middle of a band of card instead of
-                pooling the rows into a continuous list.
+        {/*
+          A GROUP of things the server reported, so the label sits outside and
+          above it — `Section`'s rank, not `Panel`'s, and the same shape every
+          group on settings.tsx now uses. This was a `Panel` with
+          `padded={listedSources === null}`: a title drawn inside a card whose
+          padding had to be switched off so the rows could reach the corners,
+          which is the hand-fitted version of exactly what `List` is. The slab
+          owns the corner, the row inset and the separators now.
 
-                The rows are inert — no `onPress`, so no chevron, no press flash
-                and no role. A source is a fact the server reported, and there is
-                nothing underneath it to open. See List.tsx's one non-cosmetic
-                rule.
-              */
-              <View>
-                {listedSources.map((src, i) => (
-                  <ListRow
-                    key={src}
-                    title={src}
-                    isLast={i === listedSources.length - 1}
-                  />
-                ))}
-              </View>
-            )}
-          </Panel>
-        </View>
+          The empty states stay OUTSIDE the slab rather than becoming a padded
+          block inside it. A group with nothing in it is one dashed slot, the
+          way Home renders a missing wearable — an empty white slab drawn around
+          it would be a card claiming to hold rows it does not have.
+        */}
+        <Section
+          label="Connected sources"
+          note="As your server sees them"
+          style={styles.section}
+        >
+          {!signedIn ? (
+            // Not "nothing has reported data" — that would be a claim about an
+            // athlete we are not entitled to describe. Dashed: we don't know.
+            <Absent label="Not signed in on this phone" />
+          ) : sources === null ? (
+            <Absent
+              label={
+                sourcesFailed
+                  ? "Could not reach your server"
+                  : "Checking with your server"
+              }
+            />
+          ) : listedSources === null ? (
+            <Absent label="Nothing has reported data yet" />
+          ) : (
+            /*
+              The rows are inert — no `onPress`, so no chevron, no press flash
+              and no role. A source is a fact the server reported, and there is
+              nothing underneath it to open. See List.tsx's one non-cosmetic
+              rule.
+            */
+            <List>
+              {listedSources.map((src, i) => (
+                <ListRow
+                  key={src}
+                  title={src}
+                  isLast={i === listedSources.length - 1}
+                />
+              ))}
+            </List>
+          )}
+        </Section>
       </ScrollView>
     </SafeAreaView>
   );

@@ -41,11 +41,18 @@
  * renders as a plain `View` — no chevron, no press flash, no accessibility
  * role. Nothing on this screen has to remember not to look tappable.
  *
- * `List` has no counterpart to `Panel`'s note, so each group's caveat is folded
- * into the group header ("UNITS · DISPLAY ONLY"). Dropping those was not an
- * option — "not available in this build" is the honest half of the
- * Notifications group, not decoration. See the NEEDS PRIMITIVE note in the
- * hand-off.
+ * ── THE LABEL: components/Section.tsx, NOT `List`'s own `header` ────────────
+ *
+ * Every group label on this screen goes through `Section`. `List` will draw one
+ * itself, from the same `text.micro`, but it has no counterpart to `Panel`'s
+ * note — so each group's caveat used to be folded into the label string
+ * ("UNITS · DISPLAY ONLY") and set in the eyebrow's uppercase mono, which is not
+ * the rank a caveat belongs in. That was the NEEDS PRIMITIVE note in the
+ * hand-off; `Section` is the primitive, and it reads label-left, note-right like
+ * every other head in the app.
+ *
+ * Dropping the caveats was never an option — "not available in this build" is
+ * the honest half of the Notifications group, not decoration.
  *
  * The two prose-and-a-button sections at the bottom stay `Panel`s. They are not
  * lists and forcing them into one would cost the paragraph that explains what
@@ -59,6 +66,7 @@ import Constants from "expo-constants";
 
 import { Absent } from "../components/Nothing";
 import { List, ListRow } from "../components/List";
+import { Section } from "../components/Section";
 import { getHome, isUnauthorized } from "../lib/api";
 import { isDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
@@ -177,45 +185,55 @@ export default function SettingsScreen() {
       <Stack.Screen options={useScreenHeader("Settings")} />
 
       <ScrollView contentContainerStyle={styles.page}>
+        {/*
+          The screen's subtitle, in the CONTENT rather than in the bar.
+          `useScreenHeader` draws one line and offers no second one
+          (theme/header.ts), and connect.tsx already carries its opening
+          sentence this way — so the two pushed screens read alike.
+        */}
+        <Text style={styles.lede}>Sync, sharing and units</Text>
+
         {/* ---- Account ------------------------------------------------- */}
-        <List header="Account · this phone">
-          {name.kind === "known" ? (
-            <ListRow title="Signed in as" detail={name.name} />
-          ) : name.kind === "loading" ? (
-            // `target.row` reserves the row's height, so nothing jumps when the
-            // name lands. Not a spinner: it is one line of text arriving, and
-            // the row's detail is already muted so it cannot read as the answer.
-            <ListRow title="Signed in as" detail="Loading…" />
-          ) : (
-            /*
-              Absent, not an em dash in the detail slot. A failed fetch is "we
-              do not know", and in this app that is one specific object: dashed
-              border, sunken fill, the word that says what the dash means. It
-              keeps its own eyebrow because it replaces the whole row, title
-              included.
+        <Section label="Account" note="This phone">
+          <List>
+            {name.kind === "known" ? (
+              <ListRow title="Signed in as" detail={name.name} />
+            ) : name.kind === "loading" ? (
+              // `target.row` reserves the row's height, so nothing jumps when the
+              // name lands. Not a spinner: it is one line of text arriving, and
+              // the row's detail is already muted so it cannot read as the answer.
+              <ListRow title="Signed in as" detail="Loading…" />
+            ) : (
+              /*
+                Absent, not an em dash in the detail slot. A failed fetch is "we
+                do not know", and in this app that is one specific object: dashed
+                border, sunken fill, the word that says what the dash means. It
+                keeps its own eyebrow because it replaces the whole row, title
+                included.
 
-              It is a block, so it cannot go through `detail` (a `Text`) and it
-              draws no row separator. See the NEEDS PRIMITIVE note.
-            */
-            <View style={styles.blockRow}>
-              <Absent eyebrow="SIGNED IN AS" label="Could not reach the server." />
-            </View>
-          )}
+                It is a block, so it cannot go through `detail` (a `Text`) and it
+                draws no row separator. See the NEEDS PRIMITIVE note.
+              */
+              <View style={styles.blockRow}>
+                <Absent eyebrow="SIGNED IN AS" label="Could not reach the server." />
+              </View>
+            )}
 
-          <ListRow
-            title="Profile"
-            sub="School, events, team and max heart rate"
-            onPress={() => router.push("/profile")}
-            chevron
-          />
-          <ListRow
-            title="Connect data"
-            sub="Where your runs, sleep and heart rate come from"
-            onPress={() => router.push("/connect")}
-            chevron
-            isLast
-          />
-        </List>
+            <ListRow
+              title="Profile"
+              sub="School, events, team and max heart rate"
+              onPress={() => router.push("/profile")}
+              chevron
+            />
+            <ListRow
+              title="Connect data"
+              sub="Where your runs, sleep and heart rate come from"
+              onPress={() => router.push("/connect")}
+              chevron
+              isLast
+            />
+          </List>
+        </Section>
 
         {/* ---- Units --------------------------------------------------- */}
         {/*
@@ -230,19 +248,21 @@ export default function SettingsScreen() {
           No `onPress`, so `ListRow` renders a plain View: no chevron promising
           a screen underneath, and no flash promising an effect.
         */}
-        <List header="Units · display only">
-          <ListRow
-            title="Distance"
-            detail="Miles"
-            sub="The server records kilometres; the app converts them on the way to the screen."
-          />
-          <ListRow
-            title="Pace"
-            detail="Minutes per mile"
-            sub="Kilometres are not a setting yet — the conversion is written into the app rather than read from a preference, so there is nothing here to switch."
-            isLast
-          />
-        </List>
+        <Section label="Units" note="Display only">
+          <List>
+            <ListRow
+              title="Distance"
+              detail="Miles"
+              sub="The server records kilometres; the app converts them on the way to the screen."
+            />
+            <ListRow
+              title="Pace"
+              detail="Minutes per mile"
+              sub="Kilometres are not a setting yet — the conversion is written into the app rather than read from a preference, so there is nothing here to switch."
+              isLast
+            />
+          </List>
+        </Section>
 
         {/* ---- Notifications ------------------------------------------- */}
         {/*
@@ -253,18 +273,20 @@ export default function SettingsScreen() {
           setting an athlete would actually rely on, and it would silently do
           nothing.
         */}
-        <List header="Notifications · not available in this build">
-          <ListRow
-            title="Check-in reminder"
-            detail="Off"
-            sub="RunGuard cannot send notifications yet — nothing in this build can deliver one, so there is no switch to turn on. Until then the check-in waits for you on the home screen."
-            isLast
-          />
-        </List>
+        <Section label="Notifications" note="Not available in this build">
+          <List>
+            <ListRow
+              title="Check-in reminder"
+              detail="Off"
+              sub="RunGuard cannot send notifications yet — nothing in this build can deliver one, so there is no switch to turn on. Until then the check-in waits for you on the home screen."
+              isLast
+            />
+          </List>
+        </Section>
 
         {/* ---- About --------------------------------------------------- */}
-        <View>
-          <List header="About · RunGuard">
+        <Section label="About" note="RunGuard">
+          <List>
             {APP_VERSION ? (
               /*
                 A numeral, so mono and tabular (non-negotiable #3). Nested inside
@@ -303,7 +325,7 @@ export default function SettingsScreen() {
             your runs, sleep and check-ins show. It does not diagnose anything, and
             it is not a substitute for your coach, an athletic trainer or a doctor.
           </Text>
-        </View>
+        </Section>
 
         {/* ---- Danger zone --------------------------------------------- */}
         {/*
@@ -380,6 +402,12 @@ const styles = StyleSheet.create({
   },
 
   /**
+   * The subtitle, directly under the native title. Same role and same token as
+   * connect.tsx's opening sentence, so the two pushed screens open alike.
+   */
+  lede: { ...text.base, color: color.ink2 },
+
+  /**
    * A block standing in for a row inside the slab — currently only `Absent`,
    * which draws its own border and fill and therefore cannot be a `Text`
    * detail. Padded to the slab's own row inset so it lines up with the titles
@@ -399,13 +427,16 @@ const styles = StyleSheet.create({
 
   body: { ...text.base, color: color.ink2 },
   /**
-   * A group footer: the same left inset as `List`'s header, so the caveat lines
-   * up with the group it qualifies rather than floating at the page edge.
+   * A group footer, at the slab's own row inset so the caveat lines up with the
+   * titles it qualifies rather than floating at the page edge.
+   *
+   * No `paddingTop`: the group is a `Section` now, and its `gap` already spaces
+   * every child from the one above it. The padding this used to carry was for a
+   * bare `View`, and laying it on top of the gap would double the distance.
    */
   disclaimer: {
     ...text.meta,
     color: color.ink2,
-    paddingTop: space.md,
     paddingHorizontal: layout.cardPadding,
   },
 

@@ -38,6 +38,7 @@ import Svg, { Path } from "react-native-svg";
 import { Card } from "../../components/Card";
 import { Absent, Zero } from "../../components/Nothing";
 import { Panel } from "../../components/Panel";
+import { Section } from "../../components/Section";
 import { Stat } from "../../components/Stat";
 import { ApiError, getActivity, isUnauthorized } from "../../lib/api";
 import { dayLabel, localDay, timeLabel } from "../../lib/dates";
@@ -145,6 +146,11 @@ function routePath(points: RoutePoint[]): string | null {
 /**
  * The trace, or the honest absence of one.
  *
+ * The DRAWING brings its own `Card`; the absence deliberately does not. Its
+ * section label now sits outside and above (see `Detail`), and `Absent` is
+ * already a surface of its own — a dashed slot framed inside a white card would
+ * be two surfaces for one hole.
+ *
  * NOTHING WRITES THE `route` COLUMN TODAY — not the live sync, not the Apple
  * export path — so every row in the database has `route IS NULL` and this
  * renders its fallback for every run the app can currently open, exactly as the
@@ -160,25 +166,27 @@ function RouteMap({ route }: { route: RoutePoint[] | null }) {
   if (path === null) return <Absent label="GPS route not recorded for this run." />;
 
   return (
-    <View style={styles.map}>
-      <Svg
-        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
-        width="100%"
-        height="100%"
-        accessibilityRole="image"
-        accessibilityLabel="The GPS route of this run."
-      >
-        <Path
-          d={path}
-          fill="none"
-          // A FILL token on a shape, never a glyph — see theme/tokens.ts.
-          stroke={color.brand}
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </Svg>
-    </View>
+    <Card>
+      <View style={styles.map}>
+        <Svg
+          viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+          width="100%"
+          height="100%"
+          accessibilityRole="image"
+          accessibilityLabel="The GPS route of this run."
+        >
+          <Path
+            d={path}
+            fill="none"
+            // A FILL token on a shape, never a glyph — see theme/tokens.ts.
+            stroke={color.brand}
+            strokeWidth={STROKE}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </View>
+    </Card>
   );
 }
 
@@ -375,15 +383,20 @@ function Detail({ activity }: { activity: ActivityDetail }) {
 
   return (
     <>
-      <View style={styles.headerRow}>
-        {started ? <Text style={styles.started}>{started}</Text> : <View />}
-        {/* `sourceLabel`, mapped by the server. The raw `source` key is never
-            printed, and never re-mapped here — one mapping, two surfaces. */}
-        <Text style={styles.chip} accessibilityLabel={`Source: ${activity.sourceLabel}`}>
-          {activity.sourceLabel}
-        </Text>
-      </View>
+      {/* Composed by `startLabel` from lib/dates: explicit, local, and already a
+          string before it reaches a component (non-negotiable #2). */}
+      {started ? <Text style={styles.started}>{started}</Text> : null}
       <Text style={styles.title}>{title}</Text>
+      {/*
+        The design's subtitle — provenance stated as a sentence under the title,
+        where this screen carried it as a badge in the opposite corner. One line
+        of prose says the same thing without a second object in the head, and it
+        is what the design does.
+
+        `sourceLabel` is mapped by the server. The raw `source` key is never
+        printed, and never re-mapped here — one mapping, two surfaces.
+      */}
+      <Text style={styles.source}>{`From ${activity.sourceLabel}`}</Text>
       {started === null ? (
         <View style={styles.startAbsent}>
           <Absent eyebrow="Started" label="Start time not recorded" />
@@ -441,8 +454,8 @@ function Detail({ activity }: { activity: ActivityDetail }) {
         muted "—" (collapsing absent into an ordinary value, non-negotiable #4)
         or to copy List's internals in here. Both are worse than a grid.
       */}
-      <View style={styles.section}>
-        <Panel title="Details">
+      <Section label="Details" style={styles.section}>
+        <Card>
           <View style={styles.grid}>
             <View style={styles.row}>
               <View style={styles.cell}>
@@ -469,14 +482,12 @@ function Detail({ activity }: { activity: ActivityDetail }) {
               </View>
             </View>
           </View>
-        </Panel>
-      </View>
+        </Card>
+      </Section>
 
-      <View style={styles.section}>
-        <Panel title="Route">
-          <RouteMap route={activity.route} />
-        </Panel>
-      </View>
+      <Section label="Route" style={styles.section}>
+        <RouteMap route={activity.route} />
+      </Section>
     </>
   );
 }
@@ -488,33 +499,11 @@ const styles = StyleSheet.create({
     paddingVertical: layout.section,
   },
 
-  /** The start left, the source right, both on the same baseline. */
-  headerRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
   /** Mono, because it is figures. ink, not muted: this is the run's identity. */
-  started: { ...text.micro, color: color.ink, flexShrink: 1 },
-  /**
-   * The source badge. An iOS system fill, not a drawn rectangle: it lost its
-   * 1.5pt rule to `color.fill`, Apple's neutral (120,120,128) at 12% — the token
-   * exists so an inert control reads as a system control rather than as a bordered
-   * web badge (see theme/tokens.ts). `ink2` on it still measures well past 4.5:1.
-   */
-  chip: {
-    ...text.meta,
-    color: color.ink2,
-    backgroundColor: color.fill,
-    borderRadius: radius.control,
-    borderCurve: "continuous",
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    overflow: "hidden",
-  },
+  started: { ...text.micro, color: color.ink },
   title: { ...text.title, color: color.ink, marginTop: space.sm },
+  /** The subtitle under the title. Prose, muted — a caption, not a badge. */
+  source: { ...text.meta, color: color.muted, marginTop: space.xs },
   startAbsent: { marginTop: space.md },
 
   section: { marginTop: layout.section },
@@ -527,9 +516,10 @@ const styles = StyleSheet.create({
    */
   row: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
   /**
-   * The Details rows. `gap` lives here rather than as a `marginTop` on every row
-   * but the first, so Panel's own 12pt gap spaces the head from this block once
-   * and does not compound with a row margin.
+   * The Details rows. `gap` lives here rather than as a `marginTop` on every
+   * row but the first: the label naming this block now sits outside the card,
+   * so the card holds one child and a row margin would have nothing to
+   * compound against but the card's own padding.
    */
   grid: { gap: space.lg },
   cell: { flex: 1 },
