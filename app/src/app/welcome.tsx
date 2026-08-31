@@ -37,6 +37,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,11 +47,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, Rect } from "react-native-svg";
 
 import { List, ListRow } from "../components/List";
 import { Section } from "../components/Section";
-import { ApiError, getDemoPairing } from "../lib/api";
+import { ApiError, BASE_URL, getDemoPairing } from "../lib/api";
 import { setToken } from "../lib/auth";
 import { enterDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
@@ -101,6 +102,51 @@ const ENTRANCE_RISE = space.md;
  * is a frame, not an animation, and the alternative (hold the screen blank
  * until the OS answers) is worse on the app's first paint.
  */
+/**
+ * The brand mark, drawn from `assets/icon.svg` rather than approximated.
+ *
+ * That file is the WEBSITE's mark, kept as one drawing so the app icon and the
+ * site favicon cannot drift; the design study took the same geometry for the
+ * same reason. Path data and stroke weights are copied from it exactly — a
+ * hand-drawn lookalike is how the two ended up different last time.
+ *
+ * ── WHY THREE LITERAL COLOURS IN A COMPONENT ───────────────────────────────
+ *
+ * `CLAUDE.md` forbids a hardcoded colour, and this is the exception the rule
+ * is not about: these are not theme values that should answer to the
+ * appearance, they are the mark. A logo that inverts in dark mode is a
+ * different logo. They stay fixed for the same reason `staticColor` exists —
+ * and the tile is its own ground, so nothing here composites against the page.
+ */
+const MARK = {
+  tile: "#0d0d0d",
+  arch: "#f59e0b",
+  check: "#ffffff",
+} as const;
+
+function BrandMark({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64" accessibilityRole="image">
+      <Rect width={64} height={64} rx={14} fill={MARK.tile} />
+      <Path
+        d="M14 50V26a5 5 0 015-5h26a5 5 0 015 5v24"
+        stroke={MARK.arch}
+        strokeWidth={5}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <Path
+        d="M24 34l7 7 11-13"
+        stroke={MARK.check}
+        strokeWidth={5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
 function useEntrance(steps: number, reduced: boolean) {
   const values = useRef(
     Array.from({ length: steps }, () => new Animated.Value(0))
@@ -157,6 +203,13 @@ const GRID = 24;
  */
 const DISC_SIZE = text.statLarge.lineHeight as number;
 const GLYPH_SIZE = text.meta.lineHeight as number;
+
+/**
+ * The brand mark's size. Derived from the wordmark it sits beside so the two
+ * stay a lockup when Dynamic Type moves the text — the design's 78 is for a
+ * mark standing alone on its own onboarding screen, which this is not.
+ */
+const MARK_SIZE = (text.title.lineHeight as number) + space.sm;
 
 /** Two arcs chasing each other — the workout arriving on its own. */
 const SYNC =
@@ -277,6 +330,36 @@ export default function WelcomeScreen() {
     })();
   }
 
+  /**
+   * The coach demo, which is NOT a screen in this app.
+   *
+   * There is no coach anything on the phone — `_layout.tsx` declares no coach
+   * group and `/api/mobile/*` has no coach surface — so this cannot open a view
+   * here. What it can do is open the one that exists: the website mints a demo
+   * coach session on `GET /api/demo/coach` and lands on the roster.
+   *
+   * So the row leaves the app, and says so. It carries NO chevron: `List`'s
+   * rule is that a chevron promises a screen underneath, and handing someone to
+   * a browser is not that. The sub-line is the affordance instead.
+   *
+   * Gated on the same `demoState` as the athlete row, and correctly so: both
+   * routes are governed by `DEMO_TEAM_ID`, and `/api/demo/coach` 404s when it
+   * is unset for the same reason `/api/mobile/demo` does. One probe, one
+   * answer, rather than a second request that could disagree with the first.
+   */
+  function openCoachDemo() {
+    setDemoError(null);
+    void (async () => {
+      const url = `${BASE_URL}/api/demo/coach`;
+      try {
+        if (!(await Linking.canOpenURL(url))) throw new Error("unopenable");
+        await Linking.openURL(url);
+      } catch {
+        setDemoError("The coach demo could not be opened in your browser.");
+      }
+    })();
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
@@ -287,9 +370,10 @@ export default function WelcomeScreen() {
             weighted for thumb reach, and with the wordmark in that group too
             the whole page floated in the middle of a tall phone with a void
             above it. */}
-        <Animated.Text style={[styles.wordmark, riseWordmark]}>
-          RunGuard
-        </Animated.Text>
+        <Animated.View style={[styles.brand, riseWordmark]}>
+          <BrandMark size={MARK_SIZE} />
+          <Text style={styles.wordmark}>RunGuard</Text>
+        </Animated.View>
 
         <View style={styles.bottom}>
           <Animated.View style={[styles.top, riseIntro]}>
@@ -424,6 +508,11 @@ export default function WelcomeScreen() {
                     sub="Someone else's season. Nothing you tap is saved."
                     onPress={demoState === "opening" ? undefined : openDemo}
                     chevron
+                  />
+                  <ListRow
+                    title="Coach demo"
+                    sub="The roster a coach sees. Opens in your browser — there is no coach view in the app."
+                    onPress={demoState === "opening" ? undefined : openCoachDemo}
                     isLast
                   />
                 </List>
@@ -479,6 +568,8 @@ const styles = StyleSheet.create({
   /** Everything that is not the wordmark, held at the bottom together. */
   bottom: { gap: layout.section },
   top: { gap: space.md },
+  /** The mark and the word read as one lockup, not two objects. */
+  brand: { flexDirection: "row", alignItems: "center", gap: space.sm },
   wordmark: { ...text.title, color: color.brandText },
   /**
    * `text.display`, NOT the design's 34.
