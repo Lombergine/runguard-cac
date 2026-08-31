@@ -76,24 +76,35 @@ const GRID = 24;
 const CHEVRON_SIZE = 18;
 const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
 
-function Chevron() {
+/**
+ * The disclosure chevron. EXPORTED, because four files had grown their own
+ * copy — this one, `RunCard`, `PlanWeek` and `BodyScan` — and they had already
+ * drifted: two had the design's round caps and two did not, and one was a
+ * different colour with no note saying why.
+ *
+ * `chevronStroke`, not `color.muted`: this is chrome pointing at a row, not
+ * information about it, so it stays one neutral grey in both appearances
+ * rather than tracking the ink. The design carries the same value for the same
+ * reason.
+ *
+ * The WIDTH keeps the app's formula rather than the design's fixed 2.2 viewBox
+ * units — dividing by the render size holds the line at exactly `ruleWidth`
+ * device pixels whatever the glyph is scaled to.
+ *
+ * `stroke` is overridable for the one legitimate case: a row whose whole label
+ * is an accent-coloured action, where a neutral chevron would read as a
+ * different control from the words beside it.
+ */
+export function Chevron({ stroke = chevronStroke }: { stroke?: string } = {}) {
   return (
     <Svg width={CHEVRON_SIZE} height={CHEVRON_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
       <Path
         d={CHEVRON}
         fill="none"
-        /*
-         * `chevronStroke`, not `color.muted`: this is chrome pointing at a
-         * row, not information about it, so it stays one neutral grey in both
-         * appearances rather than tracking the ink. The design carries the
-         * same value for the same reason.
-         *
-         * The WIDTH keeps the app's formula rather than the design's fixed 2.2
-         * viewBox units — dividing by the render size holds the line at
-         * exactly `ruleWidth` device pixels whatever the glyph is scaled to.
-         */
-        stroke={chevronStroke}
+        stroke={stroke}
         strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

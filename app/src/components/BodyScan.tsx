@@ -73,9 +73,9 @@
  */
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import Svg, { Path } from "react-native-svg";
 
 import { BodyMap, MarkSwatch } from "./BodyMap";
+import { Chevron } from "./List";
 import { Panel } from "./Panel";
 import { parseStoredPart } from "../lib/bodyParts";
 import { BodyMark, Injury, SorenessEntry } from "../lib/types";
@@ -94,31 +94,7 @@ export type BodyScanProps = {
 /** The scale every soreness figure is reported on. */
 const MAX_SEVERITY = 10;
 
-/**
- * The action row's disclosure chevron.
- *
- * Same 24-unit grid, same path and same `ruleWidth` stroke as `List`'s — the
- * icon vocabulary is one system or it is noise — drawn at the design's 18
- * rather than that file's 20, and tinted with the label rather than left grey,
- * because here the arrow and the word are one tinted object. `List` does not
- * export its copy; if it ever does, delete this one rather than keep both.
- */
-const GRID = 24;
-const CHEVRON_SIZE = 18;
-const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
 
-function Chevron() {
-  return (
-    <Svg width={CHEVRON_SIZE} height={CHEVRON_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
-      <Path
-        d={CHEVRON}
-        fill="none"
-        stroke={color.brandText}
-        strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
-      />
-    </Svg>
-  );
-}
 
 /** One flagged area, already resolved to a spot on the figure. */
 type Row = {
@@ -331,7 +307,7 @@ export function BodyScan({ injuries, soreness }: BodyScanProps) {
       >
         <View style={styles.separatorTop} pointerEvents="none" />
         <Text style={styles.actionLabel}>Add or change soreness</Text>
-        <Chevron />
+        <Chevron stroke={color.brandText} />
       </Pressable>
     </Panel>
   );

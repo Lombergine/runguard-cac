@@ -91,9 +91,9 @@
 import { useMemo, useState, type JSX } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import Svg, { Path } from "react-native-svg";
 
 import { Card } from "./Card";
+import { Chevron } from "./List";
 import { Absent, NoRun } from "./Nothing";
 import { setWorkoutStatus } from "../lib/api";
 import { dayLabel } from "../lib/dates";
@@ -103,7 +103,7 @@ import { formatDistance } from "../lib/units";
 // One derivation, shared with TodayBlock — see lib/workout.ts for why.
 import { workoutBlocks, type WorkoutBlock } from "../lib/workout";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
-import { chevronStroke, color } from "../theme/tokens";
+import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
 /**
@@ -159,36 +159,7 @@ export const planWeekMetrics = {
  * The disclosure chevron
  * ------------------------------------------------------------------ */
 
-/**
- * The same glyph `components/List.tsx` draws, on the same 24-unit grid, at the
- * same 18pt, with the same path and the same `chevronStroke`.
- *
- * IT IS A SECOND COPY, and that is worth naming rather than hiding: `List`'s
- * `Chevron` is a module-private function, and this row is not a `ListRow` —
- * it is three stacked lines with pills, not a title/detail pair — so it cannot
- * adopt the component that owns the glyph. Exporting `Chevron` from `List` and
- * importing it here is the right fix and is a one-word change to a file this
- * work does not own.
- */
-const GRID = 24;
-const CHEVRON_SIZE = 18;
-const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
 
-function Chevron() {
-  return (
-    <Svg width={CHEVRON_SIZE} height={CHEVRON_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
-      <Path
-        d={CHEVRON}
-        fill="none"
-        // Chrome pointing at a row, not information about it — one neutral grey
-        // in both appearances. The width divides by the render size so the line
-        // lands at exactly `ruleWidth` device pixels.
-        stroke={chevronStroke}
-        strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
-      />
-    </Svg>
-  );
-}
 
 /* ------------------------------------------------------------------ *
  * One block of the session

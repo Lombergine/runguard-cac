@@ -79,14 +79,14 @@
  */
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import Svg, { Path } from "react-native-svg";
 
 import { StatusDot } from "./StatusDot";
+import { Chevron } from "./List";
 import type { Flag, RunCardProps, SessionSpike } from "../lib/types";
 import { formatDistance, formatDuration, formatPace } from "../lib/units";
 import { rowPress } from "../theme/press";
-import { layout, ruleWidth, space, target } from "../theme/space";
-import { chevronStroke, color } from "../theme/tokens";
+import { layout, space, target } from "../theme/space";
+import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
 /** What sits between two figures, and between the date and the session. */
@@ -166,40 +166,7 @@ export const runCardMetrics = {
   statsRowAbsent: text.meta.lineHeight ?? 0,
 } as const;
 
-/**
- * The disclosure chevron. 18×18, the design's size.
- *
- * Same 24-unit grid and same path as `List`'s, because the icon vocabulary is
- * one system or it is noise. Two deliberate differences from that copy:
- *
- *  - The stroke is `chevronStroke`, the token the design carries as a literal
- *    because it lands in SVG paint (docs/design-port.md #8). It is chrome
- *    pointing at a row, not information about it, so it is the same grey in
- *    both appearances.
- *  - Width is `ruleWidth` scaled by the viewBox ratio, so the drawn line is
- *    1.5pt rather than 1.5 viewBox units. The design's 2.2 in a 24-unit box
- *    draws 1.65pt at this size; `ruleWidth` is the app's single line weight
- *    (space.ts rejects hairlines outright — they vanish in direct sunlight),
- *    and two chevrons at two weights in one app is the drift, not the 0.15pt.
- */
-const GRID = 24;
-const CHEVRON_SIZE = 18;
-const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
 
-function Chevron() {
-  return (
-    <Svg width={CHEVRON_SIZE} height={CHEVRON_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
-      <Path
-        d={CHEVRON}
-        fill="none"
-        stroke={chevronStroke}
-        strokeWidth={(ruleWidth * GRID) / CHEVRON_SIZE}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
   const router = useRouter();
