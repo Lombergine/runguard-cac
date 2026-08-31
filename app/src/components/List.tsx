@@ -39,14 +39,7 @@
  * row is hidden, and the failure — a separator running into the slab's rounded
  * bottom corner — is the kind that only shows up on someone else's device.
  */
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
+import { type ColorValue, Pressable, type StyleProp, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import { rowPress } from "../theme/press";
@@ -94,8 +87,14 @@ const CHEVRON = "M9.5 5.5 L16 12 L9.5 18.5";
  * `stroke` is overridable for the one legitimate case: a row whose whole label
  * is an accent-coloured action, where a neutral chevron would read as a
  * different control from the words beside it.
+ *
+ * `ColorValue`, not `string`: those callers pass `color.brandText`, which is a
+ * `DynamicColorIOS` pair and therefore an opaque object rather than a hex.
+ * react-native-svg hands it to `RCTConvert` untouched (`extractBrush`), so the
+ * glyph follows the appearance — a `string` here would only have forced them to
+ * flatten it to the light branch and draw a cream-mode ember in dark mode.
  */
-export function Chevron({ stroke = chevronStroke }: { stroke?: string } = {}) {
+export function Chevron({ stroke = chevronStroke }: { stroke?: ColorValue } = {}) {
   return (
     <Svg width={CHEVRON_SIZE} height={CHEVRON_SIZE} viewBox={`0 0 ${GRID} ${GRID}`}>
       <Path

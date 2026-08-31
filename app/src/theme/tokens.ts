@@ -104,8 +104,25 @@ export const color = {
   /** The gradient stops, for expo-linear-gradient. 135° on the web. */
   ember: ["#FBBF24", "#F59E0B", "#F97316"] as const,
   emberGlow: "rgba(249,115,22,0.16)",
-  /** TEXT: ember at 4.55:1. Use for any ember-coloured word. */
-  brandText: "#976106",
+  /**
+   * TEXT: ember dark enough to put a word or a glyph on.
+   *
+   * Measured on the three grounds, worst case first (`well`, the deepest):
+   * light `#976106` is 4.55 / 5.21 / 4.88; dark `#C98A12` is 5.50 / 5.76 / 6.34.
+   *
+   * IT HAD TO BECOME A PAIR. As one static value it was 3.11:1 on the dark well
+   * — under the floor, on the token whose entire job is "the ember you are
+   * allowed to write in". Every one of the forty-odd call sites reasoned about
+   * its light-mode figure in a comment and none of them was wrong; they were all
+   * measured against the cream. Darkening the light branch would have broken
+   * those, so the dark branch is its own value: the same hue lifted until it
+   * clears 4.5:1 on `#242019`, and stopped there rather than run up to `brand`,
+   * which is a FILL at 2.01:1 and is never a glyph.
+   *
+   * SVG paint cannot take this. See `staticColor` / `darkColor` below, which
+   * carry both branches as raw hex for the three stroked glyphs.
+   */
+  brandText: dyn("#976106", "#C98A12"),
 
   /* ── Semantic states. The website's comment: "verdicts only, never chrome" */
   ok: "#16A34A",
@@ -210,11 +227,15 @@ export const shadow = {
  * does arithmetic on channels (`mix`, `channels`) which needs a parseable hex,
  * not an opaque OS token. Those call sites read from here.
  *
- * The cost is honest and worth naming: **SVG paint does not follow the system
- * appearance.** Chart strokes and the year-grid ramp stay light-mode values in
- * dark mode. Fixing that properly means threading `useColorScheme()` into the
- * chart components, which is a real change to how they are built rather than a
- * token swap — worth doing, not worth faking.
+ * The cost, stated precisely — it used to be stated too broadly here, and the
+ * overstatement nearly bought a hook nobody needed: **it is the ARITHMETIC that
+ * cannot take a dynamic colour, not SVG.** `extractBrush` in react-native-svg
+ * 15.15.4 passes a `DynamicColorIOS` object straight through to `RCTConvert`, so
+ * a plain `fill` or `stroke` follows the appearance like any other style. What
+ * does not is chart code that reads channels out of the string to `mix` them —
+ * those call sites read from here, and their colours stay light-mode values in
+ * dark mode until `useColorScheme()` is threaded into the components, which is a
+ * real change to how they are built rather than a token swap.
  */
 export const staticColor = {
   ink: "#221D15",
