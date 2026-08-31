@@ -17,13 +17,33 @@ export const space = {
   xxxl: 48,
 } as const;
 
+/**
+ * Page-level metrics, taken from the design rather than from the 4px scale.
+ *
+ * These are not scale STEPS and must not be treated as interchangeable with
+ * `space.*`. They are the four numbers the design's phone frame actually uses
+ * for its scrolling page — its scroller is `padding: 0 0 20px` and the content
+ * wrapper inside it is `padding: 14px 16px 0` with `gap: 22px` (line 233 and
+ * 236 of `RunGuard iOS App copy.dc.html`). Three of those — 14, 16 and 22 — are
+ * off the 4px scale, and rounding them onto it is how the app drifted 4px wider
+ * and 10px lower than the design on six of its eight tabs.
+ *
+ * `pageTop` is small on purpose: `ScreenHeader` is pinned above this scroller
+ * and carries its own bottom padding and a hairline, so the page starts close
+ * under it. The tabs that still spend `space.xl` here predate the header and
+ * leave a gap where the header used to be clipped.
+ */
 export const layout = {
   /** Card padding. */
   cardPadding: space.lg,
-  /** Gap between sections. */
-  section: space.xl,
+  /** Gap between sections — the design's content-wrapper `gap`. */
+  section: 22,
   /** Page horizontal inset. */
-  page: 20,
+  page: 16,
+  /** First child's offset below the pinned header. */
+  pageTop: 14,
+  /** Last child's clearance above the tab bar. */
+  pageBottom: 20,
 } as const;
 
 /**

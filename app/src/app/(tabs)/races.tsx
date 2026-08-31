@@ -28,19 +28,16 @@
 import { useMemo } from "react";
 import {
   Pressable,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
 import { Section } from "../../components/Section";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import { Stat } from "../../components/Stat";
 import { AddRaceForm, RemoveRace } from "../../components/AddRaceForm";
 import { LogResultForm } from "../../components/LogResultForm";
@@ -446,7 +443,6 @@ function ResultRow({ result }: { result: RaceHistoryEntry }) {
 
 export default function RacesScreen() {
   // Shared `/me`, and with it the single 401 path — a revoked token ends the
-  const actions = useTabHeaderActions();
   // session from inside the store rather than from five separate catch blocks.
   const { profile: shared, state, refreshing, refresh, invalidate } = useProfile();
   /** `races.history` is not in the contract yet — see Profile. */
@@ -474,47 +470,43 @@ export default function RacesScreen() {
   // Only with nothing on screen. A failed refetch over loaded races keeps them.
   if (failed && !profile) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScreenHeader
-          title="Races"
-          subtitle="Next up, pacing and your PRs"
-          actions={actions}
-        />
-        <View style={styles.page}>
-          <Header />
-          <Card>
-            <Text style={styles.failed}>Your races could not be loaded.</Text>
-            <Pressable
-              onPress={() => void refresh()}
-              accessibilityRole="button"
-              accessibilityLabel="Try loading your races again"
-              style={({ pressed }) => [styles.retry, dim(pressed)]}
-            >
-              <Text style={styles.retryLabel}>Try again</Text>
-            </Pressable>
-          </Card>
-        </View>
-      </SafeAreaView>
+    <TabScreen
+      title="Races"
+      subtitle="Next up, pacing and your PRs"
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}
+    >
+      <Header />
+      <Card>
+        <Text style={styles.failed}>Your races could not be loaded.</Text>
+        <Pressable
+          onPress={() => void refresh()}
+          accessibilityRole="button"
+          accessibilityLabel="Try loading your races again"
+          style={({ pressed }) => [styles.retry, dim(pressed)]}
+        >
+          <Text style={styles.retryLabel}>Try again</Text>
+        </Pressable>
+      </Card>
+    </TabScreen>
     );
   }
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScreenHeader
-          title="Races"
-          subtitle="Next up, pacing and your PRs"
-          actions={actions}
-        />
-        <View style={styles.page}>
-          <Header />
-          {/* Reserves height so the sections do not jump as data arrives. */}
-          <View style={styles.sections}>
-            <View style={styles.skeletonCard} />
-            <View style={styles.skeletonCard} />
-          </View>
-        </View>
-      </SafeAreaView>
+    <TabScreen
+      title="Races"
+      subtitle="Next up, pacing and your PRs"
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}
+    >
+      <Header />
+      {/* Reserves height so the sections do not jump as data arrives. */}
+      <View style={styles.sections}>
+        <View style={styles.skeletonCard} />
+        <View style={styles.skeletonCard} />
+      </View>
+    </TabScreen>
     );
   }
 
@@ -523,16 +515,15 @@ export default function RacesScreen() {
   const predictionKnown = fitnessKnown(profile);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView
-        contentContainerStyle={styles.page}
-        /* Pull to refetch. Nothing below dims while it runs — a predicted time
-           that fades reads as a prediction losing confidence, which it is not. */
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
-        }
-      >
-        <Header stale={failed} />
+    <TabScreen
+      title="Races"
+      subtitle="Next up, pacing and your PRs"
+      /* Pull to refetch. Nothing below dims while it runs — a predicted time
+         that fades reads as a prediction losing confidence, which it is not. */
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}
+    >
+      <Header stale={failed} />
 
         <View style={styles.sections}>
           <Section
@@ -595,18 +586,11 @@ export default function RacesScreen() {
             <PrChart progression={profile.races?.prProgression} />
           </Section>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+    </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
-  },
   sections: { gap: layout.section },
   section: { gap: space.md },
   /**

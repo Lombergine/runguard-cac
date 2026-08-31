@@ -18,7 +18,7 @@
  *      nothing for that day the card carries the date alone rather than a
  *      guess.
  */
-import { ReactNode, useMemo } from "react";
+import { useMemo } from "react";
 import {
   FlatList,
   Pressable,
@@ -27,12 +27,10 @@ import {
   Text,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
 import { Section } from "../../components/Section";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import { Absent } from "../../components/Nothing";
 import { PlanWeek, planWeekMetrics } from "../../components/PlanWeek";
 import { RunCard, runCardMetrics } from "../../components/RunCard";
@@ -56,14 +54,6 @@ const SKELETON_ROWS = 3;
  */
 const NO_ADJUSTMENT: PlanAdjustment = { scale: 1, reason: null };
 
-/**
- * The sunrise ground: the warm top fading into the page over 420dp, ported
- * from the website's body gradient (globals.css:55). It is fixed to the
- * viewport rather than scrolled with the list, exactly as `background` on the
- * web body behaves, so the light stays where the light is.
- */
-const SUNRISE_STOPS = [color.bgTop, color.bg] as const;
-const SUNRISE_HEIGHT = 420;
 
 /**
  * "12 runs" — the numeral and its noun in ONE node, never a bare count with the
@@ -71,33 +61,6 @@ const SUNRISE_HEIGHT = 420;
  */
 function countLabel(n: number): string {
   return `${n} ${n === 1 ? "run" : "runs"}`;
-}
-
-/** The page, over the sunrise ground. Every branch below renders through it. */
-function Screen({ children }: { children: ReactNode }) {
-  const actions = useTabHeaderActions();
-  return (
-    <View style={styles.root}>
-      <LinearGradient
-        colors={SUNRISE_STOPS}
-        style={styles.sunrise}
-        pointerEvents="none"
-      />
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        {/*
-         * Inside `Screen`, so the loading, failed and loaded states all wear
-         * it — a header that appears only once the payload lands would make
-         * the tab look like it changed identity on arrival.
-         */}
-        <ScreenHeader
-          title="Training"
-          subtitle="This week's plan, and what you've run"
-          actions={actions}
-        />
-        {children}
-      </SafeAreaView>
-    </View>
-  );
 }
 
 /**
@@ -211,7 +174,12 @@ export default function RunsScreen() {
   // the failure is one line in the header instead — see `Header`.
   if (failed && !profile) {
     return (
-      <Screen>
+      <TabScreen
+        title="Training"
+        subtitle="This week's plan, and what you've run"
+        scroll={false}
+        gradient
+      >
         <View style={styles.page}>
           <Header count={null} />
           <Card>
@@ -231,13 +199,18 @@ export default function RunsScreen() {
             </Pressable>
           </Card>
         </View>
-      </Screen>
+      </TabScreen>
     );
   }
 
   if (!profile) {
     return (
-      <Screen>
+      <TabScreen
+        title="Training"
+        subtitle="This week's plan, and what you've run"
+        scroll={false}
+        gradient
+      >
         <View style={styles.page}>
           <View style={styles.plan}>
             <PlanSkeleton />
@@ -249,12 +222,17 @@ export default function RunsScreen() {
             ))}
           </View>
         </View>
-      </Screen>
+      </TabScreen>
     );
   }
 
   return (
-    <Screen>
+    <TabScreen
+      title="Training"
+      subtitle="This week's plan, and what you've run"
+      scroll={false}
+      gradient
+    >
       <FlatList<RecentRun>
         data={runs}
         keyExtractor={(run) => String(run.id)}
@@ -336,7 +314,7 @@ export default function RunsScreen() {
           </View>
         )}
       />
-    </Screen>
+    </TabScreen>
   );
 }
 
@@ -345,32 +323,21 @@ function Separator() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.bg },
-  sunrise: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: SUNRISE_HEIGHT,
-  },
-  /** Transparent: the gradient behind it is the ground. */
-  safe: { flex: 1 },
+  /**
+   * This screen owns its scroller (a `FlatList`, which must not be nested in
+   * `TabScreen`'s `ScrollView`), so it carries the page metrics the wrapper
+   * would otherwise apply. Same numbers, from the same place — `layout` in
+   * theme/space.ts, which now holds the design's own 14 / 16 / 20.
+   */
   page: {
     flex: 1,
     paddingHorizontal: layout.page,
-    paddingTop: space.xl,
+    paddingTop: layout.pageTop,
   },
   list: {
     paddingHorizontal: layout.page,
-    /*
-     * `md`, not `xl`. The screen used to open straight onto its content, so it
-     * spent 24 lifting the first card off the status bar. `ScreenHeader` now
-     * sits above it with its own bottom padding and a hairline, and 24 more
-     * under that read as a gap where the header had been cut off. The design
-     * gives this scroller 14.
-     */
-    paddingTop: space.md,
-    paddingBottom: layout.section,
+    paddingTop: layout.pageTop,
+    paddingBottom: layout.pageBottom,
   },
   /** Matches the FlatList separator, so loading and loaded rhythm agree. */
   rows: { gap: space.md },

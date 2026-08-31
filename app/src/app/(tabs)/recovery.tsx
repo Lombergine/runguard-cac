@@ -70,17 +70,14 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Pressable,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
 import { Card } from "../../components/Card";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import { Section } from "../../components/Section";
 import { EXPLAINERS } from "../../components/InfoDot";
 import { Chevron } from "../../components/List";
@@ -589,7 +586,6 @@ export default function RecoveryScreen() {
   // The shared `/me`, and with it the single 401 path — a revoked token ends
   // the session from inside the store. There is deliberately no catch here.
   const { profile, state, refreshing, refresh } = useProfile();
-  const actions = useTabHeaderActions();
   const failed = state === "failed";
 
   const tips = useMemo(() => (profile ? recoveryTips(profile) : []), [profile]);
@@ -598,42 +594,37 @@ export default function RecoveryScreen() {
   // them; they were true when they were fetched.
   if (failed && !profile) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScreenHeader
-          title="Recovery"
-          subtitle="What your sleep and heart rate said"
-          actions={actions}
-        />
-        <View style={styles.page}>
-          <Header />
-          <Card>
-            <Text style={styles.failed}>
-              Your recovery data could not be loaded.
-            </Text>
-            <Pressable
-              onPress={() => void refresh()}
-              accessibilityRole="button"
-              accessibilityLabel="Try loading your recovery data again"
-              style={({ pressed }) => [styles.retry, dim(pressed)]}
-            >
-              <Text style={styles.retryLabel}>Try again</Text>
-            </Pressable>
-          </Card>
-        </View>
-      </SafeAreaView>
+      <TabScreen
+        title="Recovery"
+        subtitle="What your sleep and heart rate said"
+        refreshing={refreshing}
+        onRefresh={() => void refresh()}
+      >
+        <Header />
+        <Card>
+          <Text style={styles.failed}>Your recovery data could not be loaded.</Text>
+          <Pressable
+            onPress={() => void refresh()}
+            accessibilityRole="button"
+            accessibilityLabel="Try loading your recovery data again"
+            style={({ pressed }) => [styles.retry, dim(pressed)]}
+          >
+            <Text style={styles.retryLabel}>Try again</Text>
+          </Pressable>
+        </Card>
+      </TabScreen>
     );
   }
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScreenHeader
-          title="Recovery"
-          subtitle="What your sleep and heart rate said"
-          actions={actions}
-        />
-        <View style={styles.page}>
-          <Header />
+      <TabScreen
+        title="Recovery"
+        subtitle="What your sleep and heart rate said"
+        refreshing={refreshing}
+        onRefresh={() => void refresh()}
+      >
+        <Header />
           {/* Grey bars at the exact final height, never a "—": a pending value
               is a fact about the network, and a dash would claim it is a fact
               about the athlete. */}
@@ -680,9 +671,8 @@ export default function RecoveryScreen() {
               <View style={[styles.skeleton, styles.skeletonHeading]} />
               <View style={[styles.skeleton, { height: PANEL_H }]} />
             </View>
-          </View>
         </View>
-      </SafeAreaView>
+      </TabScreen>
     );
   }
 
@@ -690,14 +680,13 @@ export default function RecoveryScreen() {
   const insights = profile.insights ?? [];
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView
-        contentContainerStyle={styles.page}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
-        }
+      <TabScreen
+        title="Recovery"
+        subtitle="What your sleep and heart rate said"
+        refreshing={refreshing}
+        onRefresh={() => void refresh()}
       >
-        <Header stale={failed} />
+      <Header stale={failed} />
 
         <View style={styles.sections}>
           {/* 1. Status. Two components, one per arm — the unknown one takes no
@@ -777,18 +766,11 @@ export default function RecoveryScreen() {
             they are not shown here.
           </Text>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+    </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
-  },
   sections: { gap: layout.section },
   section: { gap: space.md },
 

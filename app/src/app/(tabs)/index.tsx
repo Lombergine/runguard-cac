@@ -85,7 +85,7 @@ import {
   type ReadinessBand,
 } from "../../lib/readinessVerdict";
 import { dayLabel, localDay, receiptLabel } from "../../lib/dates";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import { checkedInToday, readinessState } from "../../lib/readiness";
 import type {
   ProfileWithNextRace,
@@ -164,7 +164,6 @@ const EMBER_END = { x: 1, y: 1 } as const;
 
 export default function CheckInScreen() {
   const { signOut } = useSession();
-  const actions = useTabHeaderActions();
   /**
    * `invalidate` ONLY. This screen's own data comes from the 5.3 KB `/home`,
    * and it stays that way — `useProfile()` here would trip the shared store's
@@ -463,21 +462,19 @@ export default function CheckInScreen() {
 
   if (loadError !== "none") {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <View style={styles.page}>
-          <Text style={styles.loadError}>Your check-in couldn&rsquo;t be loaded.</Text>
-          <Pressable
-            onPress={() => {
-              setLoadError("none");
-              setReloadKey((n) => n + 1);
-            }}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.loadErrorAction, dim(pressed)]}
-          >
-            <Text style={styles.loadErrorActionLabel}>Try again</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      <TabScreen title="Today">
+        <Text style={styles.loadError}>Your check-in couldn&rsquo;t be loaded.</Text>
+        <Pressable
+          onPress={() => {
+            setLoadError("none");
+            setReloadKey((n) => n + 1);
+          }}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.loadErrorAction, dim(pressed)]}
+        >
+          <Text style={styles.loadErrorActionLabel}>Try again</Text>
+        </Pressable>
+      </TabScreen>
     );
   }
 
@@ -496,7 +493,7 @@ export default function CheckInScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <>
       {/*
        * The wordmark bar this replaces existed because Chat and Settings are
        * stack routes, not tabs, and nothing else in the app reached them —
@@ -513,11 +510,7 @@ export default function CheckInScreen() {
        * exactly once, which is what non-negotiable #2 asks for. Nothing else
        * was in the subtitle, so the prop goes rather than being emptied.
        */}
-      <ScreenHeader title="Today" actions={actions} />
-      {/* The bottom inset belongs to the tab bar, which reserves it in its own
-          height (see _layout.tsx), so the scroll view stops exactly above the
-          bar and its last card clears it by one section. */}
-      <ScrollView contentContainerStyle={styles.page}>
+      <TabScreen title="Today">
         {!profile ? (
           <>
             <CheckInCardSkeleton />
@@ -574,7 +567,7 @@ export default function CheckInScreen() {
             <AfterCheckIn profile={profile} />
           </>
         )}
-      </ScrollView>
+      </TabScreen>
 
       {/* The check-in itself. A sheet you can swipe away, per the design. */}
       <Modal
@@ -600,7 +593,7 @@ export default function CheckInScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+    </>
   );
 }
 
@@ -1041,18 +1034,6 @@ function DashedRule() {
 
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    flexGrow: 1,
-    paddingHorizontal: layout.page,
-    /*
-     * `md`, not `xl`. `ScreenHeader` now sits above this scroller with its own
-     * bottom padding and a hairline; the extra 24 read as a gap where the
-     * header had been clipped. The design gives its scroller 14.
-     */
-    paddingTop: space.md,
-    paddingBottom: layout.section,
-  },
   header: {
     flexDirection: "row",
     alignItems: "center",

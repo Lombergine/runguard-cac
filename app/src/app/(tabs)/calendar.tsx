@@ -45,7 +45,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -58,7 +57,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Card } from "../../components/Card";
 import { Chevron } from "../../components/List";
 import { Section } from "../../components/Section";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import {
   getCoachPlan,
   saveCoachPlanDay,
@@ -358,7 +357,6 @@ function DayRow({
  * ------------------------------------------------------------------ */
 
 export default function CalendarScreen() {
-  const actions = useTabHeaderActions();
 
   const [plan, setPlan] = useState<CoachPlan | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -431,17 +429,12 @@ export default function CalendarScreen() {
   const writtenThisWeek = dates.filter((d) => written.has(d)).length;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScreenHeader
+    <>
+      <TabScreen
         title="Training calendar"
         subtitle="Write the session; the team sees it"
-        actions={actions}
-      />
-      <ScrollView
-        contentContainerStyle={styles.page}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />
-        }
+        refreshing={refreshing}
+        onRefresh={() => void load(true)}
       >
         {failed && !plan ? (
           <Card>
@@ -547,7 +540,7 @@ export default function CalendarScreen() {
             ) : null}
           </View>
         )}
-      </ScrollView>
+      </TabScreen>
 
       <Modal
         visible={editing !== null}
@@ -568,17 +561,12 @@ export default function CalendarScreen() {
           />
         ) : null}
       </Modal>
-    </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
-  },
   sections: { gap: layout.section },
 
   pager: {

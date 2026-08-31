@@ -37,20 +37,17 @@
 import { useMemo } from "react";
 import {
   Pressable,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   useColorScheme,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BodyScan } from "../../components/BodyScan";
 import { EXPLAINERS } from "../../components/InfoDot";
 import { Absent } from "../../components/Nothing";
 import { PrTable } from "../../components/PrTable";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import { Section } from "../../components/Section";
 import { Tile } from "../../components/Tile";
 import { YEAR_GRID_HEIGHT, YearGrid } from "../../components/YearGrid";
@@ -222,7 +219,6 @@ export default function StatsScreen() {
   // Shared `/me`, and with it the single 401 path: a revoked token ends the
   // session from inside the store (lib/profileStore), never from a screen.
   const { profile: shared, state, refreshing, refresh } = useProfile();
-  const actions = useTabHeaderActions();
   const profile: Profile | null = shared;
   const failed = state === "failed";
 
@@ -247,14 +243,13 @@ export default function StatsScreen() {
   // fact about the network, not about the athlete.
   if (failed && profile === null) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScreenHeader
-          title="Stats"
-          subtitle="Fitness, load and the year behind them"
-          actions={actions}
-        />
-        <View style={styles.page}>
-          <Card>
+      <TabScreen
+        title="Stats"
+        subtitle="Fitness, load and the year behind them"
+        refreshing={refreshing}
+        onRefresh={() => void refresh()}
+      >
+        <Card>
             <Text style={styles.failed}>
               {"Your stats could not be loaded. The RunGuard server could not be reached."}
             </Text>
@@ -266,9 +261,8 @@ export default function StatsScreen() {
             >
               <Text style={styles.retryLabel}>Try again</Text>
             </Pressable>
-          </Card>
-        </View>
-      </SafeAreaView>
+        </Card>
+      </TabScreen>
     );
   }
 
@@ -277,13 +271,12 @@ export default function StatsScreen() {
   // for "not here yet".
   if (profile === null) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScreenHeader
-          title="Stats"
-          subtitle="Fitness, load and the year behind them"
-          actions={actions}
-        />
-        <ScrollView contentContainerStyle={styles.page}>
+      <TabScreen
+        title="Stats"
+        subtitle="Fitness, load and the year behind them"
+        refreshing={refreshing}
+        onRefresh={() => void refresh()}
+      >
           <View style={styles.sections}>
             {/* The 2×2 grid, both rows. */}
             <View style={styles.tileGrid}>
@@ -304,8 +297,7 @@ export default function StatsScreen() {
             <View style={[styles.skeleton, styles.skeletonPanel]} />
             <View style={[styles.skeleton, styles.skeletonYear]} />
           </View>
-        </ScrollView>
-      </SafeAreaView>
+      </TabScreen>
     );
   }
 
@@ -318,20 +310,14 @@ export default function StatsScreen() {
   const predictions = profile.predictions ?? {};
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScreenHeader
-        title="Stats"
-        subtitle="Fitness, load and the year behind them"
-        actions={actions}
-      />
-      <ScrollView
-        contentContainerStyle={styles.page}
-        /* Pull to refetch. Nothing below dims while it runs: a figure that
-           fades reads as a figure losing confidence, which it is not. */
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
-        }
-      >
+    <TabScreen
+      title="Stats"
+      subtitle="Fitness, load and the year behind them"
+      /* Pull to refetch. Nothing below dims while it runs: a figure that
+         fades reads as a figure losing confidence, which it is not. */
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}
+    >
         <Header stale={failed} />
 
         <View style={styles.sections}>
@@ -486,8 +472,7 @@ export default function StatsScreen() {
             value={hasHistory ? longestStreak(profile.badges) : null}
           />
         </View>
-      </ScrollView>
-    </SafeAreaView>
+    </TabScreen>
   );
 }
 
@@ -499,12 +484,6 @@ export default function StatsScreen() {
 const TILE_HEIGHT = space.xxxl * 2 + space.sm;
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
-  },
   sections: { gap: layout.section },
   section: { gap: space.md },
 

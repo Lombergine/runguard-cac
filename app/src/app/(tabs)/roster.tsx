@@ -55,20 +55,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { Card } from "../../components/Card";
 import { Chevron } from "../../components/List";
 import { Section } from "../../components/Section";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import { StatusDot } from "../../components/StatusDot";
 import { Tile } from "../../components/Tile";
 import { getCoachRoster, type CoachRoster, type CoachRosterAthlete } from "../../lib/api";
@@ -306,7 +303,6 @@ function EmptyCard({ title, body }: { title: string; body: string }) {
 
 export default function RosterScreen() {
   const router = useRouter();
-  const actions = useTabHeaderActions();
 
   const [roster, setRoster] = useState<CoachRoster | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -366,24 +362,36 @@ export default function RosterScreen() {
   const today = dayLabel(localDay());
   const teamName = roster?.team?.name ?? null;
 
-  const subtitle = roster ? (
+  /*
+   * ALWAYS ONE LINE, loaded or not. This was `roster ? <Text/> : null`, so the
+   * header stood one line tall while loading and two once the payload landed —
+   * the bar changed height and pushed the content down under the coach's eye.
+   *
+   * The date is the spine because it is the one part already known before the
+   * fetch (`dayLabel(localDay())` above, pre-formatted per non-negotiable #2).
+   * The team and the count join it when they arrive; nothing appears or
+   * disappears, so nothing moves.
+   */
+  const subtitle = (
     <Text style={styles.subtitle}>
       {teamName ? `${teamName} · ` : ""}
-      {today} ·{" "}
-      <Text style={styles.subtitleCount}>{`${athletes.length} athletes`}</Text>
+      {today}
+      {roster ? (
+        <>
+          {" · "}
+          <Text style={styles.subtitleCount}>{`${athletes.length} athletes`}</Text>
+        </>
+      ) : null}
     </Text>
-  ) : null;
+  );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScreenHeader title="Before practice" subtitle={subtitle} actions={actions} />
-      <ScrollView
-        contentContainerStyle={styles.page}
-        keyboardDismissMode="on-drag"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />
-        }
-      >
+    <TabScreen
+      title="Before practice"
+      subtitle={subtitle}
+      refreshing={refreshing}
+      onRefresh={() => void load(true)}
+    >
         {failed && !roster ? (
           <Card>
             <Text style={styles.emptyTitle}>The roster could not be loaded.</Text>
@@ -480,18 +488,11 @@ export default function RosterScreen() {
             ) : null}
           </View>
         )}
-      </ScrollView>
-    </SafeAreaView>
+    </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
-  },
   sections: { gap: layout.section },
 
   subtitle: { ...text.meta, color: color.muted },

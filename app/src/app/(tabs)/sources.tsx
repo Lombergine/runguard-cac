@@ -29,17 +29,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
 import { Section } from "../../components/Section";
-import { ScreenHeader, useTabHeaderActions } from "../../components/ScreenHeader";
+import { TabScreen } from "../../components/TabScreen";
 import { getCoachSources, type CoachSources } from "../../lib/api";
 import { dayLabel, localDay } from "../../lib/dates";
 import { dim } from "../../theme/press";
@@ -71,7 +68,6 @@ function initialsOf(name: string): string {
  * ------------------------------------------------------------------ */
 
 export default function SourcesScreen() {
-  const actions = useTabHeaderActions();
 
   const [sources, setSources] = useState<CoachSources | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -136,18 +132,12 @@ export default function SourcesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScreenHeader
-        title="Data sources"
-        subtitle="Apple Health is the only live source"
-        actions={actions}
-      />
-      <ScrollView
-        contentContainerStyle={styles.page}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />
-        }
-      >
+    <TabScreen
+      title="Data sources"
+      subtitle="Apple Health is the only live source"
+      refreshing={refreshing}
+      onRefresh={() => void load(true)}
+    >
         {failed && !sources ? (
           <Card>
             <Text style={styles.emptyTitle}>Sync state could not be loaded.</Text>
@@ -241,18 +231,11 @@ export default function SourcesScreen() {
             ) : null}
           </View>
         )}
-      </ScrollView>
-    </SafeAreaView>
+    </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.bg },
-  page: {
-    paddingHorizontal: layout.page,
-    paddingTop: space.xl,
-    paddingBottom: layout.section,
-  },
   sections: { gap: layout.section },
 
   list: { overflow: "hidden" },
