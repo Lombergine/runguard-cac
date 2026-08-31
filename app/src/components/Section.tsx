@@ -47,7 +47,12 @@ export type SectionProps = {
    * its unit welded on.
    */
   note?: React.ReactNode;
-  children: React.ReactNode;
+  /**
+   * Optional, because a section's content is not always its JSX children: on
+   * Training the label heads a `FlatList` whose rows are items, not children.
+   * The head then renders alone and the list follows it.
+   */
+  children?: React.ReactNode;
   /** Layout only, merged last. */
   style?: StyleProp<ViewStyle>;
 };

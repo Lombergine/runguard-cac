@@ -574,15 +574,13 @@ export function PlanWeek({
         </Card>
       ) : null}
 
+      {/*
+       * No head inside the card. The design labels this group with an eyebrow
+       * ABOVE the surface, which is `Section`'s rank, not `Panel`'s — a Panel
+       * title belongs to one card, a Section label names a group. The caller
+       * owns the label; see `(tabs)/runs.tsx`.
+       */}
       <Card padded={false}>
-        <View style={styles.head}>
-          <Text style={styles.title}>This week&apos;s plan</Text>
-          <Text style={styles.note}>
-            Monday through Sunday · auto-built from your load, fitness, and race
-            schedule
-          </Text>
-        </View>
-
         {rows.map(({ day, dateLabel }) => (
           <PlanRow
             key={day.date}
@@ -616,9 +614,6 @@ const styles = StyleSheet.create({
   taperNote: { ...text.meta, color: color.ink2, marginTop: space.xs },
 
   /* ---- the plan card ---- */
-  head: { padding: layout.cardPadding },
-  title: { ...text.title, color: color.ink },
-  note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   /**
    * The website's `border-t` on every day, including the first — which is what

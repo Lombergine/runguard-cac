@@ -31,6 +31,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
+import { Section } from "../../components/Section";
 import { Absent } from "../../components/Nothing";
 import { PlanWeek, planWeekMetrics } from "../../components/PlanWeek";
 import { RunCard, runCardMetrics } from "../../components/RunCard";
@@ -40,7 +41,7 @@ import type { PlanAdjustment, RecentRun } from "../../lib/types";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { dim } from "../../theme/press";
 import { color } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { tabular, text } from "../../theme/type";
 
 /** How many placeholder cards to hold while the profile is in flight. */
 const SKELETON_ROWS = 3;
@@ -106,13 +107,19 @@ function Screen({ children }: { children: ReactNode }) {
 function Header({ count, stale }: { count: number | null; stale?: boolean }) {
   return (
     <View style={styles.header}>
-      <Text style={styles.eyebrow}>Run log</Text>
-      <View style={styles.headingRow}>
-        <Text style={styles.heading}>Recent runs</Text>
-        {count !== null && count > 0 ? (
-          <Text style={styles.count}>{countLabel(count)}</Text>
-        ) : null}
-      </View>
+      {/*
+       * One eyebrow, count right-aligned — the design's shape. It previously
+       * carried a second label ("Run log") above a `text.title` heading, which
+       * named the same list twice and set the section rank two steps too loud.
+       */}
+      <Section
+        label="Recent runs"
+        note={
+          count !== null && count > 0 ? (
+            <Text style={styles.count}>{countLabel(count)}</Text>
+          ) : undefined
+        }
+      />
       <Text style={styles.note}>
         Long runs well past your usual are flagged.
       </Text>
@@ -269,14 +276,21 @@ export default function RunsScreen() {
          */
         ListHeaderComponent={
           <>
-            <View style={styles.plan}>
+            {/*
+             * No note. The provenance it carried ("auto-built from your load,
+             * fitness, and race schedule") is already stated per row by the
+             * presence or absence of the coach pill, which is how the design
+             * says it. Two wrapped lines of caveat under an 11.5 eyebrow
+             * outweighed the label and the card both.
+             */}
+            <Section label="This week's plan" style={styles.plan}>
               <PlanWeek
                 days={profile.plan.days}
                 taperMode={profile.plan.taperMode ?? false}
                 taperCountdown={profile.plan.taperCountdown ?? null}
                 adjustment={profile.plan.adjustment ?? NO_ADJUSTMENT}
               />
-            </View>
+            </Section>
             <Header count={runs.length} stale={failed} />
           </>
         }
@@ -331,21 +345,13 @@ const styles = StyleSheet.create({
 
   header: { marginBottom: layout.section },
   /**
-   * The ember signature, once per screen, on the eyebrow. `brandText`, never
-   * `brand`: the fill is 2.01:1 and unreadable outdoors, while this measures
-   * 4.88:1 on the page and 4.74:1 on the warm top of the gradient.
+   * The noun stays welded on — never a bare numeral. But this is a count in a
+   * section label, not a figure the screen is about, so it sets at the design's
+   * meta rank rather than `text.stat`'s 22: right-aligned beside an 11.5
+   * eyebrow, a 22pt numeral outweighed the label naming it. Body face at
+   * `meta`, with `tabular` kept so the digits stay even.
    */
-  eyebrow: { ...text.micro, color: color.brandText },
-  headingRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.md,
-    marginTop: space.xs,
-  },
-  heading: { ...text.title, color: color.ink },
-  /** Mono, with the noun welded on. Never a bare numeral. */
-  count: { ...text.stat, color: color.ink2 },
+  count: { ...text.meta, ...tabular, color: color.muted },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   failed: { ...text.base, color: color.ink2 },
