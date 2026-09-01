@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { Stack } from "expo-router";
+import { useColorScheme } from "react-native";
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
@@ -41,6 +42,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 export const unstable_settings = { anchor: "welcome" };
 
 export default function RootLayout() {
+  const scheme = useColorScheme();
   const [fontsLoaded, fontError] = useFonts({
     Archivo_700Bold,
     Archivo_800ExtraBold,
@@ -62,10 +64,28 @@ export default function RootLayout() {
   return (
     <SessionProvider>
       <SafeAreaProvider>
+        {/*
+          ── WHY REACT NAVIGATION NEEDS ITS OWN THEME ──────────────────────────
+
+          Without this the navigator uses its light `DefaultTheme` in both
+          appearances, so `theme.colors.background` is `#fff` — and that white
+          is what paints behind a native-stack screen DURING a transition, and
+          in any gap the screen's own `contentStyle` does not cover. The app
+          masked it with `contentStyle` below and `sceneStyle` in the tabs, so
+          it was only ever visible as white edges during the dark-mode fade.
+          Masking the symptom, though: the navigator still believed it was light.
+
+          `useColorScheme()` rather than a `DynamicColorIOS` pair, because this
+          value is read by React Navigation in JS rather than resolved by the
+          OS at paint time — the same reason `theme/header.ts` resolves the
+          appearance itself.
+        */}
         {/* `auto` follows the appearance: dark glyphs on the cream ground, light
             glyphs on the dark one. Pinned to "dark" it was unreadable in dark mode. */}
         <StatusBar style="auto" />
-        <Launch fontsReady={fontsLoaded || Boolean(fontError)} />
+        <ThemeProvider value={scheme === "dark" ? DarkTheme : DefaultTheme}>
+          <Launch fontsReady={fontsLoaded || Boolean(fontError)} />
+        </ThemeProvider>
       </SafeAreaProvider>
     </SessionProvider>
   );
@@ -241,13 +261,22 @@ function Gate() {
             athlete-derived. */}
         <Stack.Screen name="privacy" />
 
-        {/* Also reachable either way, and declared rather than left out so that
-            it is a decision instead of an oversight. `/gallery` is the specimen
-            sheet: it renders fixtures only, never a fetch and never a byte of
-            anyone's data, and `gallery.tsx` returns null when `!__DEV__`.
-            Leaving it undeclared did not gate it — see the note above — it just
-            hid the fact that it was ungated. */}
-        <Stack.Screen name="gallery" />
+        {/* The specimen sheet: fixtures only, never a fetch and never a byte of
+            anyone's data. Declared rather than left out so that it is a
+            decision instead of an oversight — leaving it undeclared did not
+            gate it (see the note above), it only hid that it was ungated.
+
+            GUARDED ON `__DEV__` RATHER THAN RETURNING NULL. The screen already
+            did the latter, which kept the route in `routeNames` in release: a
+            deep link to `runguard://gallery` then opened a blank page whose
+            only exit was the invisible edge-swipe, and nothing at all if it was
+            the launch URL. `__DEV__` is a compile-time constant, so in a
+            release bundle this guard is `false` and the route does not exist —
+            an unmatched link falls through to expo-router's own screen, which
+            at least says so. */}
+        <Stack.Protected guard={__DEV__}>
+          <Stack.Screen name="gallery" />
+        </Stack.Protected>
       </Stack>
     </ProfileProvider>
   );

@@ -52,7 +52,7 @@
  * `watch` or `unusual` always rests on something real (a reported severity, or
  * the illness pattern in the wearable data), so neither is ever touched.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -223,15 +223,31 @@ function teamTiles(athletes: CoachRosterAthlete[]): TileSpec[] {
  * Rows
  * ------------------------------------------------------------------ */
 
-function AthleteRow({
+/**
+ * One roster row.
+ *
+ * MEMOISED, and taking `onOpen(id)` rather than a bare `onPress`. The search
+ * field's text is screen state, so every keystroke re-rendered every row —
+ * fourteen here, and a squad is not capped at fourteen. `React.memo` alone
+ * would not have helped: an inline `() => router.push(...)` is a new function
+ * every render, so the memo could never hit. The id goes down, one
+ * `useCallback` comes back up.
+ *
+ * This is NOT virtualisation. A `FlatList` is the real answer and would mean
+ * moving the search field and the four tiles into a `ListHeaderComponent` — a
+ * restructure of a working screen. This removes the cost that bites today at a
+ * fraction of the risk.
+ */
+const AthleteRow = memo(function AthleteRow({
   athlete,
   isLast,
-  onPress,
+  onOpen,
 }: {
   athlete: CoachRosterAthlete;
   isLast: boolean;
-  onPress: () => void;
+  onOpen: (id: number) => void;
 }) {
+  const onPress = useCallback(() => onOpen(athlete.id), [onOpen, athlete.id]);
   const state = stateOf(athlete);
   const week = athlete.risk.hasActivityHistory
     ? fmtMiles(athlete.risk.weekKm)
@@ -280,7 +296,7 @@ function AthleteRow({
       {isLast ? null : <View style={styles.separator} pointerEvents="none" />}
     </Pressable>
   );
-}
+});
 
 /**
  * Every state where the card would otherwise be empty. The design has none of
@@ -357,6 +373,12 @@ export default function RosterScreen() {
   }, [athletes, query]);
 
   const tiles = useMemo(() => teamTiles(athletes), [athletes]);
+
+  /** Stable, so `AthleteRow`'s memo survives a keystroke in the search field. */
+  const openAthlete = useCallback(
+    (id: number) => router.push(`/coach/athlete/${id}`),
+    [router]
+  );
 
   // Pre-formatted here. Non-negotiable #2: a component never derives a date.
   const today = dayLabel(localDay());
@@ -474,7 +496,7 @@ export default function RosterScreen() {
                       key={a.id}
                       athlete={a}
                       isLast={i === shown.length - 1}
-                      onPress={() => router.push(`/coach/athlete/${a.id}`)}
+                      onOpen={openAthlete}
                     />
                   ))}
                 </Card>

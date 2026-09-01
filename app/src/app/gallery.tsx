@@ -345,7 +345,7 @@ function SpecimenSheet() {
   const countTap = () => setTaps((n) => n + 1);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.pageTitle}>Specimen sheet</Text>
         {/* The ember, once, doing the energy work. 135° as on the web. */}

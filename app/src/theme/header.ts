@@ -20,6 +20,7 @@
  * real one, and it changes depending on where you came from.
  */
 import type { ComponentProps } from "react";
+import { useMemo } from "react";
 import { useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 
@@ -34,13 +35,6 @@ import { font, text } from "./type";
  */
 type HeaderOptions = NonNullable<ComponentProps<typeof Stack.Screen>["options"]>;
 
-/**
- * Header options for one pushed screen.
- *
- * Pass the title the screen should carry. Everything else is fixed on purpose:
- * a caller that needs to vary the ground or the tint is describing a different
- * component, not a variant of this one.
- */
 /**
  * A header that is ONLY a back button.
  *
@@ -67,15 +61,19 @@ type HeaderOptions = NonNullable<ComponentProps<typeof Stack.Screen>["options"]>
  */
 export function useBackOnlyHeader(): HeaderOptions {
   const dark = useColorScheme() === "dark";
-  return {
-    headerShown: true,
-    headerTitle: "",
-    headerStyle: { backgroundColor: dark ? darkColor.bg : staticColor.bg },
-    headerTintColor: dark ? darkColor.ink : staticColor.ink,
-    headerShadowVisible: false,
-    headerBackTitle: "Back",
-    headerBackTitleStyle: { fontFamily: font.body },
-  };
+  /** Memoised for the reason `useScreenHeader` above is. */
+  return useMemo<HeaderOptions>(
+    () => ({
+      headerShown: true,
+      headerTitle: "",
+      headerStyle: { backgroundColor: dark ? darkColor.bg : staticColor.bg },
+      headerTintColor: dark ? darkColor.ink : staticColor.ink,
+      headerShadowVisible: false,
+      headerBackTitle: "Back",
+      headerBackTitleStyle: { fontFamily: font.body },
+    }),
+    [dark]
+  );
 }
 
 /**
@@ -110,23 +108,37 @@ export function useBackOnlyHeader(): HeaderOptions {
  */
 export function useScreenHeader(title: string): HeaderOptions {
   const dark = useColorScheme() === "dark";
-  const ink = dark ? darkColor.ink : staticColor.ink;
-  return {
-    headerShown: true,
-    title,
-    // `bg`, not `card`: the header is part of the page's ground, and a white
-    // strip above a cream page reads as a floating bar — which the visual spec
-    // rules out ("Lines instead of shadows. Nothing floats.").
-    headerStyle: { backgroundColor: dark ? darkColor.bg : staticColor.bg },
-    headerTintColor: ink,
-    headerShadowVisible: false,
-    headerTitleStyle: {
-      fontFamily: text.title.fontFamily,
-      fontSize: text.title.fontSize,
-      color: ink,
-    },
-    headerBackTitle: "Back",
-    headerBackTitleStyle: { fontFamily: font.body },
-  };
+  /*
+   * ── MEMOISED, AND NOT AS AN OPTIMISATION ──────────────────────────────────
+   *
+   * This returned a fresh object literal on every render, and `<Stack.Screen>`
+   * memoises on that reference — so `navigation.setOptions()` fired on every
+   * render of every consumer. `chat.tsx` holds its composer draft in screen
+   * state, which made that one navigator state update per typed character,
+   * with the message list re-rendering behind it.
+   *
+   * Ten screens call this. Fixing it here rather than at the call sites is
+   * what stops the eleventh reintroducing it.
+   */
+  return useMemo<HeaderOptions>(() => {
+    const ink = dark ? darkColor.ink : staticColor.ink;
+    return {
+      headerShown: true,
+      title,
+      // `bg`, not `card`: the header is part of the page's ground, and a white
+      // strip above a cream page reads as a floating bar — which the visual
+      // spec rules out ("Lines instead of shadows. Nothing floats.").
+      headerStyle: { backgroundColor: dark ? darkColor.bg : staticColor.bg },
+      headerTintColor: ink,
+      headerShadowVisible: false,
+      headerTitleStyle: {
+        fontFamily: text.title.fontFamily,
+        fontSize: text.title.fontSize,
+        color: ink,
+      },
+      headerBackTitle: "Back",
+      headerBackTitleStyle: { fontFamily: font.body },
+    };
+  }, [dark, title]);
 }
 
