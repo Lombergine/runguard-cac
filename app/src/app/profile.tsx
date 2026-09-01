@@ -398,7 +398,25 @@ function TeamSection({
     return (
       <Section label="Team" note="What your coach sees">
         <Card padded={false} style={styles.group}>
-          <ListRow title="Team" detail={athlete.teamName} isLast={!athlete.joinCode} />
+          <ListRow
+            title="Team"
+            detail={athlete.teamName}
+            isLast={!athlete.coachName && !athlete.joinCode}
+          />
+          {/*
+            The design's `Coach` row. It could not be built before: `team` was
+            loaded server-side but the coach's name was the one thing about it
+            the payload withheld. Rendered only when it arrives — an athlete
+            with no team has no coach, and a dash here would be an `Absent` for
+            something that is not missing so much as inapplicable.
+          */}
+          {athlete.coachName ? (
+            <ListRow
+              title="Coach"
+              detail={athlete.coachName}
+              isLast={!athlete.joinCode}
+            />
+          ) : null}
           {/* Only renders once the server sends it — see AppProfile. A code is
               read back character by character, so it is mono like a numeral. */}
           {athlete.joinCode ? (
@@ -1012,7 +1030,13 @@ const styles = StyleSheet.create({
   codeInput: {
     ...text.base,
     fontFamily: font.mono,
-    letterSpacing: 2,
+    /*
+     * A join code is read aloud and typed in one character at a time, so its
+     * letters are spaced further than prose — the same reason a card number is.
+     * Derived from the rank rather than typed as a number: 0.12em is `micro`'s
+     * own tracking, which is the app's "these are glyphs, not words" value.
+     */
+    letterSpacing: 0.12 * (text.base.fontSize as number),
     color: color.ink,
     // Sunken against the white card, so the field reads as a field.
     backgroundColor: color.well,

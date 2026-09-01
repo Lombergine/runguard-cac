@@ -33,7 +33,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ChatBubble, bubbleText } from "../components/ChatBubble";
 import { SafetyNotice } from "../components/SafetyNotice";
 import { getChat, isUnauthorized, postChat } from "../lib/api";
-import { useSession } from "../lib/session";
+import { useSession, type SessionRole } from "../lib/session";
+import { DEMO_CHAT_ATHLETE, DEMO_CHAT_COACH } from "../lib/demoChat";
+import { isDemo } from "../lib/demo";
 import type { ChatMessage } from "../lib/types";
 import { List, ListRow } from "../components/List";
 import { Panel } from "../components/Panel";
@@ -128,9 +130,42 @@ function Suggestions({
   );
 }
 
+/**
+ * Whether the chat may actually be used.
+ *
+ * OFF. The screen reaches a model, and that is not a thing to switch on
+ * quietly. Everything below is wired and works; this is the one line that turns
+ * it on when the feature ships.
+ *
+ * It is a constant rather than an env var on purpose — an env var is a thing
+ * that can differ between a build and a review build, and "did the AI answer a
+ * teenager in the App Review session" is not a question worth leaving to
+ * configuration.
+ */
+const CHAT_ENABLED = false;
+
+/**
+ * What to show instead. A demo gets the example transcript for its role; anyone
+ * else gets nothing, and the empty state says why.
+ *
+ * Not the visitor's own history, and never presented as it — see `demoChat.ts`.
+ */
+function demoTranscript(role: SessionRole | null): ChatMessage[] {
+  if (!isDemo()) return [];
+  return [...(role === "coach" ? DEMO_CHAT_COACH : DEMO_CHAT_ATHLETE)];
+}
+
 export default function ChatScreen() {
-  const { signOut } = useSession();
-  const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const { role, signOut } = useSession();
+  /*
+   * `null` means "still loading". With the feature off there is nothing to load
+   * and never will be, so the transcript is the INITIAL state rather than
+   * something an effect sets — a lazy initialiser, so the fixtures are copied
+   * once on mount instead of on every render.
+   */
+  const [messages, setMessages] = useState<ChatMessage[] | null>(() =>
+    CHAT_ENABLED ? null : demoTranscript(role)
+  );
   const [loadFailed, setLoadFailed] = useState(false);
   /**
    * A 401 is not a load failure and not a blip — the token is gone, so no send
@@ -182,7 +217,23 @@ export default function ChatScreen() {
     void signOut();
   }, [signOut]);
 
+  /*
+   * ── THE CHAT IS NOT RELEASED, SO NOTHING IS FETCHED ───────────────────────
+   *
+   * `CHAT_ENABLED` is off. The screen therefore makes no request at all: it
+   * shows a fixed example transcript in a demo, and an empty page saying so
+   * otherwise. `getChat()` is left imported and wired below the flag rather
+   * than deleted — turning the feature on is flipping one constant, not
+   * rebuilding the screen.
+   *
+   * This also settles a role problem. `getChat()` is athlete-shaped, so a coach
+   * tapping the chat used to get a 401 before a packet left the phone. With no
+   * fetch there is nothing to be the wrong role for, which is why the coach can
+   * have this screen back.
+   */
   useEffect(() => {
+    // Nothing to fetch while the feature is off — see the state above.
+    if (!CHAT_ENABLED) return;
     let alive = true;
     getChat()
       .then((history) => {
@@ -201,7 +252,7 @@ export default function ChatScreen() {
     return () => {
       alive = false;
     };
-  }, [endSession]);
+  }, [endSession, role]);
 
   /**
    * Takes the text rather than reading `draft`, so a suggested prompt is the
@@ -245,8 +296,15 @@ export default function ChatScreen() {
     }
   }, [pending, signedOut, endSession]);
 
-  /** Anything at all can be sent — the composer just also needs some words. */
-  const canSendAnything = !pending && !signedOut;
+  /**
+   * Anything at all can be sent — the composer just also needs some words.
+   *
+   * `CHAT_ENABLED` gates it first, so while the feature is off the field is
+   * inert, the Send button never lights, and the suggested prompts are
+   * disabled. A control that looks live and does nothing is the failure this
+   * app keeps refusing to ship.
+   */
+  const canSendAnything = CHAT_ENABLED && !pending && !signedOut;
   const canSend = draft.trim().length > 0 && canSendAnything;
 
   return (
@@ -275,6 +333,30 @@ export default function ChatScreen() {
         <Text style={styles.caption}>
           Describes what your data shows — never what to do
         </Text>
+        {/*
+          A DEMO'S TRANSCRIPT IS LABELLED AS ONE.
+          
+          The rows below are fixtures (`lib/demoChat.ts`), and a demo that shows
+          you a conversation without saying so is passing invented words off as
+          somebody's history. It is a `Panel`, not a chat row, for the same
+          structural reason `SafetyNotice` is: anything that is not a message
+          must be unable to look like one.
+        */}
+        {!CHAT_ENABLED && isDemo() && messages && messages.length > 0 ? (
+          <View style={styles.opener}>
+            <Panel
+              style={styles.panelInset}
+              title="An example conversation"
+              note="Coming soon"
+            >
+              <Text style={styles.plain}>
+                Ask RunGuard is not switched on yet. This is a sample of what it
+                will look like — the questions and answers below are written,
+                not generated, and none of it is anyone&rsquo;s real chat.
+              </Text>
+            </Panel>
+          </View>
+        ) : null}
         {/*
           The failure sits ABOVE the list rather than replacing it, in both
           cases: a message that DID send must stay on screen — if it tripped an
@@ -323,7 +405,23 @@ export default function ChatScreen() {
             // Nothing to say either when the thread is known to be non-empty
             // and we simply are not holding it: an empty list is not a fact
             // about the athlete, and "Nothing sent yet" would assert one.
-            messages === null || historyDiscarded ? null : (
+            messages === null || historyDiscarded ? null : !CHAT_ENABLED ? (
+              /*
+               * The feature is off and this is not a demo, so there is no
+               * transcript and never was one. Saying "Nothing sent yet" here
+               * would blame the athlete for an absence that is ours.
+               */
+              <View style={styles.opener}>
+                <Panel style={styles.panelInset} title="Not available yet">
+                  <Text style={styles.plain}>
+                    Ask RunGuard is still being built. When it opens it will
+                    describe what your own training data shows — it will not
+                    tell you what to do, and your coach will be able to read
+                    what you send.
+                  </Text>
+                </Panel>
+              </View>
+            ) : (
               <View style={styles.opener}>
                 <Panel style={styles.panelInset} title="Nothing sent yet">
                   <Text style={styles.plain}>
@@ -381,7 +479,10 @@ export default function ChatScreen() {
               style={styles.input}
               value={draft}
               onChangeText={setDraft}
-              placeholder="Ask a question"
+              placeholder={
+                CHAT_ENABLED ? "Ask about your training" : "Coming soon"
+              }
+              editable={CHAT_ENABLED}
               placeholderTextColor={color.placeholder}
               multiline
               accessibilityLabel="Message"
@@ -444,10 +545,25 @@ export default function ChatScreen() {
             Verbatim, never summarised — true. It is `ink2` and not `muted`
             because fine print is the wrong register for this sentence.
           */}
-          <Text style={styles.coachNote}>
-            Your coach can read your last <Text style={styles.figure}>5</Text>{" "}
-            messages here, word for word.
-          </Text>
+          {/*
+            Present tense only while there is something to send. With the
+            feature off, "your coach can read your last 5 messages" asserts
+            something about a thread that does not exist — and on the demo it
+            would be a claim about fixtures. The panel above carries the same
+            disclosure in the future tense for that case, so it is stated
+            either way and never twice.
+          */}
+          {CHAT_ENABLED ? (
+            <Text style={styles.coachNote}>
+              Your coach can read your last <Text style={styles.figure}>5</Text>{" "}
+              messages here, word for word.
+            </Text>
+          ) : (
+            <Text style={styles.coachNote}>
+              When this opens, your coach will be able to read your last{" "}
+              <Text style={styles.figure}>5</Text> messages, word for word.
+            </Text>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

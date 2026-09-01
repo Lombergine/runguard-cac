@@ -130,19 +130,24 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
 
   /**
-   * The design's 16 sides and 14 top, taken to the 4px scale: `space.lg` is its
-   * 16 exactly, and `space.md` is the nearest step to 14. Narrower than
-   * `layout.page` (20), which the other pushed screens use, because the design
-   * insets this screen's cards further out than its list screens.
+   * The page metrics, same as every other screen.
+   *
+   * This used to spend `space.lg` and `space.md` on the argument that the
+   * design "insets this screen's cards further out than its list screens". It
+   * does not — Alerts is `padding:14px 16px 0` (`:882`), byte-identical to
+   * Settings, Profile, the run detail and the plan day. Alerts was simply the
+   * one pushed screen that had drifted 4px narrower than its siblings, and the
+   * comment had been written to justify the drift rather than to describe the
+   * design. `layout` now carries the design's own 14 / 16 / 20.
    *
    * `gap` is the design's 10 between stacked cards, at `space.md`. With the
    * alerts rendering as a single card — see (5) above — it is the space
    * between the lede, the card and the footnote.
    */
   page: {
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: layout.section,
+    paddingHorizontal: layout.page,
+    paddingTop: layout.pageTop,
+    paddingBottom: layout.pageBottom,
     gap: space.md,
   },
 

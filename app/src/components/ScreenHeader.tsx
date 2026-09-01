@@ -32,7 +32,6 @@ import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 
-import { useSession } from "../lib/session";
 import { color } from "../theme/tokens";
 import { layout, ruleWidth, space, target } from "../theme/space";
 import { text } from "../theme/type";
@@ -81,39 +80,30 @@ export type ScreenHeaderProps = {
  * Here rather than in each screen so the set cannot drift: eight copies of this
  * list is eight chances for one tab to lose the bell or order them differently.
  *
- * ── A COACH GETS TWO, NOT THREE ─────────────────────────────────────────────
+ * ── THE COACH HAS THE CHAT BACK ─────────────────────────────────────────────
  *
- * This was role-blind, and all three coach tabs render it, so a coach was shown
- * an "Ask RunGuard" button that opens the ATHLETE's chat: `getChat()` is
- * `/me`-shaped, and `request()` refuses an athlete route for a coach credential
- * before a packet leaves the phone. The design had already decided the answer —
- * its coach nav has Alerts and Settings and no chat (`:1850`) — and it is the
- * right one twice over: RunGuard's chat answers questions about YOUR training,
- * and a coach has no training here. Better not to offer the door than to open
- * it onto a 401.
+ * Briefly it did not. This hook was role-blind, and all three coach tabs render
+ * it, so a coach was shown an "Ask RunGuard" button that opened the ATHLETE's
+ * chat — `getChat()` is `/me`-shaped, and `request()` refuses an athlete route
+ * for a coach credential before a packet leaves the phone. The design's coach
+ * nav has Alerts and Settings and no chat (`:1850`), so dropping it matched the
+ * design and fixed the 401 at once.
  *
- * Alerts and Settings stay for both. Settings is now role-aware (it asks
- * `/coach/roster` rather than `/home`, which used to sign a coach out on the
- * first tap).
+ * What changed: `chat.tsx` no longer fetches anything. The feature is not
+ * released, so the screen shows an example transcript in a demo and an empty
+ * "not available yet" panel otherwise — there is no request left to be the
+ * wrong role for. Both demos are meant to show the chat, and a coach seeing
+ * what it will look like is the point of a demo.
+ *
+ * When it does ship, the coach path needs a coach-shaped endpoint before this
+ * line can stay. `docs/design-port.md` row 32 records the design's own choice.
  */
 export function useTabHeaderActions(): readonly HeaderAction[] {
   const router = useRouter();
-  const { role } = useSession();
-  const alerts: HeaderAction = {
-    glyph: "alerts",
-    label: "Alerts",
-    onPress: () => router.push("/alerts"),
-  };
-  const settings: HeaderAction = {
-    glyph: "settings",
-    label: "Settings",
-    onPress: () => router.push("/settings"),
-  };
-  if (role === "coach") return [alerts, settings];
   return [
-    alerts,
+    { glyph: "alerts", label: "Alerts", onPress: () => router.push("/alerts") },
     { glyph: "chat", label: "Ask RunGuard", onPress: () => router.push("/chat") },
-    settings,
+    { glyph: "settings", label: "Settings", onPress: () => router.push("/settings") },
   ];
 }
 

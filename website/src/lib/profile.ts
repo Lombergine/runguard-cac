@@ -75,7 +75,7 @@ export type CoreProfile = {
   // dashboard, the athlete portal and two mobile payloads, so anything on it is
   // published to all four. It used to carry `deviceToken`, and two routes had to
   // remember to delete the key on the way out.
-  athlete: { id: number; name: string; grade: number | null; school: string; events: string[]; hue: number; teamName: string | null };
+  athlete: { id: number; name: string; grade: number | null; school: string; events: string[]; hue: number; teamName: string | null; coachName: string | null };
   risk: RiskSnapshot;
   series: DailyPoint[];
   yearDays: { date: string; load: number; km: number }[];
@@ -391,6 +391,16 @@ export async function buildProfile(
       events: ["800m", "Mile", "5K", "XC 5K"],
       hue: athlete.avatar_hue,
       teamName: team?.name ?? null,
+      /*
+       * Who the coach is. The design's Profile has a `Coach` row and the app
+       * could not build one, because this was the only thing about the team the
+       * payload withheld — `team` is already loaded two lines up.
+       *
+       * The NAME only. Not `coach_email`, which is on the same row and is a
+       * teacher's work address: an athlete does not need it to know who their
+       * coach is, and a payload is a thing that gets written down.
+       */
+      coachName: team?.coach_name ?? null,
     },
     risk,
     series: risk.series,

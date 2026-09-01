@@ -595,6 +595,12 @@ export type Profile = {
     grade: number | null;
     school: string;
     teamName: string | null;
+    /**
+     * The coach's name, or null when the athlete has no team. NOT their email:
+     * the server withholds that deliberately (`profile.ts`), and this is only
+     * ever the answer to "who is my coach".
+     */
+    coachName?: string | null;
     hue: number;
     /**
      * Events contested — but `profile.ts:337` returns the LITERAL CONSTANT

@@ -487,10 +487,11 @@ export default function WelcomeScreen() {
             the server refuses them independently, so nothing typed here can
             reach the roster a coach is being shown.
 
-            ONE row. The design offers an athlete demo and a coach demo; there
-            is no coach anything on the phone — `_layout.tsx` has no coach group
-            and `/api/mobile/*` has no coach surface — so a second row would be
-            a door onto nothing.
+            TWO rows, as the design has. This said "ONE row … there is no coach
+            anything on the phone", which was true when it was written and is
+            not now: `(tabs)/_layout.tsx` registers Roster, Calendar and Sources
+            behind `guard={coach}`, and `/api/mobile/coach/*` backs all three.
+            The second row opens them.
 
             The row does NOT name the athlete. The design labels it "Ethan Park,
             grade 11 — mid-season, shin settling", and this app cannot stand
