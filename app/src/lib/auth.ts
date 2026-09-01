@@ -198,6 +198,17 @@ export async function setCoachToken(token: string): Promise<void> {
  * the paragraph above describes, in its worst form: the value left behind is the
  * non-expiring device token the product just removed, and it would sit in the
  * keychain of every upgraded phone forever.
+ *
+ * ── THE ONE KEY THAT IS DELIBERATELY NOT HERE ───────────────────────────────
+ *
+ * `runguard.appearance` (`lib/appearance.ts`). This list is credentials and
+ * athlete data; a preference for a dark screen is neither. It belongs to the
+ * phone and the person holding it rather than to the account, and erasing it on
+ * sign-out would flip a shared team phone back to light between athletes for no
+ * reason anyone chose.
+ *
+ * Named here rather than merely omitted, so the contract stays complete: every
+ * key this app writes is accounted for — in this list, or in that sentence.
  */
 const ALL_KEYS = [KEY, COACH_KEY, RETIRED_DEVICE_TOKEN_KEY, "runguard.health.state"] as const;
 

@@ -106,7 +106,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -117,6 +116,13 @@ import { Absent } from "../components/Nothing";
 import { List, ListRow } from "../components/List";
 import { Section } from "../components/Section";
 import { getCoachRoster, getHome, isUnauthorized } from "../lib/api";
+import {
+  APPEARANCE_CHOICES,
+  APPEARANCE_LABEL,
+  loadAppearance,
+  setAppearance,
+  type AppearanceChoice,
+} from "../lib/appearance";
 import { isDemo } from "../lib/demo";
 import { useSession } from "../lib/session";
 import { useScreenHeader } from "../theme/header";
@@ -168,15 +174,34 @@ export default function SettingsScreen() {
   const [signingOut, setSigningOut] = useState(false);
   // Read once per render: the value only changes on sign-out, which unmounts this.
   const demo = isDemo();
-  /*
-   * What the app is CURRENTLY drawing, not what the athlete picked — there is
-   * nothing to pick. Every colour in theme/tokens.ts is a `DynamicColorIOS`
-   * pair, so the appearance is the phone's and the row reports it.
-   */
-  const scheme = useColorScheme();
 
   /** Athletes are a person; coaches are a team. See the row below. */
   const identityLabel = role === "coach" ? "Coaching" : "Signed in as";
+
+  /*
+   * The appearance preference. Read once on mount — it cannot change under this
+   * screen except by the row below, which sets both the store and this state.
+   */
+  const [appearance, setAppearanceChoice] = useState<AppearanceChoice>("system");
+  useEffect(() => {
+    let alive = true;
+    void loadAppearance().then((c) => {
+      if (alive) setAppearanceChoice(c);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** Follow phone → Light → Dark → Follow phone. */
+  const cycleAppearance = useCallback(() => {
+    setAppearanceChoice((current) => {
+      const i = APPEARANCE_CHOICES.indexOf(current);
+      const next = APPEARANCE_CHOICES[(i + 1) % APPEARANCE_CHOICES.length];
+      void setAppearance(next);
+      return next;
+    });
+  }, []);
 
   /*
    * ── THIS SCREEN IS REACHED BY BOTH ROLES, AND USED TO EJECT ONE OF THEM ────
@@ -413,10 +438,12 @@ export default function SettingsScreen() {
           pace, so it is more than a display-layer change and it is not offered
           as one.
 
-          No `onPress`, so `ListRow` renders a plain View: no chevron promising
-          a screen underneath, and no flash promising an effect.
+          The two UNIT rows have no `onPress`, so `ListRow` renders each as a
+          plain View: no chevron promising a screen underneath, and no flash
+          promising an effect. Appearance is the exception and is a real
+          control — see its own note below.
         */}
-        <Section label="Display" note="Nothing here is a choice yet">
+        <Section label="Display" note="Appearance only">
           <List>
             <ListRow
               title="Distance"
@@ -429,17 +456,29 @@ export default function SettingsScreen() {
               sub="Kilometres are not a setting yet — the conversion is written into the app rather than read from a preference, so there is nothing here to switch."
             />
             {/*
-              The design's "Appearance / Light" — the one row of its four
-              controls that is real, because it is a REPORT rather than a
-              choice. `useColorScheme()` is what the app is drawing right now.
-              `null` (an appearance the OS will not name) draws light, so
-              "Light" is a description of the screen either way rather than a
-              claim about a setting.
+              THE ONE REAL CONTROL ON THIS SCREEN, and the file's opening
+              paragraph says why the others are not: a switch is a promise that
+              something is stored and honoured, and nothing else here could keep
+              one. This can. It is stored (`lib/appearance.ts`), honoured on
+              every launch, and the whole app obeys it — one
+              `Appearance.setColorScheme()` moves what the OS resolves every
+              `DynamicColorIOS` pair against.
+
+              THREE VALUES, NOT A SWITCH. A two-state switch cannot express
+              "follow the phone", which is the default and the right answer for
+              most people; a switch labelled "Dark mode" that is off would claim
+              the athlete chose light when they chose nothing at all. Tapping
+              cycles, and the row shows where it is.
             */}
             <ListRow
               title="Appearance"
-              detail={scheme === "dark" ? "Dark" : "Light"}
-              sub="Follows your phone, under Display & Brightness. RunGuard has no appearance of its own to set."
+              detail={APPEARANCE_LABEL[appearance]}
+              sub={
+                appearance === "system"
+                  ? "Following your phone, under Display & Brightness. Tap to override it here."
+                  : "Set in RunGuard, whatever your phone is doing. Tap to change."
+              }
+              onPress={cycleAppearance}
               isLast
             />
           </List>

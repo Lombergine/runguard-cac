@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useColorScheme } from "react-native";
+import { applyAppearance, loadAppearance } from "../lib/appearance";
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
@@ -43,6 +44,28 @@ export const unstable_settings = { anchor: "welcome" };
 
 export default function RootLayout() {
   const scheme = useColorScheme();
+
+  /*
+   * The stored appearance, applied before anything is drawn in the wrong one.
+   *
+   * `Appearance.setColorScheme()` moves what the OS resolves `DynamicColorIOS`
+   * against, so this one call turns every token, every `useColorScheme()` and
+   * the status bar over together — see `lib/appearance.ts` for why it is that
+   * rather than a context.
+   *
+   * It runs alongside the font load and the keychain read, and the splash is
+   * held until all three settle (`Launch` below), so there is no frame in which
+   * an athlete who chose dark sees a cream screen.
+   */
+  useEffect(() => {
+    let alive = true;
+    void loadAppearance().then((choice) => {
+      if (alive) applyAppearance(choice);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [fontsLoaded, fontError] = useFonts({
     Archivo_700Bold,
     Archivo_800ExtraBold,
