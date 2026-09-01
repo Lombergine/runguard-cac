@@ -1,116 +1,55 @@
 /**
  * Writes one risk_snapshots row per athlete per day — what the engine saw.
  *
- *   npx tsx scripts/snapshot.ts              # today only (the nightly job)
+ *   npx tsx scripts/snapshot.ts              # today only
  *   npx tsx scripts/snapshot.ts --backfill   # rebuild the last 120 days
  *   npx tsx scripts/snapshot.ts --backfill 200
+ *   npx tsx scripts/snapshot.ts --all        # ignore the HealthKit gate
  *
- * None of this is displayed. It exists because the engine recomputes from
- * scratch on every request, so a day that isn't written down is gone — and the
- * only thing that could ever justify showing a real number again is a season of
- * these rows labelled by what actually happened to these athletes.
+ * The nightly job is NOT this script any more — it is the Vercel cron hitting
+ * `/api/cron/snapshot`, which calls the same `runSnapshot()`. This stays as the
+ * hand-run tool for backfills and for looking at what the engine sees.
  *
- * Backfill works because computeRisk() takes an explicit `now`, so state can be
- * reconstructed as of any past date from data already in the database. The
- * corpus therefore starts with however much history each athlete already has,
- * not empty.
- *
- * Idempotent: re-running overwrites that athlete-day rather than duplicating.
+ * By default it applies the same HealthKit gate the cron does: an athlete whose
+ * phone has delivered nothing in INGEST_WINDOW_DAYS is skipped. Pass `--all` to
+ * snapshot the whole roster regardless, which is what you want against seeded
+ * data, where every row shares one frozen `created_at` and nobody passes.
  */
-import {
-  listAthletes,
-  activitiesForAthlete,
-  metricsForAthlete,
-  checkinsForAthlete,
-  sorenessHistory,
-  sorenessForCheckin,
-  upsertRiskSnapshot,
-} from "../src/lib/db";
-import { computeRisk, sessionSpike } from "../src/lib/risk";
-import { readinessScore } from "../src/lib/engine";
-import { localDay, localDayOffset } from "../src/lib/day";
-
-const DAY_MS = 86400000;
+import { runSnapshot } from "../src/lib/snapshot";
+import { close, describeTarget } from "../src/lib/db";
 
 const args = process.argv.slice(2);
 const backfill = args.includes("--backfill");
 const days = backfill ? Number(args[args.indexOf("--backfill") + 1]) || 120 : 1;
 
-const athletes = await listAthletes();
-if (!athletes.length) {
-  console.log("No athletes — nothing to snapshot.");
-  process.exit(0);
-}
+// main(), not top-level await: tsx transforms these scripts to CJS, where a
+// top-level await is a hard transform error. The previous version of this file
+// had one, which is why it could not be run at all.
+async function main() {
+  // Say which database before touching it. A backfill against the wrong target
+  // is not something you want to discover from the row count afterwards.
+  console.log(`Target: ${describeTarget()}`);
 
-let written = 0;
-const today = new Date();
-const lookback = new Date(today.getTime() - (days + 140) * DAY_MS);
+  const r = await runSnapshot({ days, requireIngest: !args.includes("--all") });
 
-for (const a of athletes) {
-  // one query per athlete, then filter per day in memory
-  const allActs = await activitiesForAthlete(a.id, lookback.toISOString());
-  const allMetrics = await metricsForAthlete(a.id, localDay(lookback));
-  const allSore = await sorenessHistory(a.id, localDayOffset(days + 10, today));
-  const allCheckins = await checkinsForAthlete(a.id, localDay(lookback));
-
-  for (let back = days - 1; back >= 0; back--) {
-    const asOf = new Date(today.getTime() - back * DAY_MS);
-    const date = localDay(asOf);
-
-    // only what was knowable that day — no leakage from the future
-    const acts = allActs.filter((x) => localDay(new Date(x.start_time)) <= date);
-    const metrics = allMetrics.filter((m) => m.date <= date);
-    if (!acts.length && !metrics.length) continue;
-
-    const sore = allSore
-      .filter((s) => s.date <= date)
-      .map((s) => ({ date: s.date, body_part: s.body_part, severity: s.severity }));
-    const risk = computeRisk(acts, metrics, asOf, sore, a);
-
-    const checkin = allCheckins.find((c) => c.date === date) ?? null;
-    const todaySore = (await sorenessForCheckin(a.id, date)).map((s) => ({
-      part: s.body_part,
-      severity: s.severity,
-    }));
-    const readiness = readinessScore(risk, checkin, todaySore);
-
-    // biggest single-session spike among that day's runs
-    let spikePctAbove: number | null = null;
-    let spikeKm: number | null = null;
-    for (const act of acts.filter((x) => localDay(new Date(x.start_time)) === date)) {
-      const sp = sessionSpike(act, acts);
-      if (sp && (spikePctAbove === null || sp.pctAbove > spikePctAbove)) {
-        spikePctAbove = sp.pctAbove;
-        spikeKm = sp.km;
-      }
-    }
-
-    await upsertRiskSnapshot({
-      athlete_id: a.id,
-      date,
-      acwr: risk.acwr,
-      ramp_pct: risk.rampPct,
-      monotony: risk.monotony,
-      days_since_rest: risk.daysSinceRest,
-      week_km: risk.weekKm,
-      rhr_delta: risk.recovery.restingHrDelta,
-      hrv_delta_pct: risk.recovery.hrvDeltaPct,
-      sleep_avg: risk.recovery.sleepAvg,
-      soreness_max: risk.selfReport.todayMax,
-      soreness_days_7: risk.selfReport.persistentDays,
-      energy: checkin?.energy ?? null,
-      readiness,
-      spike_pct_above: spikePctAbove,
-      spike_km: spikeKm,
-      hr_max: risk.hrMax.value,
-      hr_max_source: risk.hrMax.source,
-      legacy_risk_score: risk.score,
-    });
-    written++;
+  console.log(
+    `Wrote ${r.written} snapshot${r.written === 1 ? "" : "s"} for ${r.athletes} athletes ` +
+      `(${backfill ? `backfill, ${days} days` : "today"}).`
+  );
+  if (r.skipped.length) {
+    console.log(
+      `Skipped ${r.skipped.length} with no recent HealthKit ingest: ${r.skipped.join(", ")}` +
+        ` — pass --all to include them.`
+    );
   }
+  if (r.failed.length) {
+    console.error(`FAILED for ${r.failed.length} athletes: ${r.failed.join(", ")}`);
+  }
+
+  // Without this the pooler's idle_timeout holds the process open ~20s past the
+  // last query. See scripts/smoke.ts.
+  await close();
+  process.exit(r.failed.length ? 1 : 0);
 }
 
-console.log(
-  `Wrote ${written} snapshot${written === 1 ? "" : "s"} for ${athletes.length} athletes ` +
-    `(${backfill ? `backfill, ${days} days` : "today"}).`
-);
+main();

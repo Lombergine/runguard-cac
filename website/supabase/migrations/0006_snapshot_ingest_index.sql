@@ -1,0 +1,24 @@
+-- Index the HealthKit ingest gate the nightly snapshot job runs.
+--
+-- Applied ONCE by hand, like every migration in this folder — the Supabase
+-- schema is deliberately not created at runtime, because concurrent serverless
+-- instances would race the DDL.
+--
+-- WHAT READS THIS. `healthkitIngestSince()` in src/lib/db.ts, called once per
+-- snapshot run by src/lib/snapshot.ts:
+--
+--   SELECT athlete_id, MAX(created_at) FROM activities
+--    WHERE source = 'healthkit' AND created_at > ? GROUP BY athlete_id
+--
+-- WHY A NEW INDEX RATHER THAN REUSING idx_activities_athlete_time. That one is
+-- (athlete_id, start_time) — it answers "this athlete's runs, by when they
+-- ran". This query filters on `source` and `created_at` with no athlete bound
+-- and groups afterwards, so it shares no prefix with the existing index and
+-- would seq-scan the whole table.
+--
+-- WHY created_at AND NOT start_time. They answer different questions.
+-- start_time is when the athlete ran; created_at is when the row arrived. A
+-- team whose coach uploaded a year of history through the Apple Health ZIP has
+-- recent runs and has never once synced a phone. The gate is about the phone.
+CREATE INDEX IF NOT EXISTS idx_activities_source_created
+  ON public.activities (source, created_at);

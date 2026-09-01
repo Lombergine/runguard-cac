@@ -17,7 +17,15 @@
         },
         "NSLocalNetworkUsageDescription": "RunGuard connects to your team's RunGuard server on this network during development.",
         "NSHealthShareUsageDescription": "RunGuard reads your running workouts (start time, duration, distance, heart rate, cadence, and a workout's GPS route) and your daily recovery figures (resting heart rate, heart-rate variability, sleep, VO2max, respiratory rate, blood oxygen, wrist temperature). It uses them to work out how much training load you are carrying, to show you a readiness and injury-risk reading, and to show that same reading to the coach of your team. This data is never sold, never used for advertising, and never given to data brokers. You can change or revoke this in Settings > Privacy & Security > Health > RunGuard.",
-        "NSHealthUpdateUsageDescription": "RunGuard does not write anything to Health today. If you ask RunGuard to save a run you logged in the app, only that one workout - its date, duration and distance - is written back. Nothing already in Health is edited or deleted."
+        "NSHealthUpdateUsageDescription": "RunGuard does not write anything to Health today. If you ask RunGuard to save a run you logged in the app, only that one workout - its date, duration and distance - is written back. Nothing already in Health is edited or deleted.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "runguard",
+              "com.googleusercontent.apps.REPLACE-WITH-IOS-CLIENT-ID"
+            ]
+          }
+        ]
       }
     },
     "android": {

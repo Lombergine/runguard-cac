@@ -178,6 +178,14 @@ export async function currentTeamId(): Promise<number | null> {
 
 export async function logIn(teamId: number): Promise<void> {
   const store = await cookies();
+  // Signing in as a real coach means you are not in the demo any more. Without
+  // this, a visitor who opens the sample team and then signs in — by password,
+  // or now by Google — keeps `rg_demo`, and middleware refuses every write on
+  // their OWN roster with a message about a demo they have already left. Only
+  // logOut() used to clear it, which covered the demo → log out → sign in path
+  // and none of the others. `demoLogIn` sets both cookies itself rather than
+  // calling this, so it is unaffected.
+  store.delete(DEMO_COOKIE);
   store.set(COOKIE, signTeam(teamId), {
     httpOnly: true,
     secure: secureCookies(),
@@ -278,6 +286,8 @@ const ATHLETE_COOKIE = "core_athlete";
  */
 export async function athleteLogIn(athleteId: number): Promise<void> {
   const store = await cookies();
+  // Same reason as logIn(): a real athlete signing in is out of the demo.
+  store.delete(DEMO_COOKIE);
   store.set(ATHLETE_COOKIE, signAthleteToken(athleteId), {
     httpOnly: true,
     secure: secureCookies(),

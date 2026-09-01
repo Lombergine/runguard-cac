@@ -81,7 +81,7 @@ reach the browser bundle.
 
 ## Credentials
 
-These four things are credentials. Handling is the same for all of them.
+These seven things are credentials. Handling is the same for all of them.
 
 | Credential | What it opens |
 |---|---|
@@ -90,6 +90,15 @@ These four things are credentials. Handling is the same for all of them.
 | `SESSION_SECRET` | signs **both** of the above; whoever holds it can mint one for any athlete or any team |
 | `DB_PASSWORD` / `DATABASE_URL` | the database, and every athlete in it |
 | `COACH_PASSWORD` | the demo team's roster |
+| `GOOGLE_CLIENT_SECRET` | the web Google client — with it, someone else's server can complete a sign-in as this deployment |
+| `CRON_SECRET` | the nightly snapshot job; it walks the whole roster and writes to `risk_snapshots` |
+
+`GOOGLE_CLIENT_ID` and `GOOGLE_IOS_CLIENT_ID` are deliberately **not** on this
+list. A client id is public by construction — it appears in every authorization
+URL and, for the iOS client, ships inside the app binary. Google issues iOS
+clients no secret at all, which is why `/api/mobile/google` redeems their codes
+as a public client with PKCE. Treating a client id as secret would be cargo cult;
+treating `GOOGLE_CLIENT_SECRET` as anything but secret hands over the door.
 
 **The rules: never logged, never rendered, never in an error message, never in a
 commit.** Two of those get broken by accident rather than by decision. *Never in
@@ -332,6 +341,42 @@ what is already running — redeploy.
   demo team. Leave production empty so real coaches and athletes fill it via
   `/signup` and `/athlete/signup`. To get the demo team into Supabase anyway,
   seed locally and run `scripts/migrate-to-pg.ts`.
+
+## The nightly snapshot job
+
+`vercel.json` schedules `GET /api/cron/snapshot` at 10:00 UTC. It writes one
+`risk_snapshots` row per athlete per day — the feature vector the engine saw,
+which nothing displays. It exists because `computeRisk()` recomputes from
+scratch on every request, so a day nobody wrote down is gone, and a season of
+these rows labelled by what actually happened is the only thing that could ever
+justify showing a real risk number again.
+
+- **Set `CRON_SECRET`**, or the route answers 503 and nothing accumulates. Vercel
+  sends it as `Authorization: Bearer <CRON_SECRET>`.
+- **Production only.** Vercel runs crons on the production deployment, and the
+  route independently refuses unless `DB_DRIVER=supabase` — a preview deployment
+  writing to the dev database would interleave two engines' output into the same
+  `(athlete, date)` rows.
+- **It skips athletes whose phone has sent nothing in 30 days.** The gate reads
+  `activities.created_at` — when the row *arrived* — not `start_time`, which is
+  when the athlete ran. A team whose coach uploaded a year of history through the
+  Apple Health ZIP has recent runs and has never synced a phone.
+- **10:00 UTC is chosen, not arbitrary.** `localDay()` uses the process-local
+  calendar day; a cron early in UTC writes tomorrow's date relative to what the
+  athletes see.
+- **Backfilling** is a hand-run, not part of a deploy. From `website/`:
+
+  ```
+  DATABASE_URL=... DB_DRIVER=supabase npx tsx scripts/snapshot.ts --backfill 365
+  ```
+
+  Use `DATABASE_URL`, not `DB_PASSWORD` — the password-only path falls back to a
+  hardcoded host naming a project this deployment no longer uses. Add `--all` to
+  ignore the HealthKit gate, which is what you want against seeded data where
+  every row shares one frozen `created_at` and nobody passes.
+
+Re-running is safe: `upsertRiskSnapshot` is idempotent per `(athlete, date)`, so
+a partial run is repaired by the next one rather than duplicated.
 
 ## Point the mobile app at it
 

@@ -158,6 +158,34 @@ export async function lastSyncForTeam(teamId: number): Promise<Map<number, strin
   return out;
 }
 
+/**
+ * Athletes whose phone has actually delivered HealthKit data since `cutoff`,
+ * mapped to when it last arrived.
+ *
+ * NOT the same question as `lastSyncForTeam`, which reads MAX(start_time) — the
+ * date of the most recent *run*. A team that imported a year of history through
+ * the coach's ZIP upload has recent runs and has never synced. This reads
+ * `created_at`, the moment the row was written, which is the only column that
+ * records ingest rather than exercise.
+ *
+ * `source = 'healthkit'` alone is not enough either: the seeded roster carries
+ * that value on every row. Recency is what separates them — seed rows share one
+ * frozen `created_at` and age out of the window, while a phone that is really
+ * syncing pushes its athlete's timestamp forward on every sync.
+ */
+export async function healthkitIngestSince(cutoff: string): Promise<Map<number, string>> {
+  const rows = await all<{ athlete_id: number; last_at: string | null }>(
+    `SELECT athlete_id, MAX(created_at) AS last_at
+       FROM activities
+      WHERE source = 'healthkit' AND created_at > ?
+      GROUP BY athlete_id`,
+    [cutoff]
+  );
+  const out = new Map<number, string>();
+  for (const r of rows) if (r.last_at) out.set(r.athlete_id, r.last_at);
+  return out;
+}
+
 export async function getAthleteByEmail(email: string): Promise<AthleteRow | undefined> {
   return one<AthleteRow>("SELECT * FROM athletes WHERE lower(email) = lower(?)", [email.trim()]);
 }

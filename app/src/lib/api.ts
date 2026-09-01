@@ -1053,6 +1053,59 @@ export async function coachLogin(
   return { token };
 }
 
+/**
+ * POST /api/mobile/google — redeem a Google authorization code for a RunGuard
+ * session token.
+ *
+ * Hand-rolled for the same reason `coachLogin` is: `request()` resolves a stored
+ * credential and throws 401 before it ever sends when there isn't one, which is
+ * the entire situation during a sign-in.
+ *
+ * What crosses the wire is the authorization code and its PKCE verifier, never
+ * an id_token — the server redeems them so that the id_token arrives from
+ * Google over TLS rather than from this process. See lib/googleSignIn.ts.
+ *
+ * A 404 here means the Google address is verified but no RunGuard account uses
+ * it. That is a real answer, not a fault, and the server writes the sentence the
+ * athlete should read; the caller surfaces it verbatim.
+ */
+export async function googleExchange(
+  code: string,
+  codeVerifier: string,
+  redirectUri: string,
+  role: Role
+): Promise<{ token: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/api/mobile/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, codeVerifier, redirectUri, role }),
+      signal: controller.signal,
+    });
+  } catch {
+    throw new ApiError(0, `Could not reach the RunGuard server at ${BASE_URL}.`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const body = (await res.json().catch(() => null)) as
+    | { token?: unknown; error?: unknown }
+    | null;
+
+  if (!res.ok) {
+    const detail = typeof body?.error === "string" ? body.error : null;
+    throw new ApiError(res.status, detail ?? `Request failed (${res.status}).`);
+  }
+
+  const token = typeof body?.token === "string" ? body.token : null;
+  if (!token) throw new ApiError(500, "The server sent nothing this app can use.");
+  return { token };
+}
+
 /** GET /api/mobile/coach/roster — every athlete on the coach's team. */
 export async function getCoachRoster(): Promise<CoachRoster> {
   const roster = await request<CoachRoster>("/api/mobile/coach/roster", { as: "coach" });

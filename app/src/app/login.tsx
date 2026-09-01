@@ -51,9 +51,11 @@ import { Stack, useRouter } from "expo-router";
 import { Card } from "../components/Card";
 import { List, ListRow } from "../components/List";
 import { Section } from "../components/Section";
-import { ApiError, BASE_URL, coachLogin } from "../lib/api";
+import { ApiError, BASE_URL, coachLogin, googleExchange } from "../lib/api";
 import { setCoachToken, setToken } from "../lib/auth";
 import { useSession } from "../lib/session";
+import { GOOGLE_CONFIGURED, type GoogleAttempt } from "../lib/googleSignIn";
+import { GoogleButton } from "../components/GoogleButton";
 import { useBackOnlyHeader } from "../theme/header";
 import { color } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
@@ -312,6 +314,50 @@ export default function LoginScreen() {
     })();
   }
 
+  /**
+   * The Google door, for whichever form is showing.
+   *
+   * The code and its PKCE verifier go to the server, which redeems them — this
+   * screen never sees an id_token. Cancelling the sheet resets in silence: a
+   * dismissal is a decision, and an error line under a form nobody submitted is
+   * noise. Everything else lands in `problemOf`, so a 404 ("no RunGuard account
+   * uses that Google address") surfaces as the server's own sentence.
+   */
+  function attemptGoogle(run: () => Promise<GoogleAttempt>) {
+    if (busy) return;
+    setProblem(null);
+    setBusy(true);
+    void (async () => {
+      const attempt = await run();
+      if (attempt.kind === "cancelled") {
+        setBusy(false);
+        return;
+      }
+      if (attempt.kind === "failed") {
+        setProblem({ kind: "rejected", message: "That Google sign-in didn't complete." });
+        setBusy(false);
+        return;
+      }
+
+      let token: string;
+      try {
+        ({ token } = await googleExchange(
+          attempt.code,
+          attempt.codeVerifier,
+          attempt.redirectUri,
+          door
+        ));
+      } catch (err) {
+        // Mapped, never logged — the thrown value can echo a request carrying
+        // the authorization code.
+        setProblem(problemOf(err));
+        setBusy(false);
+        return;
+      }
+      await adopt(token, door === "coach" ? setCoachToken : setToken);
+    })();
+  }
+
   const coach = door === "coach";
   const submit = coach ? attemptCoach : attemptPassword;
   const actionLabel = busy ? "Logging in…" : "Log in";
@@ -392,6 +438,15 @@ export default function LoginScreen() {
                 </>
               )}
             </Pressable>
+
+            {/* NOT MOUNTED — not merely hidden — when no client id is
+                configured. The hook inside throws a render error on an empty
+                redirect, so a mounted-but-hidden button takes the whole login
+                screen down on every build without one. Serves both doors:
+                `door` decides which account the server looks for. */}
+            {GOOGLE_CONFIGURED ? (
+              <GoogleButton busy={busy} onAttempt={attemptGoogle} />
+            ) : null}
 
             {problem ? (
               <Text style={styles.problem} accessibilityLiveRegion="polite">

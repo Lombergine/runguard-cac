@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const EVENT_GROUPS = [
@@ -10,14 +10,21 @@ const EVENT_GROUPS = [
   { id: "sprint", label: "Sprint" },
 ];
 
-export default function AthleteSignup() {
+function AthleteSignupForm() {
+  const params = useSearchParams();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  // Prefilled when Google sign-in recognised nobody. The address is verified
+  // by Google, but no account stands behind it yet — and nothing else this form
+  // needs can be derived from an OIDC claim, which is why the callback sends
+  // people here instead of inventing the rest.
+  const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [pw, setPw] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [grade, setGrade] = useState("");
   const [eventGroup, setEventGroup] = useState("distance");
   const [err, setErr] = useState("");
+
+
   const [busy, setBusy] = useState(false);
   const router = useRouter();
 
@@ -135,5 +142,16 @@ export default function AthleteSignup() {
         </form>
       </div>
     </div>
+  );
+}
+
+/* useSearchParams must sit inside a Suspense boundary: unsuspended, it fails
+   the BUILD rather than the request. Same reason RangePicker is wrapped in
+   dashboard/page.tsx. */
+export default function AthleteSignup() {
+  return (
+    <Suspense>
+      <AthleteSignupForm />
+    </Suspense>
   );
 }

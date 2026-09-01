@@ -55,6 +55,11 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_activities_athlete_time
       ON activities(athlete_id, start_time);
+    -- The snapshot job's HealthKit gate: which athletes' phones have delivered
+    -- anything lately. Filters on source + created_at with no athlete bound, so
+    -- it shares no prefix with the index above. See migration 0006.
+    CREATE INDEX IF NOT EXISTS idx_activities_source_created
+      ON activities(source, created_at);
 
     CREATE TABLE IF NOT EXISTS waitlist (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -238,6 +243,18 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_team_plan_days_team_date
       ON team_plan_days(team_id, date);
+
+    -- Pending Google sign-in handshakes. Deliberately names no user: nobody is
+    -- authenticated when one starts, so it records only which door was knocked
+    -- on. The identity arrives from Google's verified email. See migration 0007.
+    CREATE TABLE IF NOT EXISTS google_oauth_states (
+      nonce TEXT PRIMARY KEY,
+      role TEXT NOT NULL,               -- 'coach' | 'athlete'
+      code_verifier TEXT NOT NULL,      -- PKCE; never leaves the server
+      expires_at INTEGER NOT NULL       -- unix seconds
+    );
+    CREATE INDEX IF NOT EXISTS idx_google_oauth_states_expires
+      ON google_oauth_states(expires_at);
   `);
 
   // Additive migrations for columns introduced after first release.
