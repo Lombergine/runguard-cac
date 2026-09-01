@@ -47,7 +47,7 @@ function usage(): never {
 async function main() {
   const role = process.argv[2];
   const id = Number(process.argv[3]);
-  if （!Number.isInteger(id)） usage();
+  if (!Number.isInteger(id)) usage();
 
   const envPath = path.resolve(process.cwd(), "../app/.env");
 

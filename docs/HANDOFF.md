@@ -35,17 +35,15 @@ when the keychain is empty. It works for **either role** — `auth.ts` reads whi
 from the token's own shape, so switching the simulator between the athlete tabs
 and the coach tabs is one line of that file.
 
-To mint one (from inside `website/`, never the repo root):
+To mint one, from inside `website/` and never the repo root:
 
 ```bash
-npx tsx --env-file=.env.local scripts/… athlete 4    # Ethan Park
-npx tsx --env-file=.env.local scripts/… coach 1      # Leland XC
+npx tsx --env-file=.env.local scripts/dev-token.ts athlete 4   # Ethan Park
+npx tsx --env-file=.env.local scripts/dev-token.ts coach 1     # Leland XC
 ```
 
-There is no committed script for this — it lived in a scratch directory. It is
-six lines: read the row, call `signAthleteToken(id, row.token_version)` or
-`signTeam(id, team.token_version)`, write the line into `app/.env`. Worth
-committing if you find yourself doing it twice.
+It writes straight into `app/.env` (gitignored) and prints only whom the token
+signs in as, never the token.
 
 **If the app suddenly 401s everywhere, the token is stale.** Tokens now carry the
 row's `token_version`, so anything that bumps a version invalidates tokens minted
@@ -108,12 +106,12 @@ Small and written down rather than hidden:
 - **No Forgot password** in the app. (The website is growing one separately.)
 - Ledger rows 43–47 cover these with the full reasoning.
 
-## One real problem, not in the app
+## Recently fixed, so you do not go looking
 
-`auth_attempts` in Supabase is `anon`-readable and writable with RLS off, and it
-holds emails and IP addresses. It is created at runtime, which is why it never
-got `ENABLE ROW LEVEL SECURITY`. This is the only item in this document with a
-security edge and it is worth doing before anyone else uses the dev project.
+`auth_attempts` was `anon`-readable and writable with RLS off while holding
+emails and IP addresses — it is created at runtime, which is why it never got
+`ENABLE ROW LEVEL SECURITY`. Closed in `eab9162`, migration
+`0009_auth_attempts_rls.sql`.
 
 ## Git
 
