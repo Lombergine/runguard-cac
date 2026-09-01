@@ -1,0 +1,16 @@
+-- Close `auth_attempts` to the anon role.
+--
+-- Applied ONCE by hand, like every migration in this folder.
+--
+-- WHY THIS TABLE WAS DIFFERENT. Every table in the base schema carries
+-- ENABLE ROW LEVEL SECURITY with no policies, which is what makes the project's
+-- public PostgREST surface safe: an anon caller reads nothing. `auth_attempts`
+-- is created at RUNTIME by src/lib/rateLimit.ts rather than by a migration, so
+-- it never passed through the place that rule is written down — and it holds
+-- email addresses and IP addresses, which is exactly the pairing that should not
+-- be world-readable.
+--
+-- The app connects as the postgres role through the pooler and bypasses RLS, so
+-- this changes nothing for the server. Do not "fix" the resulting no-policy
+-- state by adding permissive policies; denying everyone else is the intent.
+ALTER TABLE public.auth_attempts ENABLE ROW LEVEL SECURITY;
