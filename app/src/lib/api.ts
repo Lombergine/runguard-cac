@@ -740,7 +740,7 @@ export async function postChat(q: string): Promise<ChatMessage> {
 
 /**
  * The coach half of the client. Four reads and one sign-in, all authenticated
- * by the coach token (`<teamId>.<hmac>`, `lib/auth.ts`) rather than a device
+ * by the coach token (`<teamId>.<version>.<hmac>`, `lib/auth.ts`) rather than a device
  * token, which is what `as: "coach"` on every call below selects.
  *
  * THE ROUTE HANDLERS ARE THE CONTRACT, exactly as they are for the athlete

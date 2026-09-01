@@ -66,12 +66,12 @@ export async function resolveAthleteWithPath(
   // comparing it — a forged or expired-by-secret-rotation token fails before any
   // query runs.
   const auth = request.headers.get("authorization") || "";
-  const bearerId = auth.startsWith("Bearer ") ? verifyAthleteToken(auth.slice(7)) : null;
+  const bearerId = auth.startsWith("Bearer ") ? await verifyAthleteToken(auth.slice(7)) : null;
   if (bearerId !== null) {
     const r = await guard(scoped(await getAthlete(bearerId), "bearer"));
     if (r) return r;
   }
-  const cookieId = verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
+  const cookieId = await verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
   if (cookieId !== null) {
     const r = await guard(scoped(await getAthlete(cookieId), "athlete"));
     if (r) return r;
@@ -134,7 +134,7 @@ export async function resolveAthleteWithPath(
 export async function resolveCoachTeam(request: Request): Promise<number | null> {
   const auth = request.headers.get("authorization") || "";
   if (!auth.startsWith("Bearer ")) return null;
-  const teamId = verifyCoachToken(auth.slice(7));
+  const teamId = await verifyCoachToken(auth.slice(7));
   if (teamId === null) return null;
   if (isWrite(request.method) && teamId === demoTeamId()) return null;
   return teamId;

@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   await athleteLogIn(athlete.id);
-  return Response.json({ ok: true, name: athlete.name, token: signAthleteToken(athlete.id) });
+  return Response.json({ ok: true, name: athlete.name, token: signAthleteToken(athlete.id, athlete.token_version) });
 }
 
 export async function DELETE() {

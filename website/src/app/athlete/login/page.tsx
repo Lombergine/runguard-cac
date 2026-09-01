@@ -90,6 +90,16 @@ function AthleteLoginForm() {
           </button>
         </form>
 
+        <div className="mt-3 text-center">
+          <Link
+            href="/forgot?role=athlete"
+            className="text-sm"
+            style={{ color: "var(--ink-muted)" }}
+          >
+            Forgot your password?
+          </Link>
+        </div>
+
         <div className="flex items-center gap-3 my-4">
           <span className="h-px flex-1" style={{ background: "var(--hairline)" }} />
           <span className="text-xs" style={{ color: "var(--ink-muted)" }}>

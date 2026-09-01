@@ -22,7 +22,7 @@ import { verifyAthleteToken } from "@/lib/session";
  */
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
-  const athleteId = auth.startsWith("Bearer ") ? verifyAthleteToken(auth.slice(7)) : null;
+  const athleteId = auth.startsWith("Bearer ") ? await verifyAthleteToken(auth.slice(7)) : null;
   if (athleteId === null) {
     return Response.json({ error: "Invalid session token" }, { status: 401 });
   }

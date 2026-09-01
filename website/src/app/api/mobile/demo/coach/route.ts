@@ -46,5 +46,5 @@ export async function GET() {
     );
   }
 
-  return Response.json({ token: signTeam(teamId), name: team.name });
+  return Response.json({ token: signTeam(teamId, team.token_version), name: team.name });
 }

@@ -49,5 +49,5 @@ export async function POST(request: Request) {
   // The token is returned and never logged — not here, not by the app. It is
   // the whole credential, so treat any place it could be written down as a
   // place it has leaked.
-  return Response.json({ token: signTeam(team.id), team: team.name });
+  return Response.json({ token: signTeam(team.id, team.token_version), team: team.name });
 }

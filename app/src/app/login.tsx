@@ -12,8 +12,10 @@
  *   Athlete   POST /api/athlete-login       → { ok, name, token }
  *   Coach     POST /api/mobile/coach-login  → { token }
  *
- * Both tokens are SESSION tokens — `a.<athleteId>.<hmac>` and
- * `<teamId>.<hmac>`, signed server-side, obtainable only here or at `/signup`.
+ * Both tokens are SESSION tokens — `a.<athleteId>.<version>.<hmac>` and
+ * `<teamId>.<version>.<hmac>`, signed server-side, obtainable only here or at
+ * `/signup`. The version is the row's `token_version`, so bumping it revokes
+ * every token issued before.
  * The coach is a DOOR, not a mode: it asks WHO is signing in rather than how,
  * and it swaps the card in place from a grouped row underneath. The two forms
  * are otherwise the same form, which is why the screen no longer carries a

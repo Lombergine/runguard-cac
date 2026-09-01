@@ -37,7 +37,7 @@ export default async function AthletePortal({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const athleteId = verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
+  const athleteId = await verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
   const athlete = athleteId !== null ? await getAthlete(athleteId) : undefined;
   if (!athlete) redirect("/athlete/login");
 

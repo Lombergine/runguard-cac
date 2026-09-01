@@ -82,6 +82,8 @@ export type AthleteRow = {
   password_hash: string | null;
   hr_max: number | null;
   hr_max_source: string | null; // 'manual' | 'calibrated'; null = resolve automatically
+  /** Bumped by a password reset; folded into the session HMAC so old tokens die. */
+  token_version: number;
 };
 
 export type TeamRow = {
@@ -91,6 +93,8 @@ export type TeamRow = {
   coach_name: string | null;
   coach_email: string | null;
   coach_password_hash: string | null;
+  /** Bumped by a password reset; folded into the session HMAC so old tokens die. */
+  token_version: number;
 };
 
 /* ---------------- teams + accounts ---------------- */

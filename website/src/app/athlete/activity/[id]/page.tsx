@@ -168,7 +168,7 @@ function Splits({ splits }: { splits: Split[] }) {
 }
 
 export default async function ActivityDetail({ params }: { params: Promise<{ id: string }> }) {
-  const viewerId = verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
+  const viewerId = await verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
   const athlete = viewerId !== null ? await getAthlete(viewerId) : undefined;
 
   const { id } = await params;

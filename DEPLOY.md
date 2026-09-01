@@ -81,7 +81,7 @@ reach the browser bundle.
 
 ## Credentials
 
-These seven things are credentials. Handling is the same for all of them.
+These eight things are credentials. Handling is the same for all of them.
 
 | Credential | What it opens |
 |---|---|
@@ -92,6 +92,7 @@ These seven things are credentials. Handling is the same for all of them.
 | `COACH_PASSWORD` | the demo team's roster |
 | `GOOGLE_CLIENT_SECRET` | the web Google client — with it, someone else's server can complete a sign-in as this deployment |
 | `CRON_SECRET` | the nightly snapshot job; it walks the whole roster and writes to `risk_snapshots` |
+| `RESEND_API_KEY` | sending mail as your domain — and password-reset mail is the most impersonated message there is |
 
 `GOOGLE_CLIENT_ID` and `GOOGLE_IOS_CLIENT_ID` are deliberately **not** on this
 list. A client id is public by construction — it appears in every authorization

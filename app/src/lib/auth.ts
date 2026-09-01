@@ -1,7 +1,7 @@
 /**
  * Credential storage. TWO credentials exist, and never at the same time.
  *
- * ATHLETE — a session token, `a.<athleteId>.<hmac>`
+ * ATHLETE — a session token, `a.<athleteId>.<version>.<hmac>`
  * (`website/src/lib/session.ts`), obtained by signing in with an email and a
  * password and by no other means.
  *
@@ -11,7 +11,7 @@
  * paste, and nothing on any surface that can hand one out. What is stored here
  * is derived rather than permanent — signing out ends it.
  *
- * COACH — `<teamId>.<hmac>` (`signTeam()`, `website/src/lib/session.ts`), the
+ * COACH — `<teamId>.<version>.<hmac>` (`signTeam()`, `website/src/lib/session.ts`), the
  * same signed value the web dashboard carries in its cookie. It is strictly
  * WORSE to leak than an athlete's: it reads the whole roster of minors. That
  * is why there is no dev fallback for it below, and why it never appears in a
@@ -63,7 +63,29 @@ const RETIRED_DEVICE_TOKEN_KEY = "runguard.deviceToken";
  * substitution: a release build produced on a machine with the variable set
  * would otherwise bake a live session for a real athlete into the bundle.
  */
-const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
+const RAW_DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
+
+/**
+ * Session tokens carry a version now — `a.<id>.<version>.<hmac>` for an athlete,
+ * `<teamId>.<version>.<hmac>` for a coach — so that a password reset can bump it
+ * and invalidate every token issued before (website/src/lib/session.ts).
+ *
+ * A token saved in `.env` before that change has one segment too few and can
+ * never verify again. Ignoring it here rather than sending it is the difference
+ * between "the app opens at the login screen" and "every screen shows an error
+ * it cannot explain" — the server's answer would be a bare 401 on a credential
+ * the developer believes is fine.
+ *
+ * Get a new one by signing in normally; the value the app stores is the same
+ * string this variable takes.
+ */
+function devTokenUsable(token: string | null): boolean {
+  if (!token) return false;
+  const parts = token.split(".");
+  return token.startsWith("a.") ? parts.length === 4 : parts.length === 3;
+}
+
+const DEV_TOKEN = devTokenUsable(RAW_DEV_TOKEN) ? RAW_DEV_TOKEN : null;
 
 /**
  * Which role a dev token is for, read off the token itself.
@@ -74,8 +96,9 @@ const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
  * that pair — with no setter in between to delete the other one.
  *
  * The two kinds are already distinguishable, and not by guesswork: an athlete
- * session is `a.<athleteId>.<hmac>`, a coach session `<teamId>.<hmac>`
- * (`website/src/lib/session.ts`). They sign different strings, so this only
+ * session is `a.<athleteId>.<version>.<hmac>`, a coach session
+ * `<teamId>.<version>.<hmac>` (`website/src/lib/session.ts`). They sign
+ * different strings, so this only
  * chooses which header a dev build sends — a token in the wrong slot is refused
  * by the server rather than accepted as the other role.
  *

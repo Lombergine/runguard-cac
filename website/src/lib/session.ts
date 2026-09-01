@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import crypto from "crypto";
 import { DEMO_COOKIE, demoTeamId } from "./demo";
+import { one } from "./db/driver";
 
 const COOKIE = "mm_session";
 
@@ -56,10 +57,43 @@ export function secret(): string {
   return "milemarker-dev-secret";
 }
 
+/* ---- token versions: what makes a session revocable ---- */
+
+/**
+ * The account's current token generation. Bumped by a password reset, which is
+ * what turns "the password changed" into "everyone else is signed out".
+ *
+ * Imported from ./db/driver rather than ./db to keep this file off the cycle —
+ * db.ts is where the app's queries live and several of them want a session.
+ *
+ * Null means no such account. That is a rejection, not a zero: a token naming a
+ * deleted athlete must not verify because the missing row read as version 0.
+ */
+async function athleteTokenVersion(athleteId: number): Promise<number | null> {
+  const row = await one<{ token_version: number }>(
+    "SELECT token_version FROM athletes WHERE id = ?",
+    [athleteId]
+  );
+  return row ? Number(row.token_version) : null;
+}
+
+async function coachTokenVersion(teamId: number): Promise<number | null> {
+  const row = await one<{ token_version: number }>(
+    "SELECT token_version FROM teams WHERE id = ?",
+    [teamId]
+  );
+  return row ? Number(row.token_version) : null;
+}
+
 /* ---- coach session: signed, carries the team id ---- */
 
 /**
- * The coach credential itself: `<teamId>.<HMAC(secret, "coach:<teamId>")>`.
+ * The coach credential itself:
+ * `<teamId>.<version>.<HMAC(secret, "coach:<teamId>:<version>")>`.
+ *
+ * The version is INSIDE the signature as well as beside it, so it cannot be
+ * edited in transit — carrying it in the string is only what lets the verifier
+ * check the signature before it reads the database.
  *
  * Exported because the phone carries this exact value as a Bearer token
  * (`/api/mobile/coach-login` mints it, `resolveCoachTeam` in lib/apiAuth.ts
@@ -67,9 +101,12 @@ export function secret(): string {
  * credential invented for the app would be a second thing to get wrong, and the
  * one that nobody looks at is the one that rots.
  */
-export function signTeam(teamId: number): string {
-  const sig = crypto.createHmac("sha256", secret()).update(`coach:${teamId}`).digest("hex");
-  return `${teamId}.${sig}`;
+export function signTeam(teamId: number, version: number): string {
+  const sig = crypto
+    .createHmac("sha256", secret())
+    .update(`coach:${teamId}:${version}`)
+    .digest("hex");
+  return `${teamId}.${version}.${sig}`;
 }
 
 /**
@@ -100,31 +137,46 @@ export function signTeam(teamId: number): string {
  *
  * Do not reinstate it. There is no cookie in circulation that needs it.
  */
-export function verifyCoachToken(value: string | undefined): number | null {
+export async function verifyCoachToken(value: string | undefined): Promise<number | null> {
   if (!value) return null;
-  const dot = value.lastIndexOf(".");
-  if (dot < 0) return null;
-  const teamId = Number(value.slice(0, dot));
-  if (!Number.isInteger(teamId)) return null;
-  const expected = signTeam(teamId);
+  const parts = value.split(".");
+  if (parts.length !== 3) return null;
+  const teamId = Number(parts[0]);
+  const version = Number(parts[1]);
+  if (!Number.isInteger(teamId) || !Number.isInteger(version)) return null;
+
+  // Signature FIRST, database second. The version is inside the HMAC, so a
+  // forged one cannot survive this check — which means a garbage token is
+  // rejected without touching the pooler. Reading the account first would let
+  // anyone turn an unauthenticated endpoint into a query generator.
+  const expected = signTeam(teamId, version);
   try {
-    if (crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected))) return teamId;
+    if (!crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected))) return null;
   } catch {
     return null;
   }
-  return null;
+
+  // The signature proves the token was minted by us at version N. Only the
+  // account can say whether N is still current: a password reset bumps it, and
+  // every token below it stops being a session.
+  const current = await coachTokenVersion(teamId);
+  return current !== null && current === version ? teamId : null;
 }
 
 /* ---- athlete session: signed, carries the athlete id ---- */
 
 /**
- * The athlete credential: `a.<athleteId>.<HMAC(secret, "athlete:<athleteId>")>`.
+ * The athlete credential:
+ * `a.<athleteId>.<version>.<HMAC(secret, "athlete:<athleteId>:<version>")>`.
  *
  * A deliberate mirror of `signTeam` above, and it replaces `athletes.device_token`
  * — a permanent, unrevocable 40-hex string that was the entire credential for one
- * minor's health data. Nothing is persisted here: the signature IS the grant, so
- * rotating `SESSION_SECRET` invalidates every athlete session at once. That is
- * the revocation the stored token never had.
+ * minor's health data.
+ *
+ * Revocation now has two levers rather than one. Rotating `SESSION_SECRET` still
+ * invalidates every session everywhere, which is the blunt one; bumping this
+ * athlete's `token_version` invalidates only theirs, which is what a password
+ * reset does and what makes recovering a compromised account mean something.
  *
  * DOMAIN SEPARATION from the coach token is the signed string, not the shape.
  * A coach token signs `coach:<teamId>` and an athlete token signs
@@ -133,9 +185,12 @@ export function verifyCoachToken(value: string | undefined): number | null {
  * prefix is belt and braces on top of that: it makes the two forms
  * distinguishable to a reader and to `verifyCoachToken`'s `Number()` parse.
  */
-export function signAthleteToken(athleteId: number): string {
-  const sig = crypto.createHmac("sha256", secret()).update(`athlete:${athleteId}`).digest("hex");
-  return `a.${athleteId}.${sig}`;
+export function signAthleteToken(athleteId: number, version: number): string {
+  const sig = crypto
+    .createHmac("sha256", secret())
+    .update(`athlete:${athleteId}:${version}`)
+    .digest("hex");
+  return `a.${athleteId}.${version}.${sig}`;
 }
 
 /**
@@ -149,26 +204,31 @@ export function signAthleteToken(athleteId: number): string {
  * Anything malformed is null — no prefix, no dot, a non-integer id, a length
  * mismatch (which makes `timingSafeEqual` throw). Re-signing the parsed id and
  * comparing the WHOLE string is what makes `Number()`'s tolerance harmless:
- * "a. 7 .<sig>" parses to 7 but can never equal `signAthleteToken(7)`.
+ * "a. 7 .<sig>" parses to 7 but can never equal `signAthleteToken(7, v)`.
  */
-export function verifyAthleteToken(value: string | undefined): number | null {
+export async function verifyAthleteToken(value: string | undefined): Promise<number | null> {
   if (!value || !value.startsWith("a.")) return null;
-  const dot = value.lastIndexOf(".");
-  if (dot <= 1) return null;
-  const athleteId = Number(value.slice(2, dot));
-  if (!Number.isInteger(athleteId)) return null;
-  const expected = signAthleteToken(athleteId);
+  const parts = value.split(".");
+  if (parts.length !== 4) return null;
+  const athleteId = Number(parts[1]);
+  const version = Number(parts[2]);
+  if (!Number.isInteger(athleteId) || !Number.isInteger(version)) return null;
+
+  // Signature first, database second — see verifyCoachToken.
+  const expected = signAthleteToken(athleteId, version);
   try {
-    if (crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected))) return athleteId;
+    if (!crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected))) return null;
   } catch {
     return null;
   }
-  return null;
+
+  const current = await athleteTokenVersion(athleteId);
+  return current !== null && current === version ? athleteId : null;
 }
 
 export async function isLoggedIn(): Promise<boolean> {
   const store = await cookies();
-  return verifyCoachToken(store.get(COOKIE)?.value) !== null;
+  return (await verifyCoachToken(store.get(COOKIE)?.value)) !== null;
 }
 
 export async function currentTeamId(): Promise<number | null> {
@@ -177,6 +237,9 @@ export async function currentTeamId(): Promise<number | null> {
 }
 
 export async function logIn(teamId: number): Promise<void> {
+  // Minted at the account's CURRENT version, so a session issued now survives
+  // until the next reset and not one bump longer.
+  const version = (await coachTokenVersion(teamId)) ?? 0;
   const store = await cookies();
   // Signing in as a real coach means you are not in the demo any more. Without
   // this, a visitor who opens the sample team and then signs in — by password,
@@ -186,7 +249,7 @@ export async function logIn(teamId: number): Promise<void> {
   // and none of the others. `demoLogIn` sets both cookies itself rather than
   // calling this, so it is unaffected.
   store.delete(DEMO_COOKIE);
-  store.set(COOKIE, signTeam(teamId), {
+  store.set(COOKIE, signTeam(teamId, version), {
     httpOnly: true,
     secure: secureCookies(),
     sameSite: "lax",
@@ -227,8 +290,9 @@ export async function logOut(): Promise<void> {
 export async function demoLogIn(): Promise<number | null> {
   const teamId = demoTeamId();
   if (teamId === null) return null;
+  const version = (await coachTokenVersion(teamId)) ?? 0;
   const store = await cookies();
-  store.set(COOKIE, signTeam(teamId), {
+  store.set(COOKIE, signTeam(teamId, version), {
     httpOnly: true,
     secure: secureCookies(),
     sameSite: "lax",
@@ -264,7 +328,7 @@ export async function isDemoSession(): Promise<boolean> {
   if (teamId === null) return false;
   const store = await cookies();
   if (store.get(DEMO_COOKIE)?.value !== "1") return false;
-  return verifyCoachToken(store.get(COOKIE)?.value) === teamId;
+  return (await verifyCoachToken(store.get(COOKIE)?.value)) === teamId;
 }
 
 /* ---- athlete web session (the same signed token, in an httpOnly cookie) ---- */
@@ -272,7 +336,7 @@ export async function isDemoSession(): Promise<boolean> {
 const ATHLETE_COOKIE = "core_athlete";
 
 /**
- * The cookie carries exactly what the phone carries: `signAthleteToken(id)`.
+ * The cookie carries exactly what the phone carries: `signAthleteToken(id, version)`.
  *
  * It used to hold the raw `device_token` — a second copy of a permanent secret
  * that was checked against the database on every request. It now holds a signed,
@@ -285,10 +349,11 @@ const ATHLETE_COOKIE = "core_athlete";
  * cookie that this file did not sign.
  */
 export async function athleteLogIn(athleteId: number): Promise<void> {
+  const version = (await athleteTokenVersion(athleteId)) ?? 0;
   const store = await cookies();
   // Same reason as logIn(): a real athlete signing in is out of the demo.
   store.delete(DEMO_COOKIE);
-  store.set(ATHLETE_COOKIE, signAthleteToken(athleteId), {
+  store.set(ATHLETE_COOKIE, signAthleteToken(athleteId, version), {
     httpOnly: true,
     secure: secureCookies(),
     sameSite: "lax",

@@ -8,7 +8,7 @@ import { verifyAthleteToken } from "@/lib/session";
  */
 async function athleteFromRequest(request: Request): Promise<AthleteRow | null> {
   const auth = request.headers.get("authorization") || "";
-  const id = auth.startsWith("Bearer ") ? verifyAthleteToken(auth.slice(7)) : null;
+  const id = auth.startsWith("Bearer ") ? await verifyAthleteToken(auth.slice(7)) : null;
   if (id === null) return null;
   return (await getAthlete(id)) ?? null;
 }

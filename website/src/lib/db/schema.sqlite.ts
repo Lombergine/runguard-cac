@@ -255,6 +255,18 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_google_oauth_states_expires
       ON google_oauth_states(expires_at);
+
+    -- Pending password resets. The PRIMARY KEY is the sha256 of the emailed
+    -- secret, never the secret itself, so reading this table whole yields
+    -- nothing that can reset anyone's password. See migration 0008.
+    CREATE TABLE IF NOT EXISTS password_resets (
+      token_hash TEXT PRIMARY KEY,
+      subject TEXT NOT NULL,            -- 'athlete' | 'coach'
+      subject_id INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL       -- unix seconds
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_resets_expires
+      ON password_resets(expires_at);
   `);
 
   // Additive migrations for columns introduced after first release.
@@ -315,6 +327,10 @@ export function applySqliteSchema(db: Database.Database): void {
   // user and assistant rows of a safety-intercepted exchange, which is what lets
   // chatSummary keep those disclosures off the coach's screen.
   addColumn("chat_messages", "engine TEXT");
+  // Session generation. Folded into the session HMAC, so bumping it on a password
+  // reset stops every token issued before it from verifying. See migration 0008.
+  addColumn("athletes", "token_version INTEGER NOT NULL DEFAULT 0");
+  addColumn("teams", "token_version INTEGER NOT NULL DEFAULT 0");
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_races_created_by ON races(created_by_athlete_id);

@@ -51,7 +51,7 @@ export async function GET() {
   }
 
   return Response.json({
-    token: signAthleteToken(athlete.id),
+    token: signAthleteToken(athlete.id, athlete.token_version),
     name: athlete.name,
   });
 }

@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     }
     // Returned and never logged. It is the whole credential, so anywhere it
     // could be written down is somewhere it has leaked.
-    return Response.json({ token: signTeam(team.id), team: team.name });
+    return Response.json({ token: signTeam(team.id, team.token_version), team: team.name });
   }
 
   const athlete = await getAthleteByEmail(email);
@@ -75,5 +75,5 @@ export async function POST(request: Request) {
       { status: 404 }
     );
   }
-  return Response.json({ token: signAthleteToken(athlete.id), name: athlete.name });
+  return Response.json({ token: signAthleteToken(athlete.id, athlete.token_version), name: athlete.name });
 }

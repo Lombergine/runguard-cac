@@ -111,6 +111,6 @@ export async function POST(request: Request) {
     // The same signed session the login route returns, so the iOS app can sign
     // up directly and be authenticated on the next request. Signed, never
     // stored: see `signAthleteToken` in lib/session.ts.
-    token: signAthleteToken(athlete.id),
+    token: signAthleteToken(athlete.id, athlete.token_version),
   });
 }
