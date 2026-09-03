@@ -60,7 +60,7 @@ import { Absent, NoRun, Zero } from "./Nothing";
 import { dayLabel, localDay, parseLocalDay } from "../lib/dates";
 import { formatDistance } from "../lib/units";
 import { layout, radius, ruleWidth, space } from "../theme/space";
-import { color, shadow } from "../theme/tokens";
+import { color, shadow, useColors } from "../theme/tokens";
 import { text } from "../theme/type";
 
 /** One day of `calendar`, which rides along outside the `Profile` slice. */
@@ -154,6 +154,15 @@ const GUTTER = space.xxl;
 
 type Channels = [number, number, number];
 
+/**
+ * Hex → RGB channels.
+ *
+ * This is the one place in the app that PARSES a colour rather than handing it
+ * to a style prop, and that is why the ramp cannot read `color.*`: under the
+ * two-theme system those are opaque platform values, not strings — see the
+ * header of `theme/tokens.ts`. The ramp takes plain hex from `useColors()`
+ * instead, which is also what makes it re-derive when the appearance flips.
+ */
 function channels(token: string): Channels {
   const n = parseInt(token.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -164,23 +173,45 @@ function mix(from: Channels, to: Channels, t: number): Channels {
 }
 
 const RUNGS = 5;
-/** The palest rung — see the header note on why it is not paler than this. */
-const RAMP_LOW = channels(color.brand);
-/** The hottest rung: emberHot carried down into ink. */
-const RAMP_HIGH = mix(channels(color.emberHot), channels(color.ink), 0.55);
 
 /**
- * Five rungs, palest first. EXPORTED for the HR-zone bar on the Stats screen,
- * which sits a few hundred pixels above this grid and encodes the same idea —
- * five steps of intensity, hotter is harder. Two different five-step encodings
- * on one screen would be two visual languages for one concept; sharing this one
- * also means the zone bar inherits the ramp's greyscale monotonicity, so it
- * survives colour-blindness and glare exactly as the grid does.
+ * Five rungs, palest first, built from whichever palette is live.
+ *
+ * SHARED with the HR-zone bar on the Stats screen, which sits a few hundred
+ * pixels above this grid and encodes the same idea — five steps of intensity,
+ * hotter is harder. Two different five-step encodings on one screen would be
+ * two visual languages for one concept; sharing this one also means the zone
+ * bar inherits the ramp's greyscale monotonicity, so it survives
+ * colour-blindness and glare exactly as the grid does.
+ *
+ * It was a module-level `EMBER_RAMP` constant, evaluated once at import. That
+ * is exactly the shape that cannot follow an appearance change: the ramp mixes
+ * `brand` toward `ink`, and in the dark theme `ink` is nearly white, so a
+ * ramp frozen at the light values ran the wrong direction — the hardest days
+ * came out darkest against a dark ground and the grid read inverted.
  */
-export const EMBER_RAMP: string[] = Array.from({ length: RUNGS }, (_, step) => {
-  const [r, g, b] = mix(RAMP_LOW, RAMP_HIGH, step / (RUNGS - 1));
-  return `rgb(${r}, ${g}, ${b})`;
-});
+export function buildEmberRamp(p: {
+  brand: string;
+  emberHot: string;
+  ink: string;
+}): string[] {
+  const low = channels(p.brand);
+  // The hottest rung: emberHot carried toward ink, so the ramp ends in the
+  // theme's own text colour rather than an arbitrary dark.
+  const high = mix(channels(p.emberHot), channels(p.ink), 0.55);
+  return Array.from({ length: RUNGS }, (_, step) => {
+    const [r, g, b] = mix(low, high, step / (RUNGS - 1));
+    return `rgb(${r}, ${g}, ${b})`;
+  });
+}
+
+/** The ramp for the live appearance. Re-derives when the theme flips. */
+export function useEmberRamp(): string[] {
+  const { brand, emberHot, ink } = useColors();
+  // `c` is a fresh object each render, so the three values it is actually
+  // built from are the dependencies — not the object identity.
+  return useMemo(() => buildEmberRamp({ brand, emberHot, ink }), [brand, emberHot, ink]);
+}
 
 /**
  * The website's thresholds (IntensityCalendar `level()`), against the athlete's
@@ -406,6 +437,7 @@ export function YearGrid({
   days: CalendarDay[];
   restDays: Set<string>;
 }) {
+  const ramp = useEmberRamp();
   const grid = useMemo(() => buildGrid(days, restDays), [days, restDays]);
 
   /**
@@ -494,7 +526,7 @@ export function YearGrid({
                                 cell.kind === "zero" && styles.cellZero,
                                 cell.kind === "load" && styles.cellLoad,
                                 cell.kind === "load" && {
-                                  backgroundColor: EMBER_RAMP[cell.level],
+                                  backgroundColor: ramp[cell.level],
                                 },
                                 // The selected day. A ring, not a fill: the fill
                                 // is the datum and overwriting it would hide the
@@ -556,7 +588,7 @@ export function YearGrid({
           <View>
             <Text style={styles.legendLabel}>Ember cell · a day that was run</Text>
             <View style={styles.rampRow}>
-              {EMBER_RAMP.map((fill, i) => (
+              {ramp.map((fill, i) => (
                 <View
                   key={i}
                   style={[styles.cell, styles.cellLoad, { backgroundColor: fill }]}

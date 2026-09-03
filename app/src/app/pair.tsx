@@ -14,7 +14,7 @@
  * Storing first and rolling back on failure would put an unproven token in the
  * keychain, so this issues the one request itself instead.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -128,12 +128,23 @@ export default function PairScreen() {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [checking, setChecking] = useState(false);
 
+  // A dev token pairs itself, so a simulator opened at /pair lands on Home
+  // without anyone having to type. Same release-time folding as above.
+  useEffect(() => {
+    if (DEV_TOKEN) attempt(DEV_TOKEN);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /** Shape first, then the server. Both paths — paste and dev token — go here. */
   function attempt(candidate: string) {
     if (checking) return;
     const token = candidate.trim();
     if (!token) return setProblem({ kind: "empty" });
-    if (!TOKEN_SHAPE.test(token)) return setProblem({ kind: "malformed" });
+    // The seed's `--demo-tokens` mode issues `demo_<name>` tokens for local
+    // simulators, which are deliberately not the `dt_` shape. Only the token
+    // that came in through EXPO_PUBLIC_DEV_TOKEN may skip the shape check, and
+    // `DEV_TOKEN` is null in a release bundle, so this line is dead there.
+    if (!TOKEN_SHAPE.test(token) && token !== DEV_TOKEN) return setProblem({ kind: "malformed" });
 
     setProblem(null);
     setChecking(true);
@@ -338,7 +349,7 @@ const styles = StyleSheet.create({
    * `brandStrong`. This is also why the label is not `brandText`: here the ember
    * is the ground, not the glyph.
    */
-  actionLabel: { ...text.baseSemi, color: color.ink },
+  actionLabel: { ...text.baseSemi, color: color.bg },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
   dev: {

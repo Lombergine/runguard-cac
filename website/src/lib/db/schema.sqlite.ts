@@ -282,6 +282,24 @@ export function applySqliteSchema(db: Database.Database): void {
   addColumn("activities", "calories REAL");            // active kcal
   addColumn("activities", "cadence REAL");             // steps/min
   addColumn("activities", "route TEXT");               // encoded polyline, for the detail map
+  /*
+   * Per-run detail streams, as JSON text.
+   *
+   * These three exist in Supabase and the deployed activity page renders all
+   * of them — mile splits with pace bars, a heart-rate trace and an elevation
+   * profile. They were never added to the SQLite schema, so `ActivityRow`
+   * declared them, `SELECT splits` errored on this driver, and
+   * `parseStream(undefined)` quietly returned [] — which the page renders as
+   * "not recorded". Local dev therefore showed an empty version of a feature
+   * that works in production, with nothing anywhere saying why.
+   *
+   *   splits      Split[]        { mi, partial, seconds, avg_hr, elev_delta_m }
+   *   hr_series   SeriesSample[] { t_s, bpm }
+   *   elev_series SeriesSample[] { t_s, m }   metres; the UI renders feet
+   */
+  addColumn("activities", "splits TEXT");
+  addColumn("activities", "hr_series TEXT");
+  addColumn("activities", "elev_series TEXT");
   // real-account columns on athletes
   addColumn("athletes", "team_id INTEGER");
   addColumn("athletes", "email TEXT");

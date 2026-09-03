@@ -12,6 +12,7 @@ import { RecoverySnapshot, type RiskSnapshot, type EnergyTrend } from "@/lib/ris
 import IntensityCalendar from "@/components/IntensityCalendar";
 import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
+import { readinessState, readinessZone } from "@/lib/readiness";
 import AthleteModel from "@/components/athlete/AthleteModel";
 import InjuryManager from "@/components/InjuryManager";
 import {
@@ -67,14 +68,28 @@ export default async function AthletePage({
   if (!p) notFound();
 
   const first = p.athlete.name.split(" ")[0];
-  const flagColor =
-    p.prePractice.flag === "unusual"
+  // Never `p.readiness` directly. See lib/readiness.ts: the engine returns 100
+  // from no data at all, and this page was printing it as a green gauge beside
+  // a subtitle that said "No data yet".
+  const readiness = readinessState(p);
+  /*
+    The flag is the largest, greenest thing on this page, and with no synced
+    data it read "NOTHING STANDING OUT" — an all-clear about an athlete the
+    system has never seen. "Nothing detected" and "nothing to detect from" are
+    not the same claim, and only one of them is safe to put in success green
+    above a coach's decision about whether to run someone.
+  */
+  const flagKnown = p.risk.hasActivityHistory;
+  const flagColor = !flagKnown
+    ? "var(--ink-muted)"
+    : p.prePractice.flag === "unusual"
       ? "var(--status-critical)"
       : p.prePractice.flag === "watch"
         ? "var(--status-warning)"
         : "var(--status-good)";
-  const flagLabel =
-    p.prePractice.flag === "unusual"
+  const flagLabel = !flagKnown
+    ? "No data yet"
+    : p.prePractice.flag === "unusual"
       ? "Worth a look"
       : p.prePractice.flag === "watch"
         ? "Check in with them"
@@ -86,17 +101,87 @@ export default async function AthletePage({
         ← Roster
       </Link>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <Avatar name={p.athlete.name} hue={p.athlete.hue} size={56} />
+      {/*
+        WHOSE DATA IS THIS — sticky, because this page scrolls a long way.
+
+        ../../../../../docs/visual-spec.md § "Coach dashboard" is unusually
+        blunt about this one: "Whose data is this is the thing that must never
+        be misread. Athlete name is sticky at the top of any detail surface,
+        display 19, full contrast, with the roster photo or initials adjacent.
+        Never rely on the user remembering which row they clicked."
+
+        It was not sticky, and this file is ~600 lines. Past the first screen
+        the only identity left was the layout header's "Leland XC · Coach
+        view", which names the TEAM, plus an incidental "See all 8 in Aditya's
+        view" link. A coach scrolled down to Injuries — where "+ Log an injury"
+        WRITES — had nothing on screen naming the athlete they were about to
+        write against. That is the failure this rule exists to prevent, and it
+        is not a cosmetic one.
+
+        `top-14` clears the layout's own `sticky top-0` h-14 header, and
+        `glass` is the same utility that header uses for sticky chrome, so the
+        two read as one bar rather than two competing ones. The hero
+        proportions come down (avatar 56 → 40, gauge 76 → 52, name text-2xl →
+        the spec's 19px): a sticky bar is chrome, and it has to cost the page
+        as little height as it can while still being read at a glance.
+
+        `-mx-4 px-4` bleeds the glass to the full width of the layout's padded
+        main, so content passes under a continuous bar rather than under a
+        floating panel with page showing down either side.
+      */}
+      <div
+        className="sticky top-14 z-10 -mx-4 px-4 py-3 border-b glass flex flex-wrap items-center gap-4"
+        style={{ borderColor: "var(--hairline)" }}
+      >
+        <Avatar name={p.athlete.name} hue={p.athlete.hue} size={40} />
         <div className="flex-1 min-w-40">
-          <h1 className="text-2xl font-bold tracking-tight">{p.athlete.name}</h1>
+          <h1
+            className="text-[19px] font-bold tracking-tight leading-tight"
+            style={{ color: "var(--ink)" }}
+          >
+            {p.athlete.name}
+          </h1>
           <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
             Grade {p.athlete.grade} · {p.fitness.tier} tier ·{" "}
             <span style={{ color: "var(--ink-2)" }}>{p.connectedSources.join(" + ")}</span>
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Gauge value={p.readiness} color={flagColor} size={76} label="readiness" />
+          {readiness.known ? (
+            <Gauge value={readiness.value} color={flagColor} size={52} label="readiness" />
+          ) : (
+            /*
+              Non-negotiable #6, on the coach's side of the product: readiness
+              with no check-in renders as a dash and the word "unknown", never a
+              number and never a partial ring. A ring drawn at some default is
+              the specific thing the rule forbids — it reads as low-but-present
+              rather than as absent.
+
+              Dashed, matching the roster's own absent chip and the athlete
+              app's Absent, so "we don't know" looks the same everywhere in the
+              product. The second line names WHY it is unavailable rather than
+              just withholding, which is what § "Coach dashboard" means by
+              failing closed with "an empty state explaining what's
+              unavailable".
+            */
+            <div
+              className="rounded-md px-2.5 py-1.5 text-center"
+              style={{
+                border: "1px dashed var(--hairline-strong)",
+                background: "var(--surface-2)",
+              }}
+            >
+              <div className="text-lg font-bold leading-none" style={{ color: "var(--ink-2)" }}>
+                —
+              </div>
+              <div className="text-[11px] mt-1" style={{ color: "var(--ink-2)" }}>
+                readiness unknown
+              </div>
+              <div className="text-[10px]" style={{ color: "var(--ink-muted)" }}>
+                no check-in today
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -135,7 +220,19 @@ export default async function AthletePage({
           {activeTab === "Profile" && <ProfileTab p={p} />}
         </>
       ) : (
-        <CoachView p={p} flagColor={flagColor} flagLabel={flagLabel} coachExplanation={coachWhy(p)} />
+        <CoachView
+          p={p}
+          flagColor={flagColor}
+          flagLabel={flagLabel}
+          coachExplanation={
+            // `coachWhy` has no no-data branch either — it falls through to
+            // "recovery markers are at their baseline", which asserts readings
+            // that do not exist.
+            flagKnown
+              ? coachWhy(p)
+              : "Nothing has synced for this athlete yet, so there is nothing to flag either way. They need the RunGuard app connected to Apple Health before any of this page means anything."
+          }
+        />
       )}
     </div>
   );
@@ -154,6 +251,10 @@ function CoachView({
   flagLabel: string;
   coachExplanation: string;
 }) {
+  // Recomputed rather than passed down: the page above already gates, but this
+  // component is the one that renders the number, and a prop drilled through
+  // three levels is a prop someone eventually replaces with `p.readiness`.
+  const readiness = readinessState(p);
   return (
     <div className="space-y-6">
       {/* pre-practice flag */}
@@ -174,9 +275,14 @@ function CoachView({
       </div>
 
       <div className="grid lg:grid-cols-[1fr_1.1fr] gap-4 items-stretch">
+        {/*
+          `readiness` above is already the gated state — passing `p.readiness`
+          here instead was the bug this page's own comment warns about, four
+          lines from where the gate is computed.
+        */}
         <AthleteModel
-          readiness={p.readiness}
-          zone={p.readiness < 40 ? "high" : p.readiness < 65 ? "caution" : "ready"}
+          readiness={readiness.known ? readiness.value : null}
+          zone={readinessZone(readiness)}
           hotspots={[
             ...p.injuries.filter((i) => !i.resolved_at).map((i) => ({ part: i.body_part, kind: "injury" as const })),
             ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),
@@ -208,12 +314,16 @@ function CoachView({
         />
         <CStat
           label="Week TRIMP"
-          value={String(p.load.weekTrimp)}
+          // Sat reading "0" between two tiles reading "—". A zero TRIMP means
+          // "ran, but no heart-rate data" — a different fact from "never ran".
+          value={p.risk.hasActivityHistory ? String(p.load.weekTrimp) : "—"}
           info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard their heart was working. Catches the intensity that distance alone misses. Runs synced without heart-rate data count as zero."
         />
         <CStat
           label="Days since rest"
-          value={String(p.risk.daysSinceRest)}
+          // "0" here asserts they rested today. With nothing synced, no day is
+          // known to be a rest day or a training day.
+          value={p.risk.hasActivityHistory ? String(p.risk.daysSinceRest) : "—"}
           info="Consecutive training days counting back from today; only a near-zero day breaks the streak. Adaptation happens in recovery, so long unbroken runs of training days are worth noticing."
         />
       </div>
@@ -255,12 +365,13 @@ function CoachView({
         />
         <CStat
           label="Trend"
-          value={p.fitness.trend}
+          value={p.risk.hasActivityHistory ? p.fitness.trend : "—"}
           info="This week's fitness score against the average of the previous four weeks. More than 2 points up is improving, more than 2 down is declining, anything in between is a plateau."
         />
         <CStat
           label="Freshness"
-          value={`${p.fitness.freshness}`}
+          // Sits between two tiles that already gate ("—", "Not enough data").
+          value={p.risk.hasActivityHistory ? `${p.fitness.freshness}` : "—"}
           info="How far the last 7 days sit below their 28-day base — high after a taper or an easy week, low mid-block. Not the same as fitness: an athlete can be very fit and very flat."
         />
         <CStat
@@ -271,16 +382,23 @@ function CoachView({
       </div>
 
       {/* pattern detection */}
+      {/*
+        Half these rows already answered "—" with no data; the other half
+        answered "0 days" and "no", which reads as "checked, and clear" rather
+        than "never looked". `hasTrain` gates the ones derived from training
+        load; the illness pattern gates on its own two inputs, because it is
+        computed from resting HR and HRV rather than from runs.
+      */}
       <Panel title="Pattern detection">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
           <PatternRow label="Monotony" value={p.patterns.monotony !== null ? `${p.patterns.monotony}` : "—"} warn={p.patterns.monotony !== null && p.patterns.monotony > 2} info={"Foster's training monotony: the average of the last 7 days' training load divided by how much that load varied from day to day. Every day looking the same scores high. Above 2 with real volume behind it starts adding to the risk score — hard days and easy days have to actually differ. Blank when the week's loads barely varied at all."} />
-          <PatternRow label="High-effort streak" value={`${p.patterns.highEffortStreak} days`} warn={p.patterns.highEffortStreak >= 5} info={"Consecutive days, counting back from today, where the day's training load sat more than 15% above this athlete's own median training day. Six or more is one of the three things that trips the Overreaching flag."} />
+          <PatternRow label="High-effort streak" value={p.risk.hasActivityHistory ? `${p.patterns.highEffortStreak} days` : "—"} warn={p.risk.hasActivityHistory && p.patterns.highEffortStreak >= 5} info={"Consecutive days, counting back from today, where the day's training load sat more than 15% above this athlete's own median training day. Six or more is one of the three things that trips the Overreaching flag."} />
           <PatternRow label="Days since hard effort" value={p.patterns.daysSinceHardEffort !== null ? `${p.patterns.daysSinceHardEffort}` : "—"} warn={false} info={'Days since a session whose load was more than 40% above their median training day. A long gap is not automatically bad — it is what a taper or a recovery week looks like — but it is the number to check before assuming an athlete is sharp.'} />
           <PatternRow label="Sleep debt (7d)" value={p.patterns.sleepDebtH !== null ? `${p.patterns.sleepDebtH} h` : "—"} warn={p.patterns.sleepDebtH !== null && p.patterns.sleepDebtH > 4} info={'Hours short of 8 h, added up across the last 7 nights of Apple Health sleep data. Only shortfalls count: a 9-hour night does not pay back a 6-hour one. Blank rather than stale when nothing was recorded in the window — it never reaches further back to find nights.'} />
           <PatternRow label="Sleep consistency" value={p.patterns.sleepConsistency !== null ? `${p.patterns.sleepConsistency}/100` : "—"} warn={p.patterns.sleepConsistency !== null && p.patterns.sleepConsistency < 60} info={'0–100, from how much sleep length swung night to night across the last 7 nights. The same hours every night scores near 100; 5 h then 10 h scores low even when the average looks healthy. Needs at least 4 nights recorded in the window.'} />
-          <PatternRow label="Overreaching" value={p.patterns.overreaching ? "YES" : "no"} warn={p.patterns.overreaching} info={'Trips when any one of three things is true: workload ratio above 1.5; ratio above 1.4 together with monotony above 1.7; or six straight high-effort days. It is a flag to ask about, not a diagnosis.'} />
-          <PatternRow label="Undertraining" value={p.patterns.undertraining ? "YES" : "no"} warn={p.patterns.undertraining} info={'Trips only when the workload ratio is under 0.7 AND the last 7 days are under 70% of their 4-week average, and only for athletes averaging real volume. Deliberately hard to trip, so a planned easy week does not set it off.'} />
-          <PatternRow label="Illness pattern" value={p.illness ? "YES" : "no"} warn={p.illness} info={'Resting heart rate at least 5 bpm above their baseline at the same time as HRV at least 15% below it. That combination often appears a day or two before someone feels ill. A pattern, not a diagnosis — ask them how they feel.'} />
+          <PatternRow label="Overreaching" value={!p.risk.hasActivityHistory ? "—" : p.patterns.overreaching ? "YES" : "no"} warn={p.patterns.overreaching} info={'Trips when any one of three things is true: workload ratio above 1.5; ratio above 1.4 together with monotony above 1.7; or six straight high-effort days. It is a flag to ask about, not a diagnosis.'} />
+          <PatternRow label="Undertraining" value={!p.risk.hasActivityHistory ? "—" : p.patterns.undertraining ? "YES" : "no"} warn={p.patterns.undertraining} info={'Trips only when the workload ratio is under 0.7 AND the last 7 days are under 70% of their 4-week average, and only for athletes averaging real volume. Deliberately hard to trip, so a planned easy week does not set it off.'} />
+          <PatternRow label="Illness pattern" value={p.risk.recovery.restingHrDelta === null && p.risk.recovery.hrvDeltaPct === null ? "—" : p.illness ? "YES" : "no"} warn={p.illness} info={'Resting heart rate at least 5 bpm above their baseline at the same time as HRV at least 15% below it. That combination often appears a day or two before someone feels ill. A pattern, not a diagnosis — ask them how they feel.'} />
         </div>
       </Panel>
 
@@ -351,13 +469,24 @@ function CoachView({
               ) : (
                 <p style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a readiness/prediction estimate.</p>
               )}
-              {p.plan.taperMode && <p style={{ color: "var(--brand-strong)" }}>Taper mode active — their plan is already adjusted.</p>}
+              {p.plan.taperMode && p.risk.hasActivityHistory && <p style={{ color: "var(--brand-strong)" }}>Taper mode active — their plan is already adjusted.</p>}
             </div>
           ) : (
             <p className="text-sm" style={{ color: "var(--ink-muted)" }}>No races scheduled.</p>
           )}
         </Panel>
         <Panel title="PRs vs predicted">
+          {/*
+            The "Next race" panel beside this one already refuses to predict
+            without training history. This table showed the same predictions
+            anyway — an 800m "now 2:48" for an athlete with no runs on record.
+            A coach acting on that is the concrete harm.
+          */}
+          {!p.risk.hasActivityHistory ? (
+            <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+              Not enough training history yet to predict times.
+            </p>
+          ) : (
           <table className="w-full text-sm">
             <tbody>
               {p.prs.map((pr) => {
@@ -373,6 +502,7 @@ function CoachView({
               })}
             </tbody>
           </table>
+          )}
         </Panel>
       </div>
 

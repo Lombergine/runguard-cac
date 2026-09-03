@@ -26,12 +26,28 @@ import {
   type ReactNode,
 } from "react";
 
-import { clearAllStoredState, getToken } from "./auth";
+import { clearAllStoredState, clearCoachToken, getCoachToken, getToken } from "./auth";
 
 export type SessionStatus = "loading" | "in" | "out";
 
 type SessionValue = {
   status: SessionStatus;
+  /**
+   * The COACH session, tracked independently of the athlete one.
+   *
+   * Two credentials, two gates, no coupling. A coach is usually not an athlete
+   * and an athlete is never a coach, but one phone may legitimately hold both —
+   * a coach who also runs — and neither signing in nor signing out of one side
+   * may touch the other. Deriving coach status from `status` would mean a coach
+   * with no athlete pairing had no way in at all.
+   *
+   * This exists on the SESSION rather than inside the coach screens because the
+   * root layout's gate is a deny-list: an undeclared or unguarded route file is
+   * reachable in every state. A coach route has to be guardable by the same
+   * `Stack.Protected` mechanism as everything else, and that needs a boolean
+   * here.
+   */
+  coachStatus: SessionStatus;
   /**
    * Re-reads the keychain. Call after a successful sign-in so the gate flips
    * without a relaunch.
@@ -48,16 +64,32 @@ type SessionValue = {
    * signed in because a delete failed.
    */
   signOut: () => Promise<{ erased: boolean }>;
+  /** Re-reads the coach key. Call after a successful coach sign-in. */
+  refreshCoach: () => Promise<void>;
+  /**
+   * Leaves the coach side only, and leaves any athlete session untouched.
+   *
+   * Fails closed exactly like `signOut`: the gate flips to "out" whether or not
+   * the keychain delete succeeded, because a failed erase must never leave a
+   * team's roster on the glass.
+   */
+  signOutCoach: () => Promise<{ erased: boolean }>;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
+  const [coachStatus, setCoachStatus] = useState<SessionStatus>("loading");
 
   const resolve = useCallback(async () => {
     const token = await getToken();
     setStatus(token ? "in" : "out");
+  }, []);
+
+  const resolveCoach = useCallback(async () => {
+    const token = await getCoachToken();
+    setCoachStatus(token ? "in" : "out");
   }, []);
 
   useEffect(() => {
@@ -70,6 +102,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (alive) setStatus("out");
       });
+    getCoachToken()
+      .then((token) => {
+        if (alive) setCoachStatus(token ? "in" : "out");
+      })
+      .catch(() => {
+        if (alive) setCoachStatus("out");
+      });
     return () => {
       alive = false;
     };
@@ -78,12 +117,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const erased = await clearAllStoredState();
     setStatus("out");
+    // `clearAllStoredState` erases EVERY key including the coach token, so the
+    // coach gate has to follow or it would still read "in" against a key that
+    // is gone. Signing out of the app signs out of both sides.
+    setCoachStatus("out");
+    return { erased };
+  }, []);
+
+  const signOutCoach = useCallback(async () => {
+    const erased = await clearCoachToken();
+    setCoachStatus("out");
     return { erased };
   }, []);
 
   const value = useMemo<SessionValue>(
-    () => ({ status, refresh: resolve, signOut }),
-    [status, resolve, signOut]
+    () => ({
+      status,
+      coachStatus,
+      refresh: resolve,
+      refreshCoach: resolveCoach,
+      signOut,
+      signOutCoach,
+    }),
+    [status, coachStatus, resolve, resolveCoach, signOut, signOutCoach]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -49,6 +49,7 @@ import {
 } from "react-native";
 
 import { layout, minWidth, radius, ruleWidth, space, target } from "../theme/space";
+import { Press } from "./Press";
 import { color, shadow } from "../theme/tokens";
 import { font, text } from "../theme/type";
 
@@ -97,7 +98,7 @@ export function InfoDot({ label, text: explainer }: InfoDotProps) {
 
   return (
     <>
-      <Pressable
+      <Press
         ref={dot}
         onPress={toggle}
         hitSlop={SLOP}
@@ -108,9 +109,10 @@ export function InfoDot({ label, text: explainer }: InfoDotProps) {
         /* The spec's `aria-expanded` on disclosures, in its RN spelling. */
         accessibilityState={{ expanded: anchor !== null }}
         style={styles.dot}
+        haptic="none"
       >
         <Text style={styles.glyph}>i</Text>
-      </Pressable>
+      </Press>
 
       <Modal
         visible={anchor !== null}

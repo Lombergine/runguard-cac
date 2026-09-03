@@ -15,11 +15,12 @@ import { TextStyle } from "react-native";
 
 /** Font family keys as registered by useFonts() in the root layout. */
 export const font = {
-  displayBold: "Archivo_700Bold",
-  displayExtra: "Archivo_800ExtraBold",
-  body: "SourceSans3_400Regular",
-  bodySemi: "SourceSans3_600SemiBold",
-  mono: "SplineSansMono_500Medium",
+  displayBold: "Sora_700Bold",
+  displayExtra: "Sora_800ExtraBold",
+  body: "Manrope_500Medium",
+  bodySemi: "Manrope_700Bold",
+  mono: "JetBrainsMono_500Medium",
+  monoBold: "JetBrainsMono_700Bold",
 } as const;
 
 /**
@@ -44,10 +45,10 @@ export const text = {
    * disagreed by half a point and neither matched what actually rendered.
    */
   micro: {
-    fontFamily: font.mono,
-    fontSize: 11.5,
+    fontFamily: font.bodySemi,
+    fontSize: 12,
     lineHeight: 16,
-    letterSpacing: 0.12 * 11.5,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
     ...tabular,
   } as TextStyle,
@@ -55,35 +56,36 @@ export const text = {
   /** 14 body — secondary metadata, advisory reason lines. */
   meta: {
     fontFamily: font.body,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 19,
   } as TextStyle,
 
   /** 16.5 body — the base size. */
   base: {
     fontFamily: font.body,
-    fontSize: 16.5,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
   } as TextStyle,
 
   /** 16.5 body, semibold — emphasis within prose, control labels. */
   baseSemi: {
     fontFamily: font.bodySemi,
-    fontSize: 16.5,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
   } as TextStyle,
 
   /** 19 display — card titles. */
   title: {
     fontFamily: font.displayBold,
-    fontSize: 19,
-    lineHeight: 24,
+    fontSize: 18,
+    lineHeight: 22,
+    letterSpacing: -0.2,
   } as TextStyle,
 
   /** 22 mono — inline stats. */
   stat: {
-    fontFamily: font.mono,
-    fontSize: 22,
+    fontFamily: font.monoBold,
+    fontSize: 24,
     lineHeight: 28,
     ...tabular,
   } as TextStyle,
@@ -94,9 +96,9 @@ export const text = {
    */
   prompt: {
     fontFamily: font.displayExtra,
-    fontSize: 34,
-    lineHeight: 40,
-    letterSpacing: -0.02 * 34,
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: -0.5,
   } as TextStyle,
 } as const;
 

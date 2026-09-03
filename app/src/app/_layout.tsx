@@ -4,16 +4,17 @@ import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Archivo_700Bold, Archivo_800ExtraBold } from "@expo-google-fonts/archivo";
+import { Sora_700Bold, Sora_800ExtraBold } from "@expo-google-fonts/sora";
+import { Manrope_500Medium, Manrope_700Bold } from "@expo-google-fonts/manrope";
 import {
-  SourceSans3_400Regular,
-  SourceSans3_600SemiBold,
-} from "@expo-google-fonts/source-sans-3";
-import { SplineSansMono_500Medium } from "@expo-google-fonts/spline-sans-mono";
+  JetBrainsMono_500Medium,
+  JetBrainsMono_700Bold,
+} from "@expo-google-fonts/jetbrains-mono";
 
 import { ProfileProvider } from "../lib/profileStore";
 import { SessionProvider, useSession } from "../lib/session";
 import { color } from "../theme/tokens";
+import { font } from "../theme/type";
 
 /**
  * Hold the splash until the fonts are ready. The alternative — rendering in a
@@ -29,11 +30,12 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Archivo_700Bold,
-    Archivo_800ExtraBold,
-    SourceSans3_400Regular,
-    SourceSans3_600SemiBold,
-    SplineSansMono_500Medium,
+    Sora_700Bold,
+    Sora_800ExtraBold,
+    Manrope_500Medium,
+    Manrope_700Bold,
+    JetBrainsMono_500Medium,
+    JetBrainsMono_700Bold,
   });
 
   useEffect(() => {
@@ -46,7 +48,8 @@ export default function RootLayout() {
   return (
     <SessionProvider>
       <SafeAreaProvider>
-        <StatusBar style="dark" />
+        {/* "auto" — dark glyphs on the light theme, light on the dark one. */}
+        <StatusBar style="auto" />
         <Gate />
       </SafeAreaProvider>
     </SessionProvider>
@@ -76,11 +79,18 @@ export default function RootLayout() {
  * frame is exactly how a signed-out phone flashes someone else's readiness.
  */
 function Gate() {
-  const { status } = useSession();
+  const { status, coachStatus } = useSession();
 
-  if (status === "loading") return null;
+  // BOTH keychain reads must land before anything mounts. Rendering on the
+  // first of the two would pick a navigator from half the answer, and the
+  // half-answer case is a coach with no athlete pairing: `status` resolves
+  // "out" first and the auth group mounts, so the coach sees an athlete login
+  // for a frame before being moved. Guessing wrong for one frame is exactly
+  // what this gate exists to stop.
+  if (status === "loading" || coachStatus === "loading") return null;
 
   const signedIn = status === "in";
+  const coachIn = coachStatus === "in";
 
   return (
     /*
@@ -98,11 +108,26 @@ function Gate() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: color.bg },
-          animation: "fade",
+          // For the screens that do show a header: no "(tabs)" fallback text
+          // beside the chevron, and the bar in the app's own ground and type.
+          headerBackButtonDisplayMode: "minimal",
+          headerTintColor: color.ink,
+          headerStyle: { backgroundColor: color.bg },
+          headerTitleStyle: { fontFamily: font.displayBold, fontSize: 17 },
+          headerShadowVisible: false,
+          /**
+           * The platform push — on iOS a slide from the right with the
+           * interactive back-swipe. This was "fade" for every screen, so
+           * opening a run or settings crossfaded in place with no sense of
+           * depth and no way to swipe back, which is most of what made the app
+           * read as a web view. The entry screens below opt back into the fade:
+           * there the whole root is being swapped, not a screen pushed.
+           */
+          animation: "default",
         }}
       >
         <Stack.Protected guard={signedIn}>
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
           <Stack.Screen name="chat" />
           <Stack.Screen name="profile" />
           <Stack.Screen name="settings" />
@@ -115,10 +140,58 @@ function Gate() {
         </Stack.Protected>
 
         <Stack.Protected guard={!signedIn}>
-          <Stack.Screen name="login" />
-          <Stack.Screen name="signup" />
-          <Stack.Screen name="pair" />
+          <Stack.Screen name="login" options={{ animation: "fade" }} />
+          <Stack.Screen name="signup" options={{ animation: "fade" }} />
+          <Stack.Screen name="pair" options={{ animation: "fade" }} />
         </Stack.Protected>
+
+        {/*
+          THE COACH SIDE, on its own credential and its own gate.
+
+          Guarded by `coachIn`, never by `signedIn`. The two sessions are
+          independent: a coach usually has no athlete pairing, so deriving one
+          from the other would lock them out of their own team, and one phone
+          may hold both for a coach who also runs.
+
+          The same deny-list rule as everything above applies — these files are
+          declared here precisely so they are a decision. A coach route left
+          undeclared would be reachable while signed out, and the roster is an
+          entire team's health data.
+        */}
+        <Stack.Protected guard={coachIn}>
+          {/* The coach's own tab navigator: dashboard, roster, calendar,
+              sources — the same places the website's coach nav names. The
+              GROUP is guarded, so a tab added inside it inherits this gate;
+              only routes outside the group need their own line below. */}
+          <Stack.Screen name="coach/(tabs)" options={{ animation: "fade" }} />
+          {/* Pushed from the roster, so it sits outside the tabs rather than
+              becoming a fourth one: it is one athlete, not a section. */}
+          <Stack.Screen name="coach/athlete/[id]" />
+          {/* One run, pushed from that athlete's Training section. Declared
+              here for the same reason as everything else: the gate is a
+              deny-list, so an undeclared route file is reachable signed out. */}
+          <Stack.Screen name="coach/activity/[id]" />
+        </Stack.Protected>
+
+        {/*
+          Declared WITHOUT a guard, unlike every other auth screen, and that is
+          a decision rather than an oversight.
+
+          A guarded `!coachIn` version unmounts itself the instant sign-in
+          succeeds — `refreshCoach()` flips the gate, this screen leaves the
+          tree, and the `router.replace("/coach")` on the next line never lands.
+          Measured: sign-in stored the token correctly and then dropped the
+          coach on the ATHLETE home, because the navigator re-resolved to the
+          first mounted group instead. Staying mounted long enough to navigate
+          is the whole reason.
+
+          It is safe to leave reachable because it holds nothing: an empty form
+          and two inputs, no team data, no roster, no token rendered. Signing in
+          again simply re-mints the same signed value. The screens that DO hold
+          a team's health data — the roster and the athlete detail — stay behind
+          `coachIn` above.
+        */}
+        <Stack.Screen name="coach/login" options={{ animation: "fade" }} />
 
         {/* Reachable either way: required by App Review, and contains nothing
             athlete-derived. */}

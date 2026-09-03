@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
     overflow: "hidden",
   },
-  emberLabel: { ...text.baseSemi, color: color.ink },
+  emberLabel: { ...text.baseSemi, color: color.bg },
   /** No ember at all: "cannot act yet" is not a dimmed brand. */
   emberOff: { backgroundColor: color.well, borderWidth: ruleWidth, borderColor: color.ruleSoft },
   emberLabelOff: { ...text.baseSemi, color: color.muted },

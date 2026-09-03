@@ -41,18 +41,19 @@
  */
 import { useEffect, useRef, useState } from "react";
 import {
-  AccessibilityInfo,
   Animated,
+  Dimensions,
+  LayoutAnimation,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import type { ColorValue } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Line } from "react-native-svg";
+import Svg, { Line, Circle, Path } from "react-native-svg";
 
 import {
   CheckInCard,
@@ -61,13 +62,20 @@ import {
   type LoggedSoreness,
   type SleepAnswer,
 } from "../../components/CheckInCard";
+import { Sheet } from "../../components/Sheet";
+import { Ring } from "../../components/Ring";
+import { Press } from "../../components/Press";
+import { Card } from "../../components/Card";
 import { CheckInReceipt } from "../../components/CheckInReceipt";
 import { Absent } from "../../components/Nothing";
 import { Tile } from "../../components/Tile";
 import { Notifications } from "../../components/Notifications";
 import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
 import { WeekProgress } from "../../components/WeekProgress";
+import { WeekBars } from "../../components/WeekBars";
+import { LastRunCard } from "../../components/LastRunCard";
 import { ApiError, getHome, isUnauthorized, postCheckin } from "../../lib/api";
+import { committed, failed, useReduceMotion } from "../../lib/motion";
 import InfoDot, { EXPLAINERS } from "../../components/InfoDot";
 import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
 import { useInvalidateProfile } from "../../lib/profileStore";
@@ -87,9 +95,11 @@ import type {
   ProfileWithNextRace,
   ReadinessState,
   RecoverySnapshot,
+  SleepDay,
 } from "../../lib/types";
 import { duration, layout, radius, ruleWidth, space, target } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
+import { color, shadow, useColors } from "../../theme/tokens";
+import type { Palette } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 /**
@@ -129,20 +139,48 @@ function supersededBy(part: string, side: Side | null): string[] {
  * floor for a word read at 6am. These three measure 5.13:1, 5.18:1 and 5.21:1
  * on `card`.
  */
-const VERDICT_COLOR: Record<ReadinessBand, string> = {
+const VERDICT_COLOR: Record<ReadinessBand, ColorValue> = {
   under: color.unusualText,
   partial: color.watchText,
   recovered: color.okText,
 };
+/** The same bands, as palette KEYS, for the SVG ring. */
+const VERDICT_HEX_KEY: Record<ReadinessBand, keyof Palette> = {
+  under: "unusualText",
+  partial: "watchText",
+  recovered: "okText",
+};
+const RING = 84;
+/** The bars span the card: screen width less page and card insets. */
+const WEEK_BARS_W = Dimensions.get("window").width - layout.page * 2 - layout.cardPadding * 2;
 
 const STAT_LINE = text.stat.lineHeight as number;
 
 /** The website's `--ember`: `linear-gradient(135deg, …)` with a stop at 45%. */
-const EMBER_STOPS = [0, 0.45, 1] as const;
-const EMBER_START = { x: 0, y: 0 } as const;
-const EMBER_END = { x: 1, y: 1 } as const;
+
+/**
+ * "Morning, Aditya". The hour is the phone's, which is the one clock a
+ * greeting should follow; the day itself is still written out explicitly on
+ * the check-in card below, because a greeting is not a date.
+ */
+/**
+ * Last night's hours, if the wearable reported them. A night's sleep is dated
+ * the morning it ends, so today's `sleep30` row is last night.
+ */
+function lastNight(profile: { sleep30?: SleepDay[] }): number | null {
+  const today = localDay();
+  return profile.sleep30?.find((d) => d.date === today)?.hours ?? null;
+}
+
+function greeting(name: string | null): string {
+  const h = new Date().getHours();
+  const part = h < 12 ? "Morning" : h < 18 ? "Afternoon" : "Evening";
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `${part}, ${first}` : part;
+}
 
 export default function CheckInScreen() {
+  const hex = useColors();
   const router = useRouter();
   /**
    * `invalidate` ONLY. This screen's own data comes from the 5.3 KB `/home`,
@@ -208,7 +246,7 @@ export default function CheckInScreen() {
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitFailed, setSubmitFailed] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const reduceMotion = useReduceMotion();
   /**
    * Bumped by "Try again", and the ONLY thing that re-runs the load.
    *
@@ -222,7 +260,7 @@ export default function CheckInScreen() {
 
   // Starts opaque: nothing on this screen has an entrance animation. It is only
   // driven for the 180ms reveal after a check-in.
-  const reveal = useRef(new Animated.Value(1)).current;
+  const [reveal] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     let alive = true;
@@ -242,11 +280,6 @@ export default function CheckInScreen() {
       .catch((err: unknown) => {
         if (alive) setLoadError(isUnauthorized(err) ? "unpaired" : "failed");
       });
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((on) => {
-        if (alive) setReduceMotion(on);
-      })
-      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -308,6 +341,7 @@ export default function CheckInScreen() {
       // could do about each of them is different. `request()` already lifts a
       // 400's `error` string onto ApiError.message; the race forms surface it.
       const why = err instanceof ApiError ? ` ${err.message}` : "";
+      failed();
       setSorenessError(
         severity === null
           ? `That didn't clear — ${key} is still recorded. Tap the score again.${why}`
@@ -364,14 +398,30 @@ export default function CheckInScreen() {
     try {
       await postCheckin({ energy: ENERGY_BY_SLEEP[sleep] });
     } catch {
+      failed();
       setSubmitFailed(true);
       setSubmitting(false);
       return;
     }
+    // The app's one moment of completion, felt before it is seen: the collapse
+    // below is 180ms away and the phone is already being lowered.
+    committed();
     // The receipt is built from the mirror, which holds only rows the server
     // reported holding plus rows whose own write returned — so it cannot name
     // soreness the server does not have, and the uncleared list stops it
     // claiming a replacement that did not happen.
+    // The card is several hundred points tall and the receipt is one line.
+    // Without this the content below jumps up in a single frame; with it the
+    // collapse takes the same 180ms as the reveal it hands off to.
+    if (!reduceMotion) {
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(
+          duration.reveal,
+          LayoutAnimation.Types.easeInEaseOut,
+          LayoutAnimation.Properties.opacity
+        )
+      );
+    }
     setStored({ entries: Object.entries(logged), uncleared });
     setSubmittedAt(new Date());
     setSubmitting(false);
@@ -449,11 +499,21 @@ export default function CheckInScreen() {
   }
 
   let receipt: string | null = null;
-  // `reopened` suppresses the receipt so the card renders again — the athlete
-  // asked to add something, and the receipt branch cannot take input.
-  if (reopened) receipt = null;
-  else if (submittedAt) receipt = receiptLabel(submittedAt);
-  else if (!reopened && profile && checkedInToday(profile) && profile.todayCheckin) {
+  /*
+   * `reopened` no longer suppresses the receipt.
+   *
+   * It used to: adding soreness after checking in tore the collapsed state
+   * down and rebuilt the whole check-in card in its place, so the athlete's
+   * own receipt vanished while they were adding to it, and finishing rebuilt
+   * the page a second time. That is the web shape — a page that becomes a
+   * different page — and the iOS mock names the replacement directly:
+   * "Check-in → a sheet you swipe away, not a page".
+   *
+   * The picker now opens in a `Sheet` over this screen, which stays exactly as
+   * it was underneath. See the sheet below the receipt.
+   */
+  if (submittedAt) receipt = receiptLabel(submittedAt);
+  else if (profile && checkedInToday(profile) && profile.todayCheckin) {
     // `checkedInToday`, not `todayCheckin !== null` — the same gate readiness
     // uses, for the same reason. A soreness-only write creates a checkins row
     // with every self-report column NULL, and "Checked in" over a row the
@@ -469,26 +529,38 @@ export default function CheckInScreen() {
           and Settings is the only way to Profile, Connect and the privacy
           policy, so the whole account half of the app was unreachable. */}
       <View style={styles.header}>
-        <Text style={styles.wordmark}>RunGuard</Text>
+        <View style={styles.greetingWrap}>
+          <Text style={styles.greeting} numberOfLines={1}>
+            {greeting(profile?.athlete.name ?? null)}
+          </Text>
+          {profile?.athlete.school ? (
+            <Text style={styles.greetingSub}>{profile.athlete.school}</Text>
+          ) : null}
+        </View>
         <View style={styles.headerActions}>
-          <Pressable
+          <Press
             onPress={() => router.push("/chat")}
             accessibilityRole="button"
             accessibilityLabel="Ask the RunGuard coach"
-            hitSlop={hitSlopFor(styles.headerAction)}
             style={styles.headerAction}
+            pressedStyle={styles.headerActionPressed}
           >
-            <Text style={styles.headerActionLabel}>Ask RunGuard</Text>
-          </Pressable>
-          <Pressable
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={hex.ink} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5z" />
+            </Svg>
+          </Press>
+          <Press
             onPress={() => router.push("/settings")}
             accessibilityRole="button"
             accessibilityLabel="Settings"
-            hitSlop={hitSlopFor(styles.headerAction)}
             style={styles.headerAction}
+            pressedStyle={styles.headerActionPressed}
           >
-            <Text style={styles.headerActionLabel}>Settings</Text>
-          </Pressable>
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={hex.ink} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+              <Circle cx={12} cy={12} r={3} />
+              <Path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+            </Svg>
+          </Press>
         </View>
       </View>
       {/* The bottom inset belongs to the tab bar, which reserves it in its own
@@ -516,10 +588,15 @@ export default function CheckInScreen() {
               submits on the tap; so was checking in on the website.
 
               The website has no such door: its body-part chips sit on Home all
-              day. This reopens the card in its `askingWhere` state, with
+              day. This opens the picker in its `askingWhere` state, with
               everything already logged lit from the same `logged` mirror, so
               adding a second sore spot at 4pm works exactly like adding the
               first at 7am.
+
+              It opens a SHEET rather than replacing this screen. Tearing the
+              receipt down to show the card meant the athlete lost the thing
+              they had just earned in order to add to it; the sheet leaves the
+              screen intact underneath and swipes away when they are done.
             */}
             <Pressable
               style={styles.addSoreness}
@@ -529,16 +606,42 @@ export default function CheckInScreen() {
             >
               <Text style={styles.addSorenessLabel}>Add or change soreness</Text>
             </Pressable>
+            <Sheet
+              visible={reopened}
+              onClose={closeSoreness}
+              title="Anything sore?"
+              subtitle={dayLabel(localDay())}
+            >
+              {/*
+                The same component, in its soreness-only mode — not a second
+                picker written for the sheet. One body map, one write path, one
+                place the vocabulary in `lib/bodyParts.ts` has to match the
+                website's.
+              */}
+              <CheckInCard
+                dateLabel={dayLabel(localDay())}
+                logged={logged}
+                uncleared={uncleared}
+                onLogSoreness={logSoreness}
+                onComplete={finish}
+                submitting={submitting}
+                sorenessError={sorenessError}
+                failed={submitFailed}
+                sorenessOnly
+                onDone={closeSoreness}
+              />
+            </Sheet>
             <ReadinessHero
               state={readinessState(profile)}
               insight={profile.aiInsight}
             />
-            <AfterCheckIn profile={profile} />
+            <TheDay profile={profile} />
           </Animated.View>
         ) : (
           <>
             <CheckInCard
               dateLabel={dayLabel(localDay())}
+              sleepHours={lastNight(profile)}
               logged={logged}
               uncleared={uncleared}
               onLogSoreness={logSoreness}
@@ -546,13 +649,40 @@ export default function CheckInScreen() {
               submitting={submitting}
               sorenessError={sorenessError}
               failed={submitFailed}
-              sorenessOnly={reopened}
+              /* Never soreness-only here: this branch is the athlete who has
+                 not checked in at all, and the reopen path is the sheet above. */
               onDone={closeSoreness}
             />
-            {/* No receipt means no check-in today — `readinessState` is
-                `{known:false}` by construction, so this footer is given no way
-                to render a value at all. */}
-            <UnknownReadiness pending={false} />
+            {/*
+              No receipt means no check-in today — but that is no longer the
+              same thing as no readiness.
+
+              This used to hardcode `UnknownReadiness`, on the reasoning that
+              "`readinessState` is `{known:false}` by construction" here. That
+              held only while the gate was `checkedInToday` alone. It is now
+              `checkedInToday || hasSensorData`, because the engine computes a
+              real objective score from sleep, HRV and resting HR with no
+              self-report at all — so an athlete who skipped the check-in but
+              whose watch synced HAS a founded number, and hardcoding the
+              unknown arm printed "Readiness — no check-in or wearable data
+              yet" directly above a Recovery block showing all three readings.
+              Observed on the simulator, athlete 1.
+
+              Both arms now ask the same gate, which is the only way this
+              screen and the coach's web view can agree about one athlete.
+            */}
+            {(() => {
+              const state = readinessState(profile);
+              return state.known ? (
+                <ReadinessHero state={state} insight={profile.aiInsight} />
+              ) : (
+                <UnknownReadiness pending={false} />
+              );
+            })()}
+            {/* The day itself, below the question. None of it is derived from
+                the check-in, so it reads the same before and after — see
+                TheDay's header for why it no longer waits. */}
+            <TheDay profile={profile} />
           </>
         )}
       </ScrollView>
@@ -560,24 +690,6 @@ export default function CheckInScreen() {
   );
 }
 
-/**
- * The ember hairline along a hero panel's top edge — the port of the website's
- * `.card-ember`, which it reserves for hero cards. Decoration with no state in
- * it, so it is hidden from assistive tech.
- */
-function EmberEdge() {
-  return (
-    <LinearGradient
-      colors={color.ember}
-      locations={EMBER_STOPS}
-      start={EMBER_START}
-      end={EMBER_END}
-      style={styles.emberEdge}
-      accessibilityElementsHidden
-      importantForAccessibility="no"
-    />
-  );
-}
 
 /**
  * The hero: readiness, its verdict, and the sentence the server wrote about
@@ -601,9 +713,10 @@ function ReadinessHero({
   state: ReadinessState;
   insight?: string;
 }) {
+  // `color.*` is opaque to react-native-svg, so the ring reads resolved hex.
+  const hex = useColors();
   return (
     <View style={styles.hero}>
-      <EmberEdge />
       <View style={styles.panelBody}>
         <View style={styles.panelHead}>
           {/*
@@ -624,18 +737,34 @@ function ReadinessHero({
 
         {state.known ? (
           <View style={styles.readinessRow}>
-            {/* The numeral with "/100" welded on, then the verdict. See
-                lib/readinessVerdict for the bands and wording, which are
-                copied from tabs.tsx rather than invented. */}
-            <Text style={styles.readinessValue}>{readinessValue(state.value)}</Text>
-            <Text
-              style={[
-                styles.readinessVerdict,
-                { color: VERDICT_COLOR[readinessBand(state.value)] },
-              ]}
+            {/* The figure as an arc, "/100" welded on inside it, the verdict
+                beside. lib/readinessVerdict owns the bands and wording. */}
+            <Ring
+              size={RING}
+              frac={state.value / 100}
+              color={hex[VERDICT_HEX_KEY[readinessBand(state.value)]]}
             >
-              {readinessVerdict(state.value)}
-            </Text>
+              <Text
+                style={styles.readinessValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+                allowFontScaling={false}
+              >
+                {state.value}
+                <Text style={styles.readinessScale}>/100</Text>
+              </Text>
+            </Ring>
+            <View style={styles.readinessText}>
+              <Text
+                style={[
+                  styles.readinessVerdict,
+                  { color: VERDICT_COLOR[readinessBand(state.value)] },
+                ]}
+              >
+                {readinessVerdict(state.value)}
+              </Text>
+            </View>
           </View>
         ) : (
           <View style={styles.readinessPlaceholder} />
@@ -685,7 +814,14 @@ function UnknownReadiness({ pending }: { pending: boolean }) {
         <View style={styles.readinessRow}>
           <Text style={styles.readinessLabel}>Readiness</Text>
           <Text style={styles.readinessDash}>—</Text>
-          <Text style={styles.readinessQualifier}>unknown until you check in</Text>
+          {/*
+            Names BOTH inputs, because the gate now takes either one. Reached
+            only when the athlete has not reported today AND no sensor read
+            anything — "unknown until you check in" blamed the check-in alone,
+            which was wrong copy for an athlete whose watch simply had not
+            synced. See lib/readiness.ts.
+          */}
+          <Text style={styles.readinessQualifier}>no check-in or wearable data yet</Text>
         </View>
       )}
     </View>
@@ -693,19 +829,54 @@ function UnknownReadiness({ pending }: { pending: boolean }) {
 }
 
 /**
- * Everything the check-in unlocks, in the order the day is read: the body, then
- * the week, then today, then the next thing on the calendar.
+ * The day, in the order it is read: the body, then the week, then today, then
+ * the next thing on the calendar.
  *
- * None of it renders before a check-in. The empty prompt screen is the
- * signature, and a stack of tiles above the fold would be exactly the summary
- * widget the spec leaves the space empty instead of.
+ * ─────────────────────────────────────────────────────────────────────────
+ * WHY THIS NOW RENDERS BEFORE THE CHECK-IN TOO
+ *
+ * It used to render only after one, and the reasoning was sound: § "The
+ * signature" leaves the space empty on purpose, and "a stack of tiles above the
+ * fold would be exactly the summary widget the spec leaves the space empty
+ * instead of."
+ *
+ * The operative words there are ABOVE THE FOLD. That rule was written when the
+ * check-in card took `flex: 1` and filled the whole viewport, so anything shown
+ * at the same time necessarily competed with the question for the first screen.
+ * The card is now bounded (see `metrics.panelHeroMin`), which means this stack
+ * sits genuinely BELOW the question rather than beside it: the check-in is
+ * still first, still the largest and highest-contrast object, and still the
+ * only thing with the ember edge. Nothing here answers it.
+ *
+ * What the page looked like without this was not restraint but vacancy — a
+ * short card and then most of a phone screen of bare cream, which reads as a
+ * screen that failed to load rather than one holding space for one action.
+ *
+ * The honesty rules are what actually constrain this, and they are untouched:
+ *   - readiness stays `UnknownReadiness` until there is a check-in. This stack
+ *     contains no composite score and never has.
+ *   - every block below is measured data or the coach's own plan, each with its
+ *     own Absent when the measurement is missing. None of it is derived from
+ *     the check-in, so none of it changes when the check-in lands.
+ *   - Notifications stay LAST, which is the placement their own comment asks
+ *     for: below the question, never above it.
+ * ─────────────────────────────────────────────────────────────────────────
  */
-function AfterCheckIn({ profile }: { profile: ProfileWithNextRace }) {
+function TheDay({ profile }: { profile: ProfileWithNextRace }) {
   const today = profile.plan.days.find((d) => d.isToday);
   const next = profile.races?.upcoming[0];
 
   return (
     <View style={styles.sections}>
+      {profile.recentRuns[0] ? <LastRunCard run={profile.recentRuns[0]} /> : null}
+      {profile.risk.hasActivityHistory ? (
+        <Card>
+          <Text style={styles.panelTitle}>This week</Text>
+          <View style={styles.weekBars}>
+            <WeekBars runs={profile.recentRuns} width={WEEK_BARS_W} />
+          </View>
+        </Card>
+      ) : null}
       <View style={styles.section}>
         {/* The Panel head, on a section whose content is itself made of cards:
             title left, the caveat right. The tiles below are the website's
@@ -906,10 +1077,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.page,
     paddingTop: space.sm,
   },
-  wordmark: { ...text.title, color: color.ink },
-  headerActions: { flexDirection: "row", gap: space.lg },
-  headerAction: { paddingVertical: space.xs, paddingHorizontal: space.xs },
-  headerActionLabel: { ...text.meta, color: color.brandText },
+  greetingWrap: { flexShrink: 1 },
+  greeting: { ...text.prompt, color: color.ink },
+  greetingSub: { ...text.meta, color: color.muted, marginTop: 2 },
+  headerActions: { flexDirection: "row", gap: space.sm },
+  headerAction: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: color.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerActionPressed: { backgroundColor: color.surface3 },
   page: {
     flexGrow: 1,
     paddingHorizontal: layout.page,
@@ -935,6 +1115,7 @@ const styles = StyleSheet.create({
    * two-layer shadow every surface gets, not a device for making this card
    * shout over the tiles below it.
    */
+  weekBars: { marginTop: space.md },
   panelTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
   /** Keeps the dot level with the first line if the title ever wraps. */
   panelTitleDot: { height: text.title.lineHeight as number, justifyContent: "center" },
@@ -942,16 +1123,10 @@ const styles = StyleSheet.create({
     marginTop: layout.section,
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.rule,
     borderRadius: radius.card,
-    ...shadow.card,
   },
   /** Sits inside the panel's rule, so it takes the same top corners. */
-  emberEdge: {
-    height: space.xs,
-    borderTopLeftRadius: radius.card,
-    borderTopRightRadius: radius.card,
-  },
   panelBody: { padding: layout.cardPadding },
 
   /** Title left, muted note right — the website's Panel head (tabs.tsx:22). */
@@ -967,13 +1142,14 @@ const styles = StyleSheet.create({
 
   readinessRow: {
     flexDirection: "row",
-    alignItems: "baseline",
-    flexWrap: "wrap",
-    gap: space.sm,
+    alignItems: "center",
+    gap: space.lg,
     marginTop: space.md,
   },
+  readinessText: { flex: 1, gap: 2 },
+  readinessScale: { ...text.micro, color: color.muted },
   readinessLabel: { ...text.base, color: color.ink2 },
-  readinessValue: { ...text.stat, color: color.ink },
+  readinessValue: { ...text.stat, fontSize: 22, lineHeight: 26, color: color.ink },
   readinessVerdict: { ...text.baseSemi },
   readinessDash: { ...text.stat, color: color.unknown },
   readinessQualifier: { ...text.meta, color: color.muted },

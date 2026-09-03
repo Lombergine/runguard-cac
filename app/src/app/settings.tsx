@@ -42,6 +42,7 @@ import Constants from "expo-constants";
 import Svg, { Path } from "react-native-svg";
 
 import { Absent } from "../components/Nothing";
+import { ViewSwitcher } from "../components/ViewSwitcher";
 import { getHome, isUnauthorized } from "../lib/api";
 import { useSession } from "../lib/session";
 import { color, shadow } from "../theme/tokens";
@@ -384,6 +385,29 @@ export default function SettingsScreen() {
           </Text>
         </Panel>
 
+        {/*
+          The way across to the coach side.
+
+          It sits in Settings rather than in the home header because the header
+          already carries the two things an athlete opens the app to do, and a
+          third control there would compete with the check-in. It is ABOVE the
+          danger zone deliberately: switching is routine and unpairing is not,
+          and the two should not read as neighbours.
+
+          Nothing here signs anything out. See ViewSwitcher — a coach with no
+          athlete pairing and an athlete with no coach account both get the
+          relevant sign-in, and the session they came from survives a cancel.
+        */}
+        <Panel title="Coach view" note="If you also coach a team">
+          <Text style={styles.body}>
+            The coach view is a different account with its own sign-in. Opening
+            it does not sign you out of your own RunGuard.
+          </Text>
+          <View style={styles.switcher}>
+            <ViewSwitcher to="coach" />
+          </View>
+        </Panel>
+
         {/* ---- Danger zone --------------------------------------------- */}
         <Panel title="Unpair this device" note="Affects this phone only">
           <Text style={styles.body}>
@@ -458,8 +482,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
   },
   rowPressed: { backgroundColor: color.accentSoft },
-  rowBody: { flex: 1, gap: space.xs },
+  rowBody: { flex: 1, gap: space.xs, flexShrink: 1 },
   rowLabel: { ...text.baseSemi, color: color.ink },
+  switcher: { marginTop: space.md, alignItems: "flex-start" },
   rowNote: { ...text.meta, color: color.muted },
   eyebrow: { ...text.micro, color: color.muted },
   value: { ...text.base, color: color.ink },

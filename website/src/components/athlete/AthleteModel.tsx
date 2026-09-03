@@ -11,12 +11,25 @@ import { useMemo } from "react";
  *  Placement is anatomy-aware (left / right + ~18 regions).
  * ------------------------------------------------------------------ */
 
-type Zone = "ready" | "caution" | "high";
+/**
+ * "unknown" is a real zone, not a missing one.
+ *
+ * The engine's `readinessScore` returns 100 from no data at all, so a model
+ * that only knows ready/caution/high has no way to say "nobody has told us" —
+ * it renders the healthiest tint and the number 100 over an athlete who has
+ * never synced. `docs/visual-spec.md` is explicit that a blank must never read
+ * as a healthy value, so the absence gets its own zone rather than borrowing
+ * the good one.
+ */
+type Zone = "ready" | "caution" | "high" | "unknown";
 
 const ZONE_COLOR: Record<Zone, string> = {
-  ready: "#16a34a",
-  caution: "#d97706",
-  high: "#dc2626",
+  ready: "var(--status-good)",
+  caution: "var(--status-warning)",
+  high: "var(--status-critical)",
+  // Deliberately the muted ink, not a status hue: an unknown is chrome, not a
+  // verdict, and must not be mistakable for one at a glance.
+  unknown: "var(--ink-muted)",
 };
 
 /* a hotspot can arrive as a bare string (back-compat) or a rich object */
@@ -211,7 +224,8 @@ export default function AthleteModel({
   zone,
   hotspots,
 }: {
-  readiness: number;
+  /** null when the athlete has not reported — never coerce it to a number. */
+  readiness: number | null;
   zone: Zone;
   hotspots: HotspotInput[];
 }) {
@@ -224,7 +238,14 @@ export default function AthleteModel({
     return norm.flatMap(place).slice(0, 6);
   }, [hotspots]);
 
-  const zoneWord = zone === "ready" ? "Recovered" : zone === "caution" ? "Monitor" : "Elevated risk";
+  const zoneWord =
+    zone === "ready"
+      ? "Recovered"
+      : zone === "caution"
+        ? "Monitor"
+        : zone === "high"
+          ? "Elevated risk"
+          : "Not reported";
 
   const css = `
   .am-stage { perspective: 1100px; }
@@ -295,15 +316,29 @@ export default function AthleteModel({
             Body scan
           </div>
           <div className="text-[11px] mt-0.5" style={{ color: "var(--ink-muted)" }}>
-            {spots.length ? `${spots.length} area${spots.length > 1 ? "s" : ""} flagged` : "All clear"}
+            {/*
+              "All clear" is a finding; "none reported" is the absence of one.
+              The body scan only ever knows what the athlete typed in, so with
+              no check-ins on record it says which of the two this is.
+            */}
+            {spots.length
+              ? `${spots.length} area${spots.length > 1 ? "s" : ""} flagged`
+              : zone === "unknown"
+                ? "Nothing reported"
+                : "All clear"}
           </div>
         </div>
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
             Readiness
           </div>
+          {/*
+            An em dash, not a 0 and not a 100 — the same glyph every other
+            unknown in this product uses, so "we don't know" looks identical
+            wherever a reader meets it.
+          */}
           <div className="text-3xl font-extrabold tabular-nums leading-none" style={{ color: ambient }}>
-            {readiness}
+            {readiness === null ? "—" : readiness}
           </div>
           <div className="text-[10px] font-medium mt-0.5" style={{ color: ambient }}>
             {zoneWord}
@@ -397,7 +432,9 @@ export default function AthleteModel({
           </>
         ) : (
           <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
-            No flagged areas — nothing lit up. Keep it that way.
+            {zone === "unknown"
+              ? "No soreness or injuries reported yet — this fills in once they check in."
+              : "No flagged areas — nothing lit up. Keep it that way."}
           </div>
         )}
       </div>

@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
     overflow: "hidden",
   },
-  emberLabel: { ...text.baseSemi, color: color.ink },
+  emberLabel: { ...text.baseSemi, color: color.bg },
   emberOff: {
     backgroundColor: color.well,
     borderWidth: ruleWidth,

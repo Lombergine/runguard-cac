@@ -63,6 +63,7 @@
  * not one plot. Do not wrap it in another.
  */
 import { StyleSheet, Text, View } from "react-native";
+import type { ColorValue } from "react-native";
 import { Polyline } from "react-native-svg";
 
 import { Card } from "../Card";
@@ -122,7 +123,7 @@ function StepPath({
 }: {
   frame: Frame;
   data: ChartPoint[];
-  stroke?: string;
+  stroke?: ColorValue;
 }) {
   return (
     <>

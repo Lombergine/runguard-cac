@@ -23,19 +23,21 @@ export const layout = {
   /** Gap between sections. */
   section: space.xl,
   /** Page horizontal inset. */
-  page: 20,
+  page: 16,
 } as const;
 
 export const radius = {
-  card: 12,
-  control: 10,
+  card: 20,
+  control: 14,
+  /** Answer chips, segments, avatars — anything that reads as a pill. */
+  pill: 999,
 } as const;
 
 /**
  * 1.5px, not a hairline. React Native accepts fractional widths and renders
  * them on the device's pixel grid.
  */
-export const ruleWidth = 1.5;
+export const ruleWidth = 1;
 
 /** Left rule on SafetyNotice — deliberately heavier than a card rule. */
 export const safetyRuleWidth = 3;

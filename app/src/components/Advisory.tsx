@@ -23,6 +23,7 @@
  * into an instruction the way a badge or an alert weight would.
  */
 import { View, Text, StyleSheet } from "react-native";
+import type { ColorValue } from "react-native";
 
 import { AdvisoryProps, Flag } from "../lib/types";
 import { StatusDot } from "./StatusDot";
@@ -31,7 +32,7 @@ import { text } from "../theme/type";
 import { space } from "../theme/space";
 
 /** Text-safe twin of each state fill. Never the fill itself — see the header. */
-const flagText: Record<Flag, string> = {
+const flagText: Record<Flag, ColorValue> = {
   clear: color.okText,
   watch: color.watchText,
   unusual: color.unusualText,

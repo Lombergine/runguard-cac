@@ -36,8 +36,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { ruleWidth, space, target } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { selected } from "../../lib/motion";
+import { color } from "../../theme/tokens";
+import { font, text } from "../../theme/type";
 
 /**
  * The bar's own height, above the home-indicator inset. One tap target plus a
@@ -124,6 +125,9 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      /* The tab change is felt as well as seen — the one haptic both Whoop
+         and Strava fire, and the cheapest cue that the app is native. */
+      screenListeners={{ tabPress: () => selected() }}
       screenOptions={{
         // Screens own their own headers; a navigator header would be a second
         // voice on top of the check-in.
@@ -131,7 +135,7 @@ export default function TabsLayout() {
         sceneStyle: styles.scene,
         // A glyph colour: the navigator paints the LABEL with this. The icon
         // overrides it in tabIcon().
-        tabBarActiveTintColor: color.brandText,
+        tabBarActiveTintColor: color.ink,
         tabBarInactiveTintColor: color.muted,
         tabBarStyle: [styles.bar, { height: BAR_HEIGHT + insets.bottom }],
         tabBarLabelStyle: styles.label,
@@ -185,18 +189,13 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   scene: { backgroundColor: color.bg },
   bar: {
-    backgroundColor: color.card,
-    // The website's hairline colour at the app's 1.5px width.
+    backgroundColor: color.bg,
     borderTopWidth: ruleWidth,
-    borderTopColor: color.ruleSoft,
-    // The one elevation token, verbatim — it also supplies the `elevation` that
-    // replaces the navigator's default 8. Its offset is downward, so what shows
-    // above the bar is the soft top of the 14px blur, not a second shadow.
-    ...shadow.card,
+    borderTopColor: color.rule,
   },
   /** Guarantees the 48px target even if the bar is ever shortened. */
   item: { minHeight: target.min },
   // No colour here: the tint the navigator passes is what separates active
   // from inactive, and it must not be overridden.
-  label: text.micro,
+  label: { ...text.meta, fontFamily: font.bodySemi, fontSize: 11, lineHeight: 14 },
 });

@@ -1,3 +1,4 @@
+import type { ColorValue } from "react-native";
 /**
  * The marks. Stateless, all of them — they take a `Frame` and a `ChartPoint[]`
  * and return SVG. Every one of the eight charts is some combination of these
@@ -81,7 +82,7 @@ export function Bars({
 }: {
   frame: Frame;
   data: ChartPoint[];
-  fill?: string;
+  fill?: ColorValue;
 }) {
   const w = barWidth(frame.step);
   return (
@@ -147,7 +148,7 @@ export function LinePath({
 }: {
   frame: Frame;
   data: ChartPoint[];
-  stroke?: string;
+  stroke?: ColorValue;
   width?: number;
 }) {
   return (
@@ -194,7 +195,7 @@ export function Dots({
 }: {
   frame: Frame;
   data: ChartPoint[];
-  fill?: string;
+  fill?: ColorValue;
   r?: number;
 }) {
   return (
@@ -223,7 +224,7 @@ export function Band({
   frame: Frame;
   from: number;
   to: number;
-  fill?: string;
+  fill?: ColorValue;
   opacity?: number;
 }) {
   const a = frame.y(from);
@@ -255,7 +256,7 @@ export function RefLine({
 }: {
   frame: Frame;
   value: number;
-  stroke?: string;
+  stroke?: ColorValue;
 }) {
   const y = frame.y(value);
   return (

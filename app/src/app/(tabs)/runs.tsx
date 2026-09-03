@@ -21,7 +21,6 @@
 import { ReactNode, useMemo } from "react";
 import {
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -31,6 +30,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
+import { Press } from "../../components/Press";
 import { Absent } from "../../components/Nothing";
 import { PlanWeek, planWeekMetrics } from "../../components/PlanWeek";
 import { RunCard, runCardMetrics } from "../../components/RunCard";
@@ -202,13 +202,14 @@ export default function RunsScreen() {
              * clear. Dropping back to the skeleton is honest about the state:
              * nothing is known yet.
              */}
-            <Pressable
+            <Press
               onPress={() => void refresh()}
               accessibilityRole="button"
               style={styles.retry}
+              pressedStyle={styles.retryPressed}
             >
               <Text style={styles.retryLabel}>Try again</Text>
-            </Pressable>
+            </Press>
           </Card>
         </View>
       </Screen>
@@ -324,7 +325,7 @@ const styles = StyleSheet.create({
    * `brand`: the fill is 2.01:1 and unreadable outdoors, while this measures
    * 4.88:1 on the page and 4.74:1 on the warm top of the gradient.
    */
-  eyebrow: { ...text.micro, color: color.brandText },
+  eyebrow: { ...text.micro, color: color.muted },
   headingRow: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -332,9 +333,9 @@ const styles = StyleSheet.create({
     gap: space.md,
     marginTop: space.xs,
   },
-  heading: { ...text.title, color: color.ink },
+  heading: { ...text.prompt, color: color.ink, flexShrink: 1 },
   /** Mono, with the noun welded on. Never a bare numeral. */
-  count: { ...text.stat, color: color.ink2 },
+  count: { ...text.stat, color: color.ink2, flexShrink: 0 },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   failed: { ...text.base, color: color.ink2 },
@@ -348,6 +349,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
     backgroundColor: color.brand,
   },
+  retryPressed: { backgroundColor: color.press },
   retryLabel: { ...text.baseSemi, color: color.ink },
   /** The plan sits on the same section rhythm as the header below it. */
   plan: { marginBottom: layout.section },

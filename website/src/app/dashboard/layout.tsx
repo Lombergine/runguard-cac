@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DashboardNav from "./DashboardNav";
 import { redirect } from "next/navigation";
 import { isLoggedIn, currentTeamId, isDemoSession } from "@/lib/session";
 import DemoBanner from "@/components/DemoBanner";
@@ -28,11 +29,7 @@ export default async function DashboardLayout({
             <Logo />
             RunGuard
           </Link>
-          <nav className="flex items-center gap-4 text-sm" style={{ color: "var(--ink-2)" }}>
-            <Link href="/dashboard" className="hover:opacity-70">Roster</Link>
-            <Link href="/dashboard/plan" className="hover:opacity-70">Training calendar</Link>
-            <Link href="/dashboard/connect" className="hover:opacity-70">Data sources</Link>
-          </nav>
+          <DashboardNav />
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span
               className="hidden sm:inline text-xs px-2 py-1 rounded-full border"

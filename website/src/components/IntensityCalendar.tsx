@@ -11,9 +11,25 @@ export type CalendarDay = { date: string; load: number; km: number };
  * brighter = harder day, relative to the athlete's own 95th percentile.
  */
 
-// low → high intensity on the dark surface (red heat ramp — hotter = harder)
-const RAMP = ["#fcd9c2", "#f9b08a", "#f0805a", "#dd4f2e", "#b53214"];
-const REST = "#f1ece2";
+/*
+ * low → high intensity (heat ramp — hotter = harder), as tokens.
+ *
+ * The literal ramp was built for a cream page: its low end (#fcd9c2) and the
+ * rest-day tile (#f1ece2) are both near-white, so on a dark ground a year of
+ * mostly-easy training rendered as a wall of bright tiles — the calendar read
+ * inverted, with rest days shouting and hard days receding.
+ *
+ * The dark ramp keeps the same ordering and the same hue, but runs the
+ * lightness the other way so "more" is still "hotter and brighter".
+ */
+const RAMP = [
+  "var(--heat-1)",
+  "var(--heat-2)",
+  "var(--heat-3)",
+  "var(--heat-4)",
+  "var(--heat-5)",
+];
+const REST = "var(--heat-rest)";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",

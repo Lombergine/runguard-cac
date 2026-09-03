@@ -340,6 +340,21 @@ export default function LoginScreen() {
           contentContainerStyle={styles.page}
           keyboardShouldPersistTaps="handled"
         >
+          {/*
+            The brand lockup, above the form.
+
+            The iOS mock opens on "RunGuard / Training load, watched properly"
+            before anything asks for a credential — the app's replacement for
+            the web's marketing page, which does not exist here. It matters
+            more than decoration on a health product: this is the first screen
+            a fifteen-year-old sees, and the line under the wordmark is the
+            only place before sign-in that says what the thing actually does.
+          */}
+          <View style={styles.lockup}>
+            <Text style={styles.wordmark}>RunGuard</Text>
+            <Text style={styles.tagline}>Training load, watched properly</Text>
+          </View>
+
           <Card>
             <Text style={styles.eyebrow}>SIGN IN</Text>
             <Text style={styles.title}>Welcome back</Text>
@@ -491,7 +506,40 @@ export default function LoginScreen() {
             >
               <Text style={styles.altLabel}>Create an account</Text>
             </Pressable>
+
+            {/*
+              The way to the coach side. It is a separate destination rather
+              than a third mode on this screen because it produces a different
+              credential with different reach — see coach/login.tsx.
+
+              `replace`, not `push`: the coach route lives behind its own guard,
+              and leaving this screen on the stack would let a coach swipe back
+              into an athlete sign-in they have no token for.
+            */}
+            <Pressable
+              style={styles.alt}
+              onPress={() => router.replace("/coach/login")}
+              disabled={busy}
+              accessibilityRole="link"
+              accessibilityState={{ disabled: busy }}
+            >
+              <Text style={styles.altLabel}>I&apos;m a coach</Text>
+            </Pressable>
           </Card>
+
+          {/*
+            Said before sign-in, not buried in Settings.
+
+            RunGuard reads a minor's heart rate and sleep and shows it to an
+            adult. The one sentence that bounds what it claims to be belongs on
+            the first screen, in plain type — NOT in `SafetyNotice`'s shape,
+            which belongs to safety-intercepted chat replies alone and would be
+            blunted by being spent here.
+          */}
+          <Text style={styles.disclaimer}>
+            Not medical advice. RunGuard monitors training load and recovery — it describes
+            what your runs, sleep and check-ins show, and it does not diagnose anything.
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -526,6 +574,16 @@ function Field({
 }
 
 const styles = StyleSheet.create({
+  lockup: { alignItems: "center", gap: space.xs, marginBottom: space.lg },
+  wordmark: { ...text.prompt, color: color.ink },
+  tagline: { ...text.base, color: color.muted },
+  disclaimer: {
+    ...text.meta,
+    color: color.muted,
+    textAlign: "center",
+    lineHeight: 20,
+    marginTop: space.lg,
+  },
   safe: { flex: 1, backgroundColor: color.bg },
   fill: { flex: 1 },
   page: {
@@ -622,7 +680,7 @@ const styles = StyleSheet.create({
    * 5.97:1 on the darkest and 10.03:1 on the lightest. Not `brandText`, because
    * here the ember is the ground rather than the glyph.
    */
-  actionLabel: { ...text.baseSemi, color: color.ink },
+  actionLabel: { ...text.baseSemi, color: color.bg },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
   quiet: {

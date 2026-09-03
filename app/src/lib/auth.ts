@@ -14,6 +14,33 @@ import * as SecureStore from "expo-secure-store";
 const KEY = "runguard.deviceToken";
 
 /**
+ * The COACH session token, for the coach side of the app.
+ *
+ * A different credential to a different thing, so a different key. The athlete
+ * token reaches one person's health data; this one reaches an entire team's —
+ * every athlete's soreness, sleep and heart rate — which makes it the most
+ * sensitive string this app can hold.
+ *
+ * Its value is the same signed `teamId.hmac` the web coach session carries
+ * (`website/src/lib/session.ts` → `mintCoachToken`), so it cannot be forged
+ * without `SESSION_SECRET`, and rotating that secret invalidates it everywhere
+ * at once. It also cannot be revoked individually — there is no per-device row
+ * to delete — so on a lost phone the only lever is rotating the secret, which
+ * signs every coach out. Same rules as the athlete token otherwise: Keychain
+ * only, never logged, never rendered, cleared on sign-out.
+ *
+ * DELETING THE APP IS NOT SIGNING OUT. Measured on the simulator: uninstall,
+ * reinstall, deep-link to /coach, and the roster came straight back with no
+ * sign-in. SecureStore is the iOS Keychain, and Keychain items outlive the app
+ * that wrote them. So `signOutCoach()` is the only thing that actually ends a
+ * coach session — telling someone to "just delete the app" leaves a working
+ * credential for a whole team's health data on a phone they no longer own.
+ * (The guard itself is sound: with the key genuinely absent, /coach does not
+ * mount. The persistence is the finding, not a hole.)
+ */
+const COACH_KEY = "runguard.coachToken";
+
+/**
  * Dev fallback so a dev build runs with no pairing step. Read as a STATIC dot
  * path: Expo inlines `process.env.EXPO_PUBLIC_*` at build time by textual
  * substitution, so a computed lookup like `process.env[name]` comes back
@@ -68,6 +95,44 @@ export async function setToken(token: string): Promise<void> {
 }
 
 /**
+ * The coach token, or null.
+ *
+ * Deliberately has NO dev fallback. `getToken()` has one so a dev build runs
+ * without a pairing step, and that is a reasonable trade for one athlete's
+ * seeded data. The coach equivalent would hand a whole team's records to any
+ * build that happened to have an env var set, and — unlike the athlete
+ * fallback, which `__DEV__` folds away — there is no version of that which is
+ * worth the convenience. A coach signs in.
+ */
+export async function getCoachToken(): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(COACH_KEY);
+  } catch {
+    // Same reasoning as getToken: a locked keychain must not crash launch, and
+    // the error object could carry the key, so it is not surfaced.
+    return null;
+  }
+}
+
+export async function setCoachToken(token: string): Promise<void> {
+  await SecureStore.setItemAsync(COACH_KEY, token);
+}
+
+/**
+ * End the coach session only, leaving any athlete session alone.
+ *
+ * The two are separate credentials and one phone may legitimately hold both —
+ * a coach who also runs. `clearAllStoredState()` is still what sign-out calls;
+ * this is for leaving the coach side specifically.
+ */
+export async function clearCoachToken(): Promise<boolean> {
+  return SecureStore.deleteItemAsync(COACH_KEY).then(
+    () => true,
+    () => false
+  );
+}
+
+/**
  * Every SecureStore key this app writes. Signing out clears ALL of them.
  *
  * `runguard.health.state` was the miss: the old token-only erase deleted just
@@ -81,7 +146,7 @@ export async function setToken(token: string): Promise<void> {
  * spelled independently here and at `lib/health.ts` (`STATE_KEY`), so a rename
  * there would orphan this entry with no type error.
  */
-const ALL_KEYS = [KEY, "runguard.health.state"] as const;
+const ALL_KEYS = [KEY, COACH_KEY, "runguard.health.state"] as const;
 
 /**
  * Erase every stored key. Returns whether all of them actually went.

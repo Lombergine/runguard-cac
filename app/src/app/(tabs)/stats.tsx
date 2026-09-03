@@ -30,7 +30,6 @@
  */
 import { useMemo } from "react";
 import {
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -40,11 +39,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BodyScan } from "../../components/BodyScan";
+import { Press } from "../../components/Press";
 import { EXPLAINERS } from "../../components/InfoDot";
 import { Absent } from "../../components/Nothing";
 import { PrTable } from "../../components/PrTable";
+import { HrZones } from "../../components/HrZones";
 import { Tile } from "../../components/Tile";
-import { EMBER_RAMP, YEAR_GRID_HEIGHT, YearGrid } from "../../components/YearGrid";
+import { YEAR_GRID_HEIGHT, YearGrid } from "../../components/YearGrid";
 import { AcwrChart } from "../../components/charts/AcwrChart";
 import { FitnessChart } from "../../components/charts/FitnessChart";
 import { LoadChart } from "../../components/charts/LoadChart";
@@ -52,11 +53,11 @@ import { PaceChart } from "../../components/charts/PaceChart";
 import { WeeklyKmChart } from "../../components/charts/WeeklyKmChart";
 import { useProfile } from "../../lib/profileStore";
 import { fitnessKnown } from "../../lib/readiness";
-import type { Badge, Profile, ZoneMinutes } from "../../lib/types";
+import type { Badge, Profile } from "../../lib/types";
 import { formatDistance } from "../../lib/units";
 import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
-import { font, tabular, text } from "../../theme/type";
+import { text } from "../../theme/type";
 
 /**
  * This screen reads `Profile` directly.
@@ -70,7 +71,6 @@ import { font, tabular, text } from "../../theme/type";
  */
 
 /** The five zone keys, in order. */
-const ZONES = ["z1", "z2", "z3", "z4", "z5"] as const;
 
 /**
  * The longest streak, out of the 7-day-streak badge.
@@ -154,78 +154,6 @@ function Header({ stale }: { stale?: boolean }) {
   );
 }
 
-/**
- * Time in each heart-rate zone over the last seven days.
- *
- * The bar wears the SAME five-rung ember ramp as the training year at the foot
- * of this screen (`components/YearGrid`) rather than the website's five
- * separate hues. Two five-step encodings of "how hard" on one screen would be
- * two visual languages for one idea, the ramp is monotonic in greyscale where
- * blue→green→amber→orange→red is not, and the status tokens stay where they
- * belong: on verdicts, never on chrome.
- *
- * A zone at zero minutes is a measured zero and prints `0 min`. The whole panel
- * only goes Absent when there is nothing at all — no `load` leg, or no
- * heart-rate minutes recorded all week, which is what a week of runs synced
- * without a strap looks like.
- */
-function HrZones({ zones }: { zones: ZoneMinutes | undefined }) {
-  // Rounded once, here, and summed from the rounded parts — so the total in
-  // the note is always exactly the five figures in the legend added up.
-  const minutes = ZONES.map((z) => Math.round(zones?.[z] ?? 0));
-  const total = minutes.reduce((s, m) => s + m, 0);
-
-  return (
-    <Panel
-      title="Time in HR zones"
-      note={total > 0 ? `${total} min · last 7 days` : "last 7 days"}
-    >
-      {zones === undefined || total === 0 ? (
-        <Absent label="No heart-rate minutes recorded this week." />
-      ) : (
-        <>
-          <View
-            style={styles.zoneBar}
-            accessible
-            accessibilityRole="image"
-            accessibilityLabel={`Time in heart-rate zones, last 7 days. ${ZONES.map(
-              (z, i) => `${z.toUpperCase()} ${minutes[i]} minutes`,
-            ).join(", ")}. ${total} minutes total.`}
-          >
-            {ZONES.map((z, i) =>
-              minutes[i] > 0 ? (
-                <View
-                  key={z}
-                  style={{ flex: minutes[i], backgroundColor: EMBER_RAMP[i] }}
-                />
-              ) : null,
-            )}
-          </View>
-
-          {/* The legend IS the readout. Every zone prints its own minutes,
-              welded, because the website's hover title has no phone. */}
-          <View style={styles.legend}>
-            {ZONES.map((z, i) => (
-              <View key={z} style={styles.legendItem}>
-                <View
-                  style={[styles.swatch, { backgroundColor: EMBER_RAMP[i] }]}
-                />
-                <Text style={styles.legendValue}>
-                  {`${z.toUpperCase()} · ${minutes[i]} min`}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <Text style={styles.note}>
-            Z1 is your easiest running, Z5 your hardest. Runs synced without
-            heart rate are not counted here.
-          </Text>
-        </>
-      )}
-    </Panel>
-  );
-}
 
 export default function StatsScreen() {
   // Shared `/me`, and with it the single 401 path: a revoked token ends the
@@ -262,14 +190,15 @@ export default function StatsScreen() {
             <Text style={styles.failed}>
               {"Your stats could not be loaded. The RunGuard server could not be reached."}
             </Text>
-            <Pressable
+            <Press
               onPress={() => void refresh()}
               accessibilityRole="button"
               accessibilityLabel="Try loading your stats again"
               style={styles.retry}
+              pressedStyle={styles.retryPressed}
             >
               <Text style={styles.retryLabel}>Try again</Text>
-            </Pressable>
+            </Press>
           </View>
         </View>
       </SafeAreaView>
@@ -493,7 +422,7 @@ const styles = StyleSheet.create({
 
   header: { marginBottom: layout.section },
   eyebrow: { ...text.micro, color: color.muted },
-  heading: { ...text.title, color: color.ink, marginTop: space.xs },
+  heading: { ...text.prompt, color: color.ink, marginTop: space.xs },
   note: { ...text.meta, color: color.muted, marginTop: space.sm },
 
   panel: {
@@ -526,6 +455,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
     backgroundColor: color.brand,
   },
+  retryPressed: { backgroundColor: color.press },
   retryLabel: { ...text.baseSemi, color: color.ink },
 
   /** Two columns; the fifth tile takes the last row on its own, as on the web. */
@@ -542,30 +472,6 @@ const styles = StyleSheet.create({
   tileCell: { flexBasis: "47%", flexGrow: 1 },
 
   /* ── HR zones ─────────────────────────────────────────────────────── */
-  zoneBar: {
-    flexDirection: "row",
-    height: space.xl,
-    borderRadius: radius.control,
-    // The unfilled remainder is the sunken well, so a short week reads as a
-    // short bar rather than as a full one at low intensity.
-    backgroundColor: color.well,
-    overflow: "hidden",
-  },
-  legend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.md,
-    marginTop: space.md,
-  },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  swatch: { width: space.md, height: space.md, borderRadius: space.xs },
-  /** Mono at metadata size: it carries a numeral, and every numeral is mono. */
-  legendValue: {
-    ...text.meta,
-    ...tabular,
-    fontFamily: font.mono,
-    color: color.ink2,
-  },
 
   /* ── Skeletons. Grey blocks at final height, never a dash. ─────────── */
   skeleton: { backgroundColor: color.well, borderRadius: radius.card },

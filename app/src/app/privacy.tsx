@@ -232,10 +232,10 @@ export default function PrivacyScreen() {
           <Text style={styles.p}>
             RunGuard is built for school and club teams, and many of its athletes are
             minors. It is meant to be used with a coach or school involved and, for
-            athletes under 18, with a parent or guardian's permission. Coaches and schools
+            athletes under 18, with a parent or guardian&apos;s permission. Coaches and schools
             who invite athletes are responsible for getting whatever consent their
-            institution and the law require before an athlete's data is collected. Parents
-            and guardians can contact us to review, correct or delete their child's
+            institution and the law require before an athlete&apos;s data is collected. Parents
+            and guardians can contact us to review, correct or delete their child&apos;s
             information, or to withdraw consent.
           </Text>
           <Text style={styles.p}>
@@ -252,8 +252,8 @@ export default function PrivacyScreen() {
         <Panel title="Security" note="NOT A GUARANTEE">
           <Text style={styles.p}>
             Data is encrypted in transit over HTTPS. Passwords are stored only as salted
-            hashes. Each athlete's phone has its own pairing token, sessions use signed
-            cookies, and an athlete's data is limited to that athlete and their coach. The
+            hashes. Each athlete&apos;s phone has its own pairing token, sessions use signed
+            cookies, and an athlete&apos;s data is limited to that athlete and their coach. The
             infrastructure underneath is run by established providers.
           </Text>
           <Text style={styles.p}>

@@ -1,133 +1,139 @@
 /**
- * Colour tokens — the "sunrise" system, ported from the website.
+ * Colour tokens — the "sunrise" system, now in two themes.
  *
- * Source of truth: `website/src/app/globals.css:3-45`, whose own docblock names
- * the system: "Warm cream-white surfaces, one ember signature doing the energy
- * work, soft real shadows, colorful-but-disciplined state chips."
- *
- * This SUPERSEDES the pale-cool palette the app shipped with. See
- * ../../../docs/visual-spec.md — its palette section is overruled; its safety
- * and honesty rules are not.
+ * The values live in `palette.ts`. This file is the runtime: it decides which
+ * theme a given reference resolves to, and it does that in two different ways
+ * for two different consumers.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * WHY THERE ARE TWO SETS OF ACCENT COLOURS
+ * WHY `color` IS DYNAMIC AND `useColors()` EXISTS AS WELL
  *
- * The website's palette was never checked against WCAG, and most of it fails
- * as text. Measured against `surface2` (#f4efe6), the darkest ground text
- * commonly sits on:
+ * 912 references across 66 files read `color.*`, and 62 of those files build
+ * their styles in a module-scope `StyleSheet.create` — evaluated once, at
+ * import, long before any component can know the appearance. A hook cannot
+ * reach them without rewriting every one.
  *
- *     ink-muted  #94897b  3.21:1     brand    #f59e0b  2.01:1
- *     good       #16a34a  3.08:1     warning  #d97706  2.98:1
- *     series-1   #2a78d6  4.13:1     serious  #ea580c  3.33:1
+ * `DynamicColorIOS` is built for exactly this: it returns an opaque value the
+ * platform resolves per appearance, so a static stylesheet re-themes itself
+ * with no React involvement. Every existing `StyleSheet.create` keeps working
+ * and gains dark mode for free.
  *
- * Every one of those is below the 4.5:1 text floor, and `ink-muted` carries
- * every micro-label, note and sub-line on the site. This app is used at 6am
- * outdoors in glare, so shipping them verbatim would be a real legibility
- * defect rather than a pedantic one.
+ * The cost is that the value is OPAQUE — it is not a string, cannot be
+ * inspected, concatenated, or handed to anything that parses colours itself.
+ * `react-native-svg` is the consumer that matters here: it processes its own
+ * `stroke`/`fill` props. So anything drawing into SVG takes plain hex from
+ * `useColors()` instead. TypeScript enforces the split — `color` is typed
+ * `ColorValue`, so a site that needs a real string fails to compile rather
+ * than rendering the wrong colour at runtime.
  *
- * So each accent exists twice:
- *   - the FILL value  — the website's exact hex, for bars, dots and gradients
- *   - the TEXT value  — the same hue and saturation walked down in lightness
- *                       until it clears 4.5:1 on surface2
- *
- * Use `…Text` whenever the colour lands on a glyph. Use the plain token for a
- * shape. Getting this wrong is invisible indoors and unreadable on a track.
+ * Rule of thumb:
+ *   • a React Native style prop  → `color.*`
+ *   • an SVG prop, a gradient, or anything computed → `useColors()`
  * ─────────────────────────────────────────────────────────────────────────
  */
+import { DynamicColorIOS, Platform, useColorScheme } from "react-native";
+import type { ColorValue } from "react-native";
 
-export const color = {
-  /* Surfaces — warm paper, three elevation steps (globals.css:12-24). */
-  bg: "#FAF7F2",
-  /** Top of the page gradient; the website's ground sunrises over 420px. */
-  bgTop: "#FDF3E3",
-  card: "#FFFFFF",
-  /** Sunken. The old palette called this `well`; kept as the empty-slot fill. */
-  well: "#F4EFE6",
-  surface3: "#ECE5D8",
+import {
+  darkColors,
+  darkEmber,
+  lightColors,
+  lightEmber,
+  type Palette,
+} from "./palette";
 
-  /* Ink. Both clear 4.5:1 on every surface above (ink 14.6+, ink2 6.4+). */
-  ink: "#221D15",
-  ink2: "#55503F",
-  /**
-   * Darkened from the website's #94897b (3.21:1 → 4.83:1 on bg, 4.51 on well).
-   * Same hue and saturation, lower lightness.
-   */
-  muted: "#756C5F",
-
-  /* Rules. The website uses translucent ink rather than a grey. */
-  rule: "rgba(34,29,21,0.14)",
-  ruleSoft: "rgba(34,29,21,0.09)",
-  ruleStrong: "rgba(34,29,21,0.24)",
-
-  /* ── The ember signature — "the fun" (globals.css:26-31) ───────────── */
-  /** FILL only: bars, dots, gradient stops. 2.01:1 — never put a glyph on it. */
-  brand: "#F59E0B",
-  brandStrong: "#D97706",
-  emberHot: "#F97316",
-  /** The gradient stops, for expo-linear-gradient. 135° on the web. */
-  ember: ["#FBBF24", "#F59E0B", "#F97316"] as const,
-  emberGlow: "rgba(249,115,22,0.16)",
-  /** TEXT: ember at 4.55:1. Use for any ember-coloured word. */
-  brandText: "#976106",
-
-  /* ── Semantic states. The website's comment: "verdicts only, never chrome" */
-  ok: "#16A34A",
-  watch: "#D97706",
-  serious: "#EA580C",
-  unusual: "#DC2626",
-  series1: "#2A78D6",
-  /** TEXT variants, all ≥4.5:1 on well. */
-  okText: "#117E39",
-  watchText: "#A55A05",
-  seriousText: "#BD470A",
-  unusualText: "#D42222",
-  series1Text: "#266DC4",
-
-  /**
-   * Absent. ALWAYS paired with a dashed border and a label, never colour alone.
-   * Retuned for the cream ground: 4.86:1 on well, 5.21:1 on bg.
-   */
-  unknown: "#6F675C",
-
-  /* ── Compatibility with the pre-sunrise names ──────────────────────────
-   * The old palette had exactly ONE accent (a deep field blue) because colour
-   * was rationed. Under sunrise the accent IS the ember, so these map onto it.
-   * `accent` is a FILL — put a glyph on `brandText`, never on this.
-   */
-  accent: "#F59E0B",
-  /** Soft ember wash for a bar track or a pressed state. */
-  accentSoft: "#FDECC8",
-
-  /**
-   * Body-map support colour. The spec's rule survives the re-skin: soreness is
-   * data entry about the body, so it must NOT wear the accent, or a tapped
-   * region reads as a system action. Warm brick — same family as the ember,
-   * clearly not it.
-   */
-  track: "#9A4A38",
-  trackSoft: "#F2E0DB",
-
-  /* Chart furniture (globals.css:23-24). */
-  grid: "#ECE6DA",
-  baseline: "#D8D0C0",
-} as const;
+/** LinearGradient wants at least two stops, so the tuple shape has to survive. */
+type EmberStops = readonly [string, string, string];
 
 /**
- * The website's two-layer card shadow (globals.css:77-82), translated to RN.
- * iOS reads shadow*, Android reads elevation, so both are set.
+ * One key, resolved per appearance.
  *
- * Nothing floated in the old palette. Under sunrise things do — but a shadow is
- * elevation, never emphasis: it must not be used to make one card louder than
- * another.
+ * Android and web have no `DynamicColorIOS`, so they take the light value and
+ * this app stays light there. That is a deliberate limit rather than an
+ * oversight: RunGuard's whole reason for existing on a phone is Apple Health,
+ * and the iOS build is the one that ships.
+ */
+function dyn(key: keyof Palette): ColorValue {
+  return Platform.OS === "ios"
+    ? DynamicColorIOS({ light: lightColors[key], dark: darkColors[key] })
+    : lightColors[key];
+}
+
+const dynamicPalette = Object.fromEntries(
+  (Object.keys(lightColors) as (keyof Palette)[]).map((k) => [k, dyn(k)])
+) as Record<keyof Palette, ColorValue>;
+
+/**
+ * The token object every stylesheet reads.
+ *
+ * Typed `ColorValue`, NOT `string`. A call site that genuinely needs the hex —
+ * an SVG stroke, a gradient stop — will not compile against this, which is how
+ * those sites get found instead of silently drawing an unresolved colour.
+ */
+export const color = {
+  ...dynamicPalette,
+  /** Gradient stops stay a plain tuple; an array cannot be a dynamic colour. */
+  ember: lightEmber,
+} as Record<keyof Palette, ColorValue> & { ember: EmberStops };
+
+/**
+ * The resolved palette as plain hex, for SVG, gradients and anything computed.
+ *
+ * Re-renders on appearance change, which is what makes an SVG chart follow the
+ * theme — `color.*` cannot, because the SVG layer never asks the platform to
+ * resolve it.
+ */
+export function useColors(): Palette & { ember: EmberStops } {
+  const scheme = useColorScheme();
+  const dark = scheme === "dark" && Platform.OS === "ios";
+  return {
+    ...(dark ? darkColors : lightColors),
+    ember: dark ? darkEmber : lightEmber,
+  };
+}
+
+/** True when the app is currently drawing its dark theme. */
+export function useIsDark(): boolean {
+  return useColorScheme() === "dark" && Platform.OS === "ios";
+}
+
+/**
+ * Elevation. A shadow is elevation, never emphasis: it must not be used to
+ * make one card louder than another.
+ *
+ * On a dark ground a drop shadow has nothing to fall on, so the dark theme
+ * spends almost nothing on the shadow and lets the card's own lighter surface
+ * carry the separation instead — the same move the website's dark block makes
+ * with its rim light.
  */
 export const shadow = {
-  card: {
-    shadowColor: "#221D15",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 3,
+  /**
+   * Pulse has no drop shadows: on a dark ground a shadow has nothing to fall
+   * on, and a raised surface is simply lighter than the one beneath it. The
+   * token stays so the 48 sites that spread it keep compiling — and so that
+   * nobody re-adds a shadow by hand somewhere the token would not reach.
+   */
+  card: Platform.select({
+    ios: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+    },
+    default: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
+    },
+  }) as {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
   },
 } as const;
 
-export type ColorToken = keyof typeof color;
+export type ColorToken = keyof Palette;
+export type { Palette };

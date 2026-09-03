@@ -70,6 +70,33 @@ function signTeam(teamId: number): string {
  *
  * Do not reinstate it. There is no cookie in circulation that needs it.
  */
+/**
+ * Verify a coach session STRING, wherever it arrived from.
+ *
+ * Exported so the native app's `Authorization: Bearer` path reuses this exact
+ * check instead of growing a parallel one: same `signTeam` HMAC, same secret,
+ * same timing-safe compare. One definition of "is this a valid coach session",
+ * and no second implementation to drift out of step with the warning above.
+ */
+export function verifyCoachToken(value: string | undefined): number | null {
+  return verifyCoachCookie(value);
+}
+
+/**
+ * Mint the value a coach client stores. Byte-identical to the cookie's.
+ *
+ * A coach token is a FULL CREDENTIAL for an entire team's health data — every
+ * athlete's soreness, sleep and heart rate. It is strictly more sensitive than
+ * an athlete device token, which reaches one person. The signature carries no
+ * expiry of its own (the 30 days in `logIn` is a cookie attribute, not part of
+ * the signed value), so a copy of this string is valid until `SESSION_SECRET`
+ * rotates. Treat it as `app/README.md` treats device tokens: Keychain only,
+ * never logged, never rendered, cleared on sign-out.
+ */
+export function mintCoachToken(teamId: number): string {
+  return signTeam(teamId);
+}
+
 function verifyCoachCookie(value: string | undefined): number | null {
   if (!value) return null;
   const dot = value.lastIndexOf(".");

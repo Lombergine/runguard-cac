@@ -47,6 +47,7 @@ import { Card } from "./Card";
 import { Absent } from "./Nothing";
 import { Stat } from "./Stat";
 import type { Flag, RunCardProps, SessionSpike } from "../lib/types";
+import { tapped } from "../lib/motion";
 import { formatDistance, formatDuration, formatPace } from "../lib/units";
 import { layout, ruleWidth, space, target } from "../theme/space";
 import { color } from "../theme/tokens";
@@ -220,6 +221,7 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
   return (
     <Pressable
       onPress={() => router.push(`/activity/${run.id}`)}
+      onPressIn={tapped}
       accessibilityRole="button"
       accessibilityLabel={spoken}
       accessibilityHint="Opens this run."
@@ -301,7 +303,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.md,
   },
-  date: { ...text.micro, color: color.ink },
+  date: { ...text.micro, color: color.ink, flexShrink: 1 },
   /** The note: shrinks first, because the date must never be truncated. */
   session: {
     ...text.micro,

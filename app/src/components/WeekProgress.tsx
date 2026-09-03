@@ -26,7 +26,6 @@
  * the whole meaning.
  */
 import { StyleSheet, Text, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 
 import { Card } from "./Card";
 import { Absent } from "./Nothing";
@@ -51,9 +50,6 @@ const BAR_HEIGHT = space.md;
  * this shallow that reads as left-to-right, which is the direction the fill
  * grows in, and the hottest stop lands at the leading edge.
  */
-const EMBER_STOPS = [0, 0.45, 1] as const;
-const EMBER_START = { x: 0, y: 0 } as const;
-const EMBER_END = { x: 1, y: 1 } as const;
 
 export type WeekProgressProps = {
   /** KILOMETRES — `Profile["risk"]["weekKm"]`. */
@@ -120,12 +116,8 @@ export function WeekProgress({ weekKm, weeklyTargetKm }: WeekProgressProps) {
                 ]}
               />
             ) : (
-              <LinearGradient
-                colors={color.ember}
-                locations={EMBER_STOPS}
-                start={EMBER_START}
-                end={EMBER_END}
-                style={[styles.fill, { width: `${Math.min(100, rawPct)}%` }]}
+              <View
+                style={[styles.fill, styles.fillOn, { width: `${Math.min(100, rawPct)}%` }]}
               />
             )}
           </View>
@@ -169,6 +161,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
   },
   /** Flat, so over-plan differs from the gradient in more than hue. */
+  fillOn: { backgroundColor: color.brand },
   fillOver: { backgroundColor: color.watch },
   caption: { ...text.meta, color: color.muted, marginTop: space.sm },
   /** `watchText`, not `watch`: this is a glyph. 5.17:1 on card, vs 2.98:1. */

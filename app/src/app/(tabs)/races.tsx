@@ -24,7 +24,6 @@
  */
 import { useMemo } from "react";
 import {
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -35,6 +34,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
+import { Press } from "../../components/Press";
 import { Card } from "../../components/Card";
 import { Stat } from "../../components/Stat";
 import { AddRaceForm, RemoveRace } from "../../components/AddRaceForm";
@@ -404,14 +404,15 @@ export default function RacesScreen() {
           <Header count={null} />
           <Card>
             <Text style={styles.failed}>Your races could not be loaded.</Text>
-            <Pressable
+            <Press
               onPress={() => void refresh()}
               accessibilityRole="button"
               accessibilityLabel="Try loading your races again"
               style={styles.retry}
+              pressedStyle={styles.retryPressed}
             >
               <Text style={styles.retryLabel}>Try again</Text>
-            </Pressable>
+            </Press>
           </Card>
         </View>
       </SafeAreaView>
@@ -527,7 +528,7 @@ const styles = StyleSheet.create({
   raceNote: { ...text.meta, color: color.muted, marginTop: space.xs },
   /** Ember-coloured meta on the card ground — the pairing `countdown` uses.
       A word about the race, not a badge that rates it. */
-  priority: { ...text.meta, color: color.brandText, marginTop: space.xs },
+  priority: { ...text.meta, color: color.muted, marginTop: space.xs },
   checklist: { gap: space.xs, marginTop: space.md },
   checklistHead: { ...text.micro, color: color.muted },
   /** Prose, no marker, no glyph — see the block that renders this. */
@@ -543,8 +544,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: space.xl,
     borderRadius: radius.control,
-    backgroundColor: color.brand,
+    backgroundColor: color.muted,
   },
+  retryPressed: { backgroundColor: color.press },
   retryLabel: { ...text.baseSemi, color: color.ink },
 
   header: { marginBottom: layout.section },
@@ -557,19 +559,19 @@ const styles = StyleSheet.create({
     gap: space.md,
     marginTop: space.xs,
   },
-  heading: { ...text.title, color: color.ink },
+  heading: { ...text.prompt, color: color.ink },
   /**
    * Mono, with the noun welded on. Never a bare numeral. Ember on type, so it
    * takes `brandText` — 4.88:1 on `bg`, where `brand` itself is 2.01:1.
    */
-  count: { ...text.stat, color: color.brandText },
+  count: { ...text.stat, color: color.ink },
   sectionTitle: { ...text.title, color: color.ink },
   sectionNote: { ...text.meta, color: color.muted, flexShrink: 1 },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   /** The one loud thing on the screen, and only when the race is nearly here. */
   ember: {
-    height: space.xs,
+    height: 2,
     borderTopLeftRadius: radius.card - ruleWidth,
     borderTopRightRadius: radius.card - ruleWidth,
   },
@@ -598,7 +600,7 @@ const styles = StyleSheet.create({
     width: space.sm,
     height: space.sm,
     borderRadius: space.xs,
-    backgroundColor: color.brand,
+    backgroundColor: color.muted,
   },
   splitText: { ...text.meta, color: color.ink2, flexShrink: 1 },
 

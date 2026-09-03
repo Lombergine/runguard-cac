@@ -160,6 +160,13 @@ export default function ConnectScreen() {
       // Not a fetch guard — a scrub. The gate normally unmounts this screen
       // outright, so this branch covers the frames before that lands: drop
       // every athlete-derived value rather than let one outlive the session.
+      //
+      // The cascading-render warning is accepted deliberately here. Deferring
+      // this to a later tick is exactly what must not happen: it would leave a
+      // signed-out session's health data on screen for those frames, which
+      // `../../CLAUDE.md` treats as the same failure as leaking the token.
+      // One extra render is the correct price.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHealth(null);
       setFailure(null);
       return;
@@ -470,7 +477,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   /** INK on the ember, never white — 5.25:1 on the pressed `brandStrong`. */
-  actionLabel: { ...text.baseSemi, color: color.ink },
+  actionLabel: { ...text.baseSemi, color: color.bg },
 
   figures: {
     marginTop: space.xl,

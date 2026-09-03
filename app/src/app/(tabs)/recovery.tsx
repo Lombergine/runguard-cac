@@ -68,19 +68,21 @@
  */
 import { useMemo } from "react";
 import {
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import type { ColorValue } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Absent } from "../../components/Nothing";
+import { Press } from "../../components/Press";
 import { Card } from "../../components/Card";
+import { DisclosureRow } from "../../components/DisclosureRow";
 import { EXPLAINERS } from "../../components/InfoDot";
-import { Tile } from "../../components/Tile";
+import { ListSection } from "../../components/List";
 import { SleepChart } from "../../components/charts/SleepChart";
 import { SleepStages } from "../../components/charts/SleepStages";
 import { useProfile } from "../../lib/profileStore";
@@ -89,7 +91,7 @@ import { readinessBand, readinessValue, type ReadinessBand } from "../../lib/rea
 import type { Profile } from "../../lib/types";
 import { layout, radius, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
-import { text } from "../../theme/type";
+import { font, tabular, text } from "../../theme/type";
 
 /**
  * The website's three bands, in the app's register: lowercase, descriptive, no
@@ -108,7 +110,7 @@ const BAND_WORD: Record<ReadinessBand, string> = {
  * `watch` 3.19:1, fine for a bar and under the floor for a word read outdoors.
  * These three measure ≥5.13:1 on `card`. Same map as `(tabs)/index.tsx`.
  */
-const BAND_COLOR: Record<ReadinessBand, string> = {
+const BAND_COLOR: Record<ReadinessBand, ColorValue> = {
   under: color.unusualText,
   partial: color.watchText,
   recovered: color.okText,
@@ -359,95 +361,123 @@ function Readings({ profile }: { profile: Profile }) {
   const r = profile.risk.recovery;
   return (
     <>
-      <View style={styles.section}>
-        <SectionHeading title="Measured overnight" note="from your wearable" />
-        <View style={styles.grid}>
-          <View style={styles.gridRow}>
-            <Tile
-              label="Sleep · 7d avg"
-              info={EXPLAINERS.sleep7d}
-              value={r.sleepAvg !== null ? `${r.sleepAvg} h` : null}
-            />
-          </View>
-          <View style={styles.gridRow}>
-            <Tile
-              label="HRV"
-              info={EXPLAINERS.hrv}
-              value={r.hrv !== null ? `${r.hrv} ms` : null}
-              sub={
-                r.hrvDeltaPct !== null
-                  ? `${signed(r.hrvDeltaPct)}% vs base`
-                  : undefined
-              }
-            />
-            <Tile
-              label="Resting HR"
-              info={EXPLAINERS.restingHr}
-              value={r.restingHr !== null ? `${r.restingHr} bpm` : null}
-              sub={
-                r.restingHrDelta !== null
-                  ? `${signed(r.restingHrDelta)} bpm vs base`
-                  : undefined
-              }
-            />
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeading
-          title="Scored from those"
-          note="0–100, worked out rather than measured"
+      <ListSection
+        title="Measured overnight"
+        footer="Tap a reading for what it is and where it came from."
+      >
+        <DisclosureRow
+          label="Sleep · 7d avg"
+          source="From Apple Health"
+          explainer={EXPLAINERS.sleep7d}
+          value={reading(r.sleepAvg === null ? null : `${r.sleepAvg} h`)}
+          detail={r.sleepAvg === null ? "not recorded" : undefined}
         />
-        <View style={styles.gridRow}>
-          {/*
-            `freshness` is always a number, so `hasActivityHistory` is the
-            guard — see divergence 4 in the header. With nothing synced this
-            figure is 67 computed from an empty series.
-          */}
-          <Tile
-            label="Body battery"
-            info={EXPLAINERS.bodyBattery}
-            value={
-              profile.risk.hasActivityHistory && profile.fitness
-                ? `${profile.fitness.freshness}/100`
-                : null
-            }
-          />
-          {/*
-            GATED ON `sleepAvg`, NOT ON ITS OWN NULLNESS.
+        <DisclosureRow
+          label="HRV"
+          source="From Apple Health"
+          explainer={EXPLAINERS.hrv}
+          value={reading(r.hrv === null ? null : `${r.hrv} ms`)}
+          detail={
+            r.hrv === null
+              ? "not recorded"
+              : r.hrvDeltaPct !== null
+                ? `${signed(r.hrvDeltaPct)}% vs base`
+                : undefined
+          }
+        />
+        <DisclosureRow
+          label="Resting HR"
+          source="From Apple Health"
+          explainer={EXPLAINERS.restingHr}
+          value={reading(r.restingHr === null ? null : `${r.restingHr} bpm`)}
+          detail={
+            r.restingHr === null
+              ? "not recorded"
+              : r.restingHrDelta !== null
+                ? `${signed(r.restingHrDelta)} bpm vs base`
+                : undefined
+          }
+        />
+      </ListSection>
 
-            `patterns.sleepConsistency` is scored from the last seven nights that
-            HAVE data, with no window — while `recovery.sleepAvg` is the mean of
-            the last seven CALENDAR nights. When a watch stops syncing the two
-            come apart, and observed on the simulator on 2026-08-11 they read:
+      <ListSection
+        title="Scored from those"
+        footer="0–100, worked out rather than measured — not a reading off the watch."
+      >
+        {/*
+          `freshness` is always a number, so `hasActivityHistory` is the guard.
+          With nothing synced this figure is 67 computed from an empty series.
+        */}
+        <DisclosureRow
+          label="Body battery"
+          source="Computed by RunGuard"
+          explainer={EXPLAINERS.bodyBattery}
+          value={reading(
+            profile.risk.hasActivityHistory && profile.fitness
+              ? `${profile.fitness.freshness}/100`
+              : null
+          )}
+          detail={
+            profile.risk.hasActivityHistory && profile.fitness
+              ? undefined
+              : "not enough training history yet"
+          }
+        />
+        {/*
+          GATED ON `sleepAvg`, NOT ON ITS OWN NULLNESS.
 
-                SLEEP · 7D AVG        —  Not recorded
-                SLEEP CONSISTENCY     82/100
+          `patterns.sleepConsistency` is scored from the last seven nights that
+          HAVE data, with no window — while `recovery.sleepAvg` is the mean of
+          the last seven CALENDAR nights. When a watch stops syncing the two
+          come apart, and observed on the simulator on 2026-08-11 they read:
 
-            side by side, both describing the same nights. The 82 was computed
-            from nights ending 2026-07-28, a fortnight stale, and this tile's own
-            explainer says "the swing across the last 7 nights" — which was not
-            true of it. A stale number presented as a current one is the same
-            failure as a blank presented as a healthy one.
+              SLEEP · 7D AVG        —  Not recorded
+              SLEEP CONSISTENCY     82/100
 
-            So: if there is no sleep in the current window, consistency over that
-            window is unknown, whatever the engine still remembers.
-          */}
-          <Tile
-            label="Sleep consistency"
-            info={EXPLAINERS.sleepConsistency}
-            value={
-              profile.risk.recovery.sleepAvg != null &&
-              profile.patterns?.sleepConsistency != null
-                ? `${profile.patterns.sleepConsistency}/100`
-                : null
-            }
-          />
-        </View>
-      </View>
+          side by side, both describing the same nights. The 82 was computed
+          from nights ending 2026-07-28, a fortnight stale, and this row's own
+          explainer says "the swing across the last 7 nights" — which was not
+          true of it. A stale number presented as a current one is the same
+          failure as a blank presented as a healthy one.
+
+          So: if there is no sleep in the current window, consistency over that
+          window is unknown, whatever the engine still remembers.
+        */}
+        <DisclosureRow
+          label="Sleep consistency"
+          source="Computed by RunGuard"
+          explainer={EXPLAINERS.sleepConsistency}
+          value={reading(
+            r.sleepAvg != null && profile.patterns?.sleepConsistency != null
+              ? `${profile.patterns.sleepConsistency}/100`
+              : null
+          )}
+          detail={
+            r.sleepAvg != null && profile.patterns?.sleepConsistency != null
+              ? undefined
+              : "no sleep recorded in the window"
+          }
+        />
+      </ListSection>
     </>
   );
+}
+
+/**
+ * A reading in a list row, or the dash that means it was never recorded.
+ *
+ * Matches `<Tile/>`'s null case exactly — an inline dash in `color.unknown`,
+ * never a nested `<Absent/>` box. Tile's own header explains why: three
+ * stacked dashed rectangles dominated the screen and read as three failures to
+ * load. In a grouped list the argument is stronger still, because the row
+ * already has a label and a detail line to carry "not recorded" in words.
+ *
+ * Colour is not doing the work on its own — the dash is a different GLYPH from
+ * every figure beside it, and the detail line says so in text.
+ */
+function reading(value: string | null) {
+  if (value === null) return <Text style={styles.absentValue}>—</Text>;
+  return <Text style={styles.readingValue}>{value}</Text>;
 }
 
 /* ------------------------------------------------------------------ *
@@ -473,14 +503,15 @@ export default function RecoveryScreen() {
             <Text style={styles.failed}>
               Your recovery data could not be loaded.
             </Text>
-            <Pressable
+            <Press
               onPress={() => void refresh()}
               accessibilityRole="button"
               accessibilityLabel="Try loading your recovery data again"
               style={styles.retry}
+              pressedStyle={styles.retryPressed}
             >
               <Text style={styles.retryLabel}>Try again</Text>
-            </Pressable>
+            </Press>
           </Card>
         </View>
       </SafeAreaView>
@@ -626,6 +657,10 @@ export default function RecoveryScreen() {
 }
 
 const styles = StyleSheet.create({
+  /* A reading in a list row: mono, so figures line up down the column. */
+  readingValue: { ...text.baseSemi, ...tabular, fontFamily: font.mono, color: color.ink },
+  /* The dash that means never recorded. Same token Tile's null case uses. */
+  absentValue: { ...text.baseSemi, color: color.unknown },
   safe: { flex: 1, backgroundColor: color.bg },
   page: {
     paddingHorizontal: layout.page,
@@ -637,7 +672,7 @@ const styles = StyleSheet.create({
 
   header: { marginBottom: layout.section },
   eyebrow: { ...text.micro, color: color.muted },
-  heading: { ...text.title, color: color.ink, marginTop: space.xs },
+  heading: { ...text.prompt, color: color.ink, marginTop: space.xs },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },
 
   /** Title left, muted note right — the website's Panel head (tabs.tsx:22). */
@@ -696,6 +731,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
     backgroundColor: color.brand,
   },
+  retryPressed: { backgroundColor: color.press },
   retryLabel: { ...text.baseSemi, color: color.ink },
 
   skeleton: { borderRadius: radius.card, backgroundColor: color.well },

@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.sm,
   },
-  date: { ...text.micro, color: color.muted },
+  date: { ...text.micro, color: color.muted, flexShrink: 1 },
   /** Today, in the ember text colour — 5.21:1 on card. */
   dateToday: { color: color.brandText },
 
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },
-  pillLabel: { ...text.meta, color: color.brandText },
+  pillLabel: { ...text.meta, color: color.muted },
 
   /*
    * Outlined like the taper pill, but in ember rather than the neutral rule, so
@@ -675,12 +675,12 @@ const styles = StyleSheet.create({
    */
   coachPill: {
     borderWidth: ruleWidth,
-    borderColor: color.brandStrong,
+    borderColor: color.ruleStrong,
     borderRadius: radius.control,
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },
-  coachPillLabel: { ...text.meta, color: color.brandText },
+  coachPillLabel: { ...text.meta, color: color.ink2 },
 
   type: { ...text.base, color: color.ink, marginTop: space.xs },
   prescription: { marginTop: space.xs },
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
    * Asked for, not yet answered: the border moves, the FILL does not. The fill
    * is the claim that the server has it, and only a confirmation may set it.
    */
-  choicePending: { borderColor: color.brandStrong },
+  choicePending: { borderColor: color.ruleStrong },
   /** Opacity, never the selected fill — see StatusButtons. */
   choicePressed: { opacity: 0.72 },
   choiceLabel: { ...text.baseSemi, color: color.ink, textAlign: "center" },

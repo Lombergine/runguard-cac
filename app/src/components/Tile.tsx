@@ -26,9 +26,9 @@
 import { View, Text, StyleSheet } from "react-native";
 
 import { InfoDot } from "./InfoDot";
-import { color, shadow } from "../theme/tokens";
+import { color } from "../theme/tokens";
 import { text, font, tabular } from "../theme/type";
-import { layout, radius, ruleWidth, space } from "../theme/space";
+import { layout, radius, space, ruleWidth } from "../theme/space";
 
 export type TileProps = {
   /** Micro-label, e.g. "Resting HR". Rendered uppercase by `text.micro`. */
@@ -122,6 +122,9 @@ export function Tile({ label, value, sub, accent, info }: TileProps) {
         <Text style={styles.label}>{label}</Text>
       )}
       <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
         style={[
           styles.value,
           absent ? styles.valueAbsent : accent ? { color: accent } : null,
@@ -143,10 +146,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.rule,
     borderRadius: radius.card,
     padding: layout.cardPadding,
-    ...shadow.card,
   },
   label: { ...text.micro, color: color.muted },
   /** Only reached when `info` is passed — see the note on the prop. */
@@ -157,7 +159,8 @@ const styles = StyleSheet.create({
     height: text.micro.lineHeight as number,
     justifyContent: "center",
   },
-  value: { ...text.stat, color: color.ink, marginTop: space.xs },
+  /** A step under `stat`: two of these share a row, and "63.5 ml/kg/min" has to fit one line. */
+  value: { ...text.stat, fontSize: 20, lineHeight: 24, color: color.ink, marginTop: space.xs },
   /** Same size and position as a real value, so rows stay aligned. */
   valueAbsent: { color: color.unknown },
   // Mono at metadata size: the sub-line carries a figure ("+3 bpm vs base"),

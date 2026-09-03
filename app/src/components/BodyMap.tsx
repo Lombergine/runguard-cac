@@ -67,9 +67,11 @@
  * intensity and would be a blank rendered as the worst possible reading.
  */
 import { Pressable, StyleSheet, View } from "react-native";
+import type { ColorValue } from "react-native";
 import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
 
 import { BODY_PARTS } from "../lib/bodyParts";
+import { Press } from "./Press";
 import { BodyMapProps, BodyMark } from "../lib/types";
 import { ruleWidth, target } from "../theme/space";
 import { color } from "../theme/tokens";
@@ -259,9 +261,13 @@ function Picker({
           : [box];
 
         return boxes.map((b, i) => (
-          <Pressable
+          <Press
             key={`${p.key}-${i}`}
             onPress={() => onToggle(p.key)}
+            /* The region's fill is the visual answer; the box itself is
+               invisible, so scaling it would move nothing the eye can see. */
+            scale={false}
+            haptic="select"
             accessibilityRole="button"
             accessibilityLabel={p.label}
             accessibilityState={{ selected: on }}
@@ -301,7 +307,7 @@ function Picker({
  * says.
  * ------------------------------------------------------------------ */
 
-const MARK_COLOR: Record<"injury" | "severe" | "moderate" | "mild", string> = {
+const MARK_COLOR: Record<"injury" | "severe" | "moderate" | "mild", ColorValue> = {
   injury: color.unusual,
   severe: color.unusual,
   moderate: color.serious,

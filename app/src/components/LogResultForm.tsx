@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
     marginTop: space.xl,
     overflow: "hidden",
   },
-  actionLabel: { ...text.baseSemi, color: color.ink },
+  actionLabel: { ...text.baseSemi, color: color.bg },
 
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },

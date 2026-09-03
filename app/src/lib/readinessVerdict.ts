@@ -1,3 +1,4 @@
+import type { ColorValue } from "react-native";
 /**
  * Readiness presentation, mirrored from the web athlete portal.
  *
@@ -37,7 +38,7 @@ export function readinessBand(value: number): ReadinessBand {
 }
 
 /** Website `readyColor`, mapped onto this app's status tokens. */
-export function readinessColor(value: number): string {
+export function readinessColor(value: number): ColorValue {
   switch (readinessBand(value)) {
     case "under":
       return color.unusual;

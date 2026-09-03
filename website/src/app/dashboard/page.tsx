@@ -1,19 +1,40 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { localDayOffset } from "@/lib/day";
 import { miNum } from "@/lib/units";
-import Link from "next/link";
-import { athletesForTeam, getTeam, activitiesForAthlete, metricsForAthlete, sorenessHistory, teamPlanDays } from "@/lib/db";
-import { computeRisk, sessionSpike, type RiskSnapshot, type SessionSpike } from "@/lib/risk";
-import { computeFitness } from "@/lib/engine";
+import { getTeam, teamPlanDays } from "@/lib/db";
+import {
+  buildRoster,
+  teamStats,
+  STALE_AFTER_DAYS,
+  SELF_REPORT_LOOKBACK_DAYS,
+} from "@/lib/roster";
 import { currentTeamId } from "@/lib/session";
-import { parseRange, fetchDays } from "@/lib/range";
+import { parseRange } from "@/lib/range";
 import Avatar from "@/components/Avatar";
-import { LoadSpark } from "@/components/charts";
+import { WeeklyKmChart } from "@/components/charts";
 import InviteCard from "./InviteCard";
 import RangePicker from "./RangePicker";
+import { Tile, TodaysSession, RosterFlags } from "./_shared";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The team overview — "how is the squad", answered without scrolling.
+ *
+ * This page and `/dashboard/roster` were one route. The roster table is
+ * fourteen rows deep on a real team, which pushed every team-level number below
+ * the fold, so the coach's first question ("is anything wrong today") was
+ * answered underneath the answer to their second ("who do I open"). They are a
+ * tab each now.
+ *
+ * ── NOTHING HERE IS A NEW MEASUREMENT ──────────────────────────────────────
+ * Every figure is an aggregate of what `buildRoster` already computed per
+ * athlete, and the aggregation itself lives in `lib/roster.ts` as `teamStats`
+ * — the same function `/api/mobile/coach/roster` ships to the native coach
+ * dashboard. Computing it here as well is how the phone and this page would
+ * start banding the same squad differently.
+ */
 export default async function Dashboard({
   searchParams,
 }: {
@@ -28,76 +49,43 @@ export default async function Dashboard({
   // renders that must be replayable, which this is not.
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
-  // Read wide enough for the chosen window AND the equal window before it, plus
-  // the 28-day chronic baseline the risk engine builds off the same array. See
-  // fetchDays(): a short window must not starve ACWR.
-  const since = new Date(nowMs - fetchDays(range) * 86400000).toISOString();
-  const rangeStart = new Date(nowMs - range.days * 86400000).toISOString();
-  const prevRangeStart = new Date(nowMs - range.days * 2 * 86400000).toISOString();
-  const soreSince = localDayOffset(13, new Date(nowMs));
-  // Today and tomorrow off the team calendar, for the strip below the header.
-  // Two days, not seven: this is the "what are we doing" glance before practice,
-  // and the full picture is one click away on /dashboard/plan.
   const todayIso = localDayOffset(0, new Date(nowMs));
   const tomorrowIso = localDayOffset(-1, new Date(nowMs));
   const planAhead = teamId ? await teamPlanDays(teamId, todayIso, tomorrowIso) : new Map();
-  // Fail closed rather than falling back to every athlete in the database.
-  const roster = teamId ? await athletesForTeam(teamId) : [];
-  const athletes = await Promise.all(roster.map(async (a) => {
-    const acts = await activitiesForAthlete(a.id, since);
-    const metrics = await metricsForAthlete(a.id, since);
-    // the roster is the coach's triage screen — it has to see what athletes
-    // reported, not just what their watches recorded
-    const sore = (await sorenessHistory(a.id, soreSince)).map((s) => ({
-      date: s.date,
-      body_part: s.body_part,
-      severity: s.severity,
-    }));
-    const risk = computeRisk(acts, metrics, new Date(nowMs), sore, a);
-    const fitness = computeFitness(risk, metrics, acts);
-    // Distance over the window the coach picked, and over the equally long
-    // window immediately before it. Computed here rather than taken from
-    // risk.weekKm, which is fixed at 7 days by definition and must stay that
-    // way — ACWR is only meaningful on its own windows.
-    const km = (from: string, to?: string) =>
-      acts
-        .filter((x) => x.start_time >= from && (to === undefined || x.start_time < to))
-        .reduce((sum, x) => sum + x.distance_m / 1000, 0);
-    const rangeKm = km(rangeStart);
-    const prevRangeKm = km(prevRangeStart, rangeStart);
-    // most recent run that was markedly longer than anything before it
-    const spikeRun = [...acts]
-      .sort((x, y) => y.start_time.localeCompare(x.start_time))
-      .slice(0, 7)
-      .map((x) => ({ at: x.start_time, spike: sessionSpike(x, acts) }))
-      .find((x) => x.spike !== null);
-    return { a, risk, fitness, spike: spikeRun?.spike ?? null, rangeKm, prevRangeKm };
-  }));
-  // Alphabetical, deliberately. Ranking minors by an injury-risk number teaches
-  // them to inflate their check-ins to avoid being at the top of it — which
-  // corrupts self-report, the most sensitive signal in the whole system.
-  athletes.sort((x, y) => x.a.name.localeCompare(y.a.name));
 
-  const spikes = athletes.filter((x) => x.spike !== null).length;
-  const sore = athletes.filter(
-    (x) => x.risk.selfReport.persistentPart && x.risk.selfReport.persistentDays >= 3
-  ).length;
-  const quiet = athletes.filter(
-    (x) => !x.risk.selfReport.hasData || (x.risk.selfReport.daysSinceReport ?? 0) >= 5
-  ).length;
-  const teamKm = athletes.reduce((s, x) => s + x.rangeKm, 0);
-  const teamPrevKm = athletes.reduce((s, x) => s + x.prevRangeKm, 0);
-  // Null, not 0. With no distance in the previous window there is no percentage
-  // to state, and printing "+0%" there claims the team held steady when the
-  // truth is that nothing was recorded to compare against.
-  const teamDelta =
-    teamPrevKm > 0 ? Math.round(((teamKm - teamPrevKm) / teamPrevKm) * 100) : null;
+  const { entries: athletes, summary } = teamId
+    ? await buildRoster(teamId, range, nowMs)
+    : { entries: [], summary: { spikes: 0, sore: 0, quiet: 0, teamKm: 0, teamChangePct: null } };
+  const { spikes, sore, quiet, teamKm, teamChangePct: teamDelta } = summary;
 
-  const today = new Date().toLocaleDateString("en-US", {
+  const today = new Date(nowMs).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
+
+  /* One computation, two surfaces — see lib/roster.ts. */
+  const stats = teamStats(athletes, todayIso);
+  const bands = stats.acwr;
+
+  /* Who needs opening today, in the roster's own order (missing data first). */
+  const needsLook = athletes.filter(
+    (a) =>
+      a.spike !== null ||
+      (a.risk.selfReport.persistentPart && a.risk.selfReport.persistentDays >= 3) ||
+      a.daysSinceCheckIn === null ||
+      a.daysSinceCheckIn >= STALE_AFTER_DAYS
+  );
+
+  /* Weeks arrive as ISO Mondays; a component never derives a date, so the
+     label is made here. */
+  const teamWeeks = stats.weeks.map((w) => ({
+    week: new Date(w.week + "T12:00:00").toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
+    km: w.km,
+  }));
 
   return (
     <div className="space-y-8">
@@ -105,7 +93,8 @@ export default async function Dashboard({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Before practice today</h1>
           <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>
-            {team ? `${team.name} · ` : ""}{today} · {athletes.length} athlete{athletes.length === 1 ? "" : "s"} tracked
+            {team ? `${team.name} · ` : ""}{today} · {athletes.length} athlete
+            {athletes.length === 1 ? "" : "s"} tracked
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -114,9 +103,7 @@ export default async function Dashboard({
             page is force-dynamic so it is never prerendered, but Next still
             prerenders the error and not-found shells that wrap it, and an
             unsuspended useSearchParams there fails the build rather than the
-            request — a failure that would only appear at deploy time, which is
-            the worst moment to find it. The fallback is a same-size blank so
-            the header does not jump.
+            request — a failure that would only appear at deploy time.
           */}
           <Suspense fallback={<div style={{ width: 190, height: 38 }} />}>
             <RangePicker />
@@ -125,12 +112,6 @@ export default async function Dashboard({
         </div>
       </div>
 
-      {/*
-        Today's session, straight off the team calendar. The coach's own note
-        asked for the calendar to reach "the home screen dashboard" — this is
-        that, and it doubles as the empty-state prompt for a coach who has not
-        written anything yet.
-      */}
       <TodaysSession
         today={planAhead.get(todayIso) ?? null}
         tomorrow={planAhead.get(tomorrowIso) ?? null}
@@ -143,19 +124,31 @@ export default async function Dashboard({
         >
           <div className="text-lg font-semibold">Your roster is empty — for now</div>
           <p className="text-sm mt-2 max-w-md mx-auto" style={{ color: "var(--ink-muted)" }}>
-            Share your team code with your athletes. When they sign up with it, they show up here
-            automatically — risk-ranked, the moment their watch syncs.
+            Share your team code with your athletes. When they sign up with it, they show up
+            here automatically — risk-ranked, the moment their watch syncs.
           </p>
           {team && (
-            <div className="mt-4 inline-block rounded-xl border px-6 py-3" style={{ borderColor: "var(--brand)", background: "color-mix(in oklab, var(--brand) 8%, var(--surface))" }}>
-              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Team code</div>
-              <div className="text-2xl font-extrabold tracking-wider" style={{ color: "var(--brand-strong)" }}>{team.join_code}</div>
+            <div
+              className="mt-4 inline-block rounded-xl border px-6 py-3"
+              style={{
+                borderColor: "var(--brand)",
+                background: "color-mix(in oklab, var(--brand) 8%, var(--surface))",
+              }}
+            >
+              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
+                Team code
+              </div>
+              <div
+                className="text-2xl font-extrabold tracking-wider"
+                style={{ color: "var(--brand-strong)" }}
+              >
+                {team.join_code}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* stat tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
@@ -192,251 +185,231 @@ export default async function Dashboard({
         ))}
       </div>
 
-      {/* roster */}
-      <div
-        className="rounded-2xl border overflow-hidden"
-        style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
-      >
-        <table className="w-full text-sm">
-          <thead>
-            <tr
-              className="text-left text-xs uppercase tracking-wide"
-              style={{ color: "var(--ink-muted)" }}
-            >
-              <th className="px-4 py-3 font-medium">Athlete</th>
-              <th className="px-3 py-3 font-medium">Needs a look</th>
-              <th className="px-3 py-3 font-medium text-right">{range.short} mi</th>
-              <th className="px-3 py-3 font-medium hidden md:table-cell w-36">Last 4 weeks</th>
-              <th className="px-3 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {athletes.map(({ a, risk, fitness, spike, rangeKm }) => (
-
-              <tr
-                key={a.id}
-                className="border-t transition-colors hover:bg-black/[0.03]"
-                style={{
-                  borderColor: "var(--hairline)",
-                  boxShadow: `inset 3px 0 0 ${
-                    spike || (risk.selfReport.persistentPart && risk.selfReport.persistentDays >= 3)
-                      ? "var(--status-warning)"
-                      : "transparent"
-                  }`,
-                }}
-              >
-                <td className="px-4 py-3">
-                  <Link href={`/dashboard/athlete/${a.id}`} className="flex items-center gap-3">
-                    <Avatar name={a.name} hue={a.avatar_hue} />
-                    <span>
-                      <span className="font-medium block leading-tight">{a.name}</span>
-                      <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
-                        Grade {a.grade} · {fitness.tier}
-                      </span>
-                    </span>
-                  </Link>
-                </td>
-                <td className="px-3 py-3">
-                  <RosterFlags self={risk.selfReport} spike={spike} />
-                </td>
-                <td className="px-3 py-3 text-right tabular-nums" style={{ color: "var(--ink-2)" }}>
-                  {miNum(rangeKm)}
-                </td>
-                <td className="px-3 py-1 hidden md:table-cell">
-                  <LoadSpark data={risk.series} />
-                </td>
-                <td className="px-3 py-3 text-right">
+      {/*
+        The one actionable block. It repeats rows that are also on the roster
+        tab, on purpose: the overview's job is that a coach who reads only this
+        page has still seen everyone who needs opening before practice starts.
+      */}
+      {athletes.length > 0 && (
+        <Panel
+          title="Needs a look before practice"
+          note={needsLook.length > 0 ? `${needsLook.length} of ${athletes.length}` : undefined}
+          action={{ href: "/dashboard/roster", label: "Full roster →" }}
+        >
+          {needsLook.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+              Nothing flagged, and everyone has checked in recently. The roster tab has the
+              full squad.
+            </p>
+          ) : (
+            <ul className="divide-y" style={{ borderColor: "var(--hairline)" }}>
+              {needsLook.map(({ athlete: a, risk, spike, daysSinceCheckIn }) => (
+                <li key={a.id} className="first:pt-0 py-3" style={{ borderColor: "var(--hairline)" }}>
                   <Link
                     href={`/dashboard/athlete/${a.id}`}
-                    className="text-xs font-medium hover:underline"
-                    style={{ color: "var(--brand-strong)" }}
+                    className="flex flex-wrap items-center gap-x-4 gap-y-1.5 group"
                   >
-                    View →
+                    <Avatar name={a.name} hue={a.hue} size={32} />
+                    <span className="font-medium group-hover:underline">{a.name}</span>
+                    <span className="flex-1 min-w-48">
+                      <RosterFlags
+                        self={risk.selfReport}
+                        spike={spike}
+                        daysSinceCheckIn={daysSinceCheckIn}
+                        windowDays={SELF_REPORT_LOOKBACK_DAYS}
+                      />
+                    </span>
+                    <span className="text-xs font-medium" style={{ color: "var(--brand-strong)" }}>
+                      Open →
+                    </span>
                   </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      )}
 
-      <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
-        The window above moves the distance figures. Soreness patterns stay on their own
-        7-day lookback and acute:chronic workload stays 7-day vs 28-day — both are defined
-        on fixed windows and would mean nothing rescaled. Numbers update as watches sync.
-      </p>
+      {athletes.length > 0 && (
+        <div className="grid lg:grid-cols-2 gap-4 items-start">
+          <Panel title="Team distance" note="everyone added together, through last week">
+            <WeeklyKmChart data={teamWeeks} />
+          </Panel>
+
+          <Panel
+            title="Workload spread"
+            note="context only — this ratio showed no link to injury in a 5,205-runner study"
+          >
+            {bands.rated === 0 ? (
+              <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
+                Not enough training history on anyone yet for a workload ratio.
+              </p>
+            ) : (
+              <>
+                <BandBar
+                  segments={[
+                    { n: bands.under, label: "under 0.8", color: "var(--series-1)" },
+                    { n: bands.inZone, label: "0.8–1.3", color: "var(--status-good)" },
+                    { n: bands.over, label: "above 1.3", color: "var(--status-warning)" },
+                  ]}
+                  total={bands.rated}
+                />
+                <p className="text-xs mt-3" style={{ color: "var(--ink-muted)" }}>
+                  {/*
+                    Stated, not dropped. Taking the bands over a smaller
+                    denominator without saying so would report athletes we know
+                    nothing about as sitting in the safe band.
+                  */}
+                  Of {athletes.length} athlete{athletes.length === 1 ? "" : "s"}, {bands.rated} ha
+                  {bands.rated === 1 ? "s" : "ve"} enough history to rate
+                  {bands.unrated > 0
+                    ? `; ${bands.unrated} ha${bands.unrated === 1 ? "s" : "ve"} not synced enough yet`
+                    : ""}
+                  .
+                </p>
+              </>
+            )}
+          </Panel>
+        </div>
+      )}
+
+      {athletes.length > 0 && (
+        <div className="grid lg:grid-cols-2 gap-4 items-start">
+          {/*
+            The window is in the title, and the tile above is named alongside
+            it. Unlabelled, this panel read "0 of 14" three inches under a tile
+            reading "NOT CHECKING IN 0 — Everyone reporting", and both were
+            true: nobody has logged one SINCE MIDNIGHT, and everybody has logged
+            one in the last few days. Two windows, one screen, and no way for a
+            coach to tell that from the numbers alone.
+          */}
+          <Panel
+            title="Self-reports logged today"
+            note={`${stats.reportedToday} of ${athletes.length} so far`}
+          >
+            <BandBar
+              segments={[
+                { n: stats.reportedToday, label: "logged today", color: "var(--status-good)" },
+                {
+                  n: athletes.length - stats.reportedToday,
+                  label: "not yet today",
+                  color: "var(--surface-3)",
+                  muted: true,
+                },
+              ]}
+              total={athletes.length}
+            />
+            <p className="text-xs mt-3" style={{ color: "var(--ink-muted)" }}>
+              Today only — the tile above counts anyone quiet for {STALE_AFTER_DAYS}+ days,
+              which is the one worth chasing. Self-reports are the only input RunGuard cannot
+              read from a watch: a quiet athlete is not a healthy one, they are an unknown one.
+            </p>
+          </Panel>
+
+          <Panel title="Squad by tier" note="from each athlete's own fitness score">
+            <div className="flex flex-wrap gap-2">
+              {stats.tiers.map((t) => (
+                <div
+                  key={t.tier}
+                  className="rounded-xl border px-4 py-3"
+                  style={{ borderColor: "var(--hairline)", background: "var(--surface-2)" }}
+                >
+                  <div className="text-2xl font-bold tabular-nums leading-none">{t.n}</div>
+                  <div className="text-xs mt-1" style={{ color: "var(--ink-muted)" }}>
+                    {t.tier}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }
 
-/**
- * Everything on this row a coach could act on today — and nothing they can't.
- *
- * There is no score here by design. A ranked injury number taught athletes to
- * inflate their check-ins to stay off the top of it, which corrupted the most
- * sensitive signal in the system. These are specific, named, and tied either to
- * a session that already happened or to a pattern in what the athlete reported.
- *
- * A blank cell means nothing needs attention — not that the athlete is fine.
- * That distinction is why "no check-in" is itself one of the states.
- */
-function RosterFlags({
-  self,
-  spike,
+function Panel({
+  title,
+  note,
+  action,
+  children,
 }: {
-  self: RiskSnapshot["selfReport"];
-  spike: SessionSpike | null;
+  title: string;
+  note?: string;
+  action?: { href: string; label: string };
+  children: React.ReactNode;
 }) {
-  const persistent = self.persistentPart && self.persistentDays >= 3;
-  const acute = !persistent && self.todayMax >= 6;
-  const stale = self.hasData && (self.daysSinceReport ?? 0) >= 5;
-
-  const rows: { text: string; color: string; title?: string }[] = [];
-
-  if (spike) {
-    rows.push({
-      text: `\u26a0 ${miNum(spike.km)} mi run · ${spike.pctAbove}% over usual`,
-      color: spike.level === "large" ? "var(--status-critical)" : "var(--status-warning)",
-      title: `Longest run in the 30 days before it was ${miNum(spike.longestKm)} mi`,
-    });
-  }
-  if (persistent) {
-    rows.push({
-      text: `\u26a0 ${self.persistentPart} · ${self.persistentDays}/7d${self.escalating ? " \u2191" : ""}`,
-      color: "var(--status-warning)",
-      title: `Reported sore on ${self.persistentDays} of the last 7 days, peak ${self.persistentPeak}/10`,
-    });
-  } else if (acute) {
-    rows.push({
-      text: `\u26a0 ${self.todayPart} · ${self.todayMax}/10 today`,
-      color: "var(--status-critical)",
-    });
-  }
-  if (!self.hasData) {
-    rows.push({ text: "no check-ins", color: "var(--ink-muted)" });
-  } else if (stale) {
-    rows.push({ text: `no check-in · ${self.daysSinceReport}d`, color: "var(--ink-muted)" });
-  }
-
-  if (!rows.length) {
-    return <span className="text-sm" style={{ color: "var(--ink-muted)" }}>—</span>;
-  }
-
-  return (
-    <div className="space-y-0.5">
-      {rows.map((r, i) => (
-        <div key={i} className="text-[11px] font-medium" style={{ color: r.color }} title={r.title}>
-          {r.text}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * What the team is doing today, per the coach's own calendar.
- *
- * Shows nothing invented. With no session written it says so and links to the
- * calendar, rather than displaying RunGuard's generated suggestion here — that
- * suggestion is per-athlete by design, so there is no single team answer to
- * print, and printing one athlete's would be misleading on a team screen.
- */
-function TodaysSession({
-  today,
-  tomorrow,
-}: {
-  today: { type: string; distance_m: number | null; target_pace: string | null; details: string | null } | null;
-  tomorrow: { type: string; distance_m: number | null } | null;
-}) {
-  const line = (d: { type: string; distance_m: number | null; target_pace?: string | null }) =>
-    [d.type, d.distance_m != null ? `${miNum(d.distance_m / 1000)} mi` : null, d.target_pace]
-      .filter(Boolean)
-      .join(" · ");
-
-  if (!today && !tomorrow) {
-    return (
-      <div
-        className="rounded-2xl border p-5 flex flex-wrap items-center gap-x-4 gap-y-2"
-        style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
-      >
-        <div className="flex-1 min-w-60">
-          <div className="text-sm font-semibold">No session on the calendar today</div>
-          <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>
-            Athletes are seeing RunGuard&apos;s own suggestion, adapted to each of them.
-            Write your own and it replaces it for the whole team.
-          </p>
-        </div>
-        <Link
-          href="/dashboard/plan"
-          className="rounded-full px-5 py-2.5 text-sm font-semibold text-black"
-          style={{ background: "var(--brand)" }}
-        >
-          Open the training calendar →
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div
       className="rounded-2xl border p-5"
-      style={{
-        borderColor: "var(--brand)",
-        background: "color-mix(in oklab, var(--brand) 6%, var(--surface))",
-      }}
+      style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="micro-label" style={{ color: "var(--brand-strong)" }}>
-          Today&apos;s session
-        </div>
-        <Link href="/dashboard/plan" className="text-xs hover:underline" style={{ color: "var(--brand-strong)" }}>
-          Edit the calendar →
-        </Link>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-3">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {note && (
+          <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
+            {note}
+          </span>
+        )}
+        {action && (
+          <Link
+            href={action.href}
+            className="text-xs font-medium hover:underline"
+            style={{ color: "var(--brand-strong)" }}
+          >
+            {action.label}
+          </Link>
+        )}
       </div>
-      <div className="text-xl font-bold mt-1">
-        {today ? line(today) : "Nothing written for today"}
-      </div>
-      {today?.details && (
-        <p className="text-sm mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
-          {today.details}
-        </p>
-      )}
-      {tomorrow && (
-        <p className="text-xs mt-2.5" style={{ color: "var(--ink-muted)" }}>
-          Tomorrow: {line(tomorrow)}
-        </p>
-      )}
+      {children}
     </div>
   );
 }
 
-function Tile({
-  label,
-  value,
-  sub,
-  accent,
+/**
+ * A proportion bar with the counts written on it.
+ *
+ * The numbers are printed beside each swatch rather than left to the segment
+ * widths, because a band holding one athlete out of fourteen is a sliver — and
+ * "one athlete is ramping hard" is exactly the case a coach must not miss to a
+ * rounding error in a bar.
+ */
+function BandBar({
+  segments,
+  total,
 }: {
-  label: string;
-  value: string;
-  sub?: string;
-  accent?: string;
+  segments: { n: number; label: string; color: string; muted?: boolean }[];
+  total: number;
 }) {
+  const shown = segments.filter((s) => s.n > 0);
   return (
-    <div
-      className="rounded-2xl border p-4"
-      style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
-    >
-      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
-        {label}
+    <>
+      <div
+        className="flex h-3 rounded-full overflow-hidden"
+        style={{ background: "var(--surface-3)" }}
+      >
+        {shown.map((s) => (
+          <div
+            key={s.label}
+            style={{ width: `${(s.n / Math.max(1, total)) * 100}%`, background: s.color }}
+          />
+        ))}
       </div>
-      <div className="text-3xl font-bold mt-1" style={{ color: accent ?? "var(--ink)" }}>
-        {value}
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-3">
+        {segments.map((s) => (
+          <span key={s.label} className="inline-flex items-center gap-2 text-xs">
+            <span
+              className="w-2.5 h-2.5 rounded-sm inline-block shrink-0"
+              style={{
+                background: s.color,
+                border: s.muted ? "1px solid var(--hairline-strong)" : undefined,
+              }}
+            />
+            <span className="tabular-nums font-semibold">{s.n}</span>
+            <span style={{ color: "var(--ink-muted)" }}>{s.label}</span>
+          </span>
+        ))}
       </div>
-      {sub && (
-        <div className="text-xs mt-1" style={{ color: "var(--ink-muted)" }}>
-          {sub}
-        </div>
-      )}
-    </div>
+    </>
   );
 }

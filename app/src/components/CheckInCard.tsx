@@ -66,15 +66,16 @@
  * *which side and exactly how much*.
  * ─────────────────────────────────────────────────────────────────────────
  */
-import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { BODY_PARTS, getBodyPart, sorenessLabel, type Side } from "../lib/bodyParts";
+import { selected as selectionHaptic } from "../lib/motion";
 import { layout, radius, ruleWidth, space, target } from "../theme/space";
-import { color, shadow } from "../theme/tokens";
+import { color, shadow, useColors } from "../theme/tokens";
 import { font, tabular, text } from "../theme/type";
 import { BodyMap } from "./BodyMap";
+import { Ring } from "./Ring";
 
 /** The sleep question's three answers. */
 export type SleepAnswer = "bad" | "ok" | "good";
@@ -171,6 +172,15 @@ const PROMPT_LINE = text.prompt.lineHeight as number;
  * forbidden from moving under their thumb, which is only guaranteed while the
  * skeleton and the card are built from the same numbers in the same file.
  */
+/** The arc is "of a full night", and eight hours is that for a teenager. */
+const FULL_NIGHT_H = 8;
+const RING = 72;
+/** "7h 12m" — one node, hours and minutes welded. */
+function fmtHours(h: number): string {
+  const total = Math.round(h * 60);
+  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, "0")}m`;
+}
+
 const metrics = {
   /** One line of the panel title, taken from the scale rather than guessed at. */
   headLine: text.title.lineHeight as number,
@@ -185,9 +195,11 @@ const metrics = {
    *
    * Composed from the pieces rather than picked: the head, the two-line prompt,
    * the air the spec asks for, and the answer row. It is a FLOOR, not a height —
-   * the panel grows past it once the body map is disclosed. Before that, on any
-   * phone taller than this, the card still reads as the full-bleed hero it is
-   * meant to be, because the spacer takes the slack.
+   * the panel grows past it once the body map is disclosed, and the spacer takes
+   * up whatever slack the floor leaves when the content is shorter.
+   *
+   * It is now the ONLY floor. The card used to take `flex: 1` on top of this and
+   * stretch to the viewport; see the `panel` style for why that was removed.
    */
   panelMin:
     layout.cardPadding * 2 +
@@ -203,28 +215,7 @@ const metrics = {
  * 45%. 135° in CSS runs top-left to bottom-right, which is what this start/end
  * pair describes.
  */
-const EMBER_STOPS = [0, 0.45, 1] as const;
-const EMBER_START = { x: 0, y: 0 } as const;
-const EMBER_END = { x: 1, y: 1 } as const;
 
-/**
- * The ember hairline along the top edge of the panel — the port of the
- * website's `.card-ember`, which it reserves for hero cards. It is decoration
- * with no state in it, so it is hidden from assistive tech.
- */
-function EmberEdge() {
-  return (
-    <LinearGradient
-      colors={color.ember}
-      locations={EMBER_STOPS}
-      start={EMBER_START}
-      end={EMBER_END}
-      style={styles.emberEdge}
-      accessibilityElementsHidden
-      importantForAccessibility="no"
-    />
-  );
-}
 
 type CheckInCardProps = {
   /**
@@ -236,6 +227,12 @@ type CheckInCardProps = {
    * is enough to trigger that.
    */
   sorenessOnly?: boolean;
+  /**
+   * Last night, in hours, from the wearable — drawn as an arc against a full
+   * night beside the question. `null`/absent draws nothing: an athlete with no
+   * watch just gets the question, never an empty ring implying a bad night.
+   */
+  sleepHours?: number | null;
   /** Called by Done in `sorenessOnly` mode. Closes the card; posts nothing. */
   onDone?: () => void;
   /**
@@ -283,8 +280,10 @@ export function CheckInCard({
   sorenessError,
   failed,
   sorenessOnly = false,
+  sleepHours = null,
   onDone,
 }: CheckInCardProps) {
+  const hex = useColors();
   /*
    * `sorenessOnly` opens straight on the picker, for an athlete who already
    * checked in today and came back to add a sore spot. Sleep is not re-asked —
@@ -358,8 +357,7 @@ export function CheckInCard({
   const ready = entries.length > 0;
 
   return (
-    <View style={[styles.panel, !askingWhere && styles.panelHero]}>
-      <EmberEdge />
+    <View style={styles.panel}>
       <View style={styles.body}>
         {/* The Panel head: title left, muted note right. The note carries the
             explicit local day, so the header still reads as a date and never
@@ -369,9 +367,27 @@ export function CheckInCard({
           <Text style={styles.note}>{dateLabel}</Text>
         </View>
 
-        <Text style={styles.prompt}>
-          {askingSoreness ? "Anything sore?" : "How did you sleep?"}
-        </Text>
+        <View style={styles.promptRow}>
+          {!askingSoreness && sleepHours != null ? (
+            <Ring size={RING} frac={sleepHours / FULL_NIGHT_H} color={hex.series1} strokeWidth={8}>
+              <Text
+                style={styles.ringValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+                allowFontScaling={false}
+              >
+                {fmtHours(sleepHours)}
+              </Text>
+              <Text style={styles.ringLabel} allowFontScaling={false}>
+                slept
+              </Text>
+            </Ring>
+          ) : null}
+          <Text style={[styles.prompt, styles.promptText]}>
+            {askingSoreness ? "Anything sore?" : "How did you sleep?"}
+          </Text>
+        </View>
 
         {/* Pushes the targets into the bottom third, one-handed reach. */}
         <View style={styles.spacer} />
@@ -492,16 +508,7 @@ export function CheckInCard({
               {/* Ember, because this is the card's one system action. The label
                   above it stays ink: white on these stops bottoms out at
                   1.7:1, ink never drops below 5.9:1. */}
-              {ready ? (
-                <LinearGradient
-                  colors={color.ember}
-                  locations={EMBER_STOPS}
-                  start={EMBER_START}
-                  end={EMBER_END}
-                  style={styles.doneFill}
-                />
-              ) : null}
-              <Text style={[styles.doneLabel, !ready && styles.doneLabelIdle]}>
+              <Text style={[styles.doneLabel, ready ? styles.doneLabelReady : styles.doneLabelIdle]}>
                 Done
               </Text>
             </Pressable>
@@ -525,8 +532,7 @@ export function CheckInCard({
  */
 export function CheckInCardSkeleton() {
   return (
-    <View style={[styles.panel, styles.panelHero]}>
-      <EmberEdge />
+    <View style={styles.panel}>
       <View style={styles.body}>
         <View style={styles.head}>
           <View style={styles.skeletonTitle} />
@@ -585,6 +591,7 @@ function SideRow({
             }
             accessibilityState={{ checked: isSelected, selected: isSelected, disabled }}
             disabled={disabled}
+            onPressIn={selectionHaptic}
             onPress={() => onPick(value)}
             style={({ pressed }) => [
               styles.sideChip,
@@ -653,6 +660,7 @@ function SeverityScale({
             disabled,
           }}
           disabled={disabled}
+          onPressIn={selectionHaptic}
           onPress={() => onPick(0)}
           style={({ pressed }) => [
             styles.zeroTarget,
@@ -678,6 +686,7 @@ function SeverityScale({
                     disabled,
                   }}
                   disabled={disabled}
+                  onPressIn={selectionHaptic}
                   onPress={() => onPick(value)}
                   style={({ pressed }) => [
                     styles.severity,
@@ -735,6 +744,7 @@ function AnswerRow<T extends string>({
               ...(expanded === undefined ? {} : { expanded: isSelected && expanded }),
             }}
             disabled={disabled}
+            onPressIn={selectionHaptic}
             onPress={() => onPick(option.value)}
             style={({ pressed }) => [
               styles.answer,
@@ -770,24 +780,31 @@ const styles = StyleSheet.create({
      * Done sat past a fold with nothing to scroll to. Tapping a body part
      * appeared to do nothing.
      *
-     * With `minHeight` the card still FILLS the viewport while it is only a
-     * question (the hero proportions § "The signature" asks for), and GROWS past
-     * it once the map appears, at which point the ScrollView has real overflow
-     * and scrolls. The spec sanctions this directly — § Accessibility: "it may
-     * scroll, but the three answer targets stay reachable."
+     * With `minHeight` the card is sized by its CONTENT and grows past the
+     * floor once the map appears, at which point the ScrollView has real
+     * overflow and scrolls. The spec sanctions this directly — § Accessibility:
+     * "it may scroll, but the three answer targets stay reachable."
+     *
+     * There was briefly a second rule on top of this — `panelHero` — that added
+     * `flex: 1` back while the card was only a question, so it would fill the
+     * viewport the way § "The signature" describes. That is gone. It was written
+     * against a screen holding nothing but this card, and on a large phone it
+     * produced ~850pt of blank white between the question and the answers, which
+     * reads as a card that failed to load rather than as air. The home screen
+     * now carries the day's blocks below the question (see `TheDay` in
+     * (tabs)/index.tsx), so the card no longer has to hold the screen open on
+     * its own, and the question keeps its primacy through position, the ember
+     * edge and type rather than through sheer height.
      *
      * The map is deliberately NOT scaled down to fit: one SVG unit is one point
      * there, and that is the only thing making a 48-unit hit box a real 48pt
      * target.
      */
     minHeight: metrics.panelMin,
-    // NOTE: `panelHero` below adds `flex: 1` back while the card is only a
-    // question. See its comment — the two together are the whole fix.
-    backgroundColor: color.card,
+    backgroundColor: color.raised,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.raisedRule,
     borderRadius: radius.card,
-    ...shadow.card,
   },
   /** Sits inside the panel's rule, so it takes the same top corners. */
   emberEdge: {
@@ -795,24 +812,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.card,
     borderTopRightRadius: radius.card,
   },
-  /**
-   * `flex: 1`, but ONLY while the body map is not disclosed.
-   *
-   * That is the distinction the old code missed by applying it always. As a
-   * question the card SHOULD fill the viewport — § "The signature" wants the
-   * empty slot to be the loudest thing on the screen, and with short content
-   * `flex: 1` gives exactly that. The moment the 540pt map appears it becomes
-   * a cage: `flex: 1` is `flexBasis: 0`, so the panel is pinned to the viewport,
-   * the ScrollView's contentSize equals its frame, the screen cannot scroll, and
-   * everything past ~514pt — the lower half of the figure and the entire
-   * severity scale — is unreachable.
-   *
-   * So: hero while it asks, content-sized once it listens.
-   */
-  panelHero: { flex: 1 },
 
-  // Grows with its content; `panelHero` is what fills the screen before
-  // disclosure.
+  // Grows with its content. `panel`'s own `minHeight` is the only floor.
   body: { flexGrow: 1, padding: layout.cardPadding },
 
   head: {
@@ -825,6 +826,10 @@ const styles = StyleSheet.create({
   title: { ...text.title, color: color.ink },
   note: { ...text.meta, color: color.muted },
 
+  promptRow: { flexDirection: "row", alignItems: "center", gap: space.lg },
+  promptText: { flex: 1 },
+  ringValue: { ...text.stat, fontSize: 16, lineHeight: 20, color: color.ink },
+  ringLabel: { ...text.micro, fontSize: 10, lineHeight: 12, color: color.muted },
   prompt: { ...text.prompt, color: color.ink, marginTop: space.lg },
   /*
    * Pushes the three answers into the bottom third while the card is only a
@@ -841,10 +846,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: space.md,
     paddingHorizontal: space.sm,
-    backgroundColor: color.well,
+    backgroundColor: color.control,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
-    borderRadius: radius.control,
+    borderColor: color.controlEdge,
+    borderRadius: radius.pill,
   },
   /**
    * The chosen answer, and the chosen severity, and the chosen side. One
@@ -854,7 +859,7 @@ const styles = StyleSheet.create({
    * against it. That survives glare and colour-blindness; a warmer fill alone
    * would not.
    */
-  answerActive: { backgroundColor: color.accentSoft, borderColor: color.brandStrong },
+  answerActive: { backgroundColor: color.accentSoft, borderColor: color.brand },
   answerLabel: { ...text.baseSemi, color: color.ink, textAlign: "center" },
 
   /** Everything "Yes" discloses. One rhythm, set once. */
@@ -935,22 +940,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    backgroundColor: color.well,
+    backgroundColor: color.control,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
-    borderRadius: radius.control,
+    borderColor: color.controlEdge,
+    borderRadius: radius.pill,
   },
-  doneReady: { borderColor: color.brandStrong },
-  /** Rounded on the fill itself, so the panel needs no clipping layer. */
-  doneFill: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    borderRadius: radius.control,
-  },
+  doneReady: { backgroundColor: color.brand, borderColor: color.brand },
   doneLabel: { ...text.baseSemi, color: color.ink },
+  /** Ground-coloured on coral: 6.5:1. Ink on coral is 2.6:1. */
+  doneLabelReady: { color: color.bg },
   doneLabelIdle: { color: color.muted },
 
   failed: { ...text.meta, color: color.ink2, marginTop: space.md },

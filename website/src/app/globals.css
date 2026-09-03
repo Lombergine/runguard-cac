@@ -8,7 +8,45 @@
  * who run at 6am, not analysts in a cave.
  */
 
+/* ---------------------------------------------------------------------------
+ * TOKENS
+ *
+ * The complete LIGHT palette lives on bare `:root`. The dark block near the
+ * bottom of this section redefines ONLY these same names — no new tokens, no
+ * component rules — so any value used anywhere resolves in both themes and a
+ * colour can never be defined in one mode and missing in the other.
+ *
+ * ── CONTRAST ──────────────────────────────────────────────────────────────
+ * Every colour used for TEXT is measured against the three grounds text sits
+ * on — `--page` #faf7f2, `--surface` #ffffff, `--surface-2` #f4efe6 — and
+ * clears 4.5:1 on all three. Ratios in the comments are real, computed, not
+ * estimated. `--surface-3` is a track and well colour that never carries body
+ * text, so it is not part of the bar.
+ *
+ * The previous ramp did not clear it. Measured before this change, on --page:
+ *   --status-good     3.08    --status-warning  2.98
+ *   --status-serious  3.33    --series-1        4.13
+ *   --ink-muted       3.21  ← used 169 times, the most-used colour on the site
+ * Only --status-critical passed, at 4.52. Several are large bold text where
+ * 3:1 is the AA bar, but --ink-muted is 11–12px caption text everywhere, and
+ * that is the one that mattered most.
+ *
+ * ── BRAND IS NOT A STATE ──────────────────────────────────────────────────
+ * `--status-warning` used to be #d97706, which is the same hex as
+ * `--brand-strong`. A caution and the brand's own strong tone were literally
+ * the same colour, so nothing amber on the page could be read as meaning
+ * anything: the active tab, the assistant's name, the mileage bar and an
+ * actual warning were one hue. Warning is now an ochre, 1.60x separated from
+ * --brand-strong.
+ *
+ * The rule that keeps them apart, both ways:
+ *   • --brand / --brand-strong / --ember are CHROME. Never a verdict.
+ *   • --status-* are VERDICTS. Never chrome, never decoration.
+ * ------------------------------------------------------------------------- */
+
 :root {
+  color-scheme: light;
+
   /* surfaces — warm paper, 3 elevation steps */
   --page: #faf7f2;
   --page-top: #fdf3e3;
@@ -17,25 +55,82 @@
   --surface-3: #ece5d8;
   --ink: #221d15;
   --ink-2: #55503f;
-  --ink-muted: #94897b;
+  /* 4.82 / 5.15 / 4.50 — was #94897b at 3.21, and it is the site's most-used colour */
+  --ink-muted: #766c5e;
   --hairline: rgba(34, 29, 21, 0.09);
   --hairline-strong: rgba(34, 29, 21, 0.18);
   --grid: #ece6da;
   --baseline: #d8d0c0;
 
-  /* the ember signature — the fun */
+  /* the ember signature — the fun. CHROME ONLY. */
   --brand: #f59e0b;
   --brand-strong: #d97706;
   --ember-hot: #f97316;
   --ember: linear-gradient(135deg, #fbbf24 0%, #f59e0b 45%, #f97316 100%);
   --ember-glow: rgba(249, 115, 22, 0.16);
+  --ember-hairline: linear-gradient(
+    135deg,
+    rgba(251, 191, 36, 0.65),
+    rgba(245, 158, 11, 0.15) 45%,
+    rgba(249, 115, 22, 0.6) 100%
+  );
+  /* Amber on cream is 2.98:1 — never legible as text. Anywhere the brand has
+     to be READ rather than seen, this is the token. 4.76 / 5.09 / 4.45. */
+  --brand-text: #9a6207;
 
-  /* semantic states tuned for light surfaces — verdicts only, never chrome */
-  --status-good: #16a34a;
-  --status-warning: #d97706;
-  --status-serious: #ea580c;
-  --status-critical: #dc2626;
-  --series-1: #2a78d6;
+  /* semantic states — VERDICTS ONLY, never chrome */
+  --status-good: #166534;     /* 6.67 / 7.13 / 6.23 */
+  --status-warning: #9a6207;  /* 4.76 / 5.09 / 4.45 */
+  --status-serious: #c2410c;  /* 4.85 / 5.18 / 4.52 */
+  --status-critical: #b91c1c; /* 6.05 / 6.47 / 5.65 */
+  --series-1: #1d63b8;        /* 5.57 / 5.95 / 5.20 */
+
+  /* ── effect tokens ────────────────────────────────────────────────────────
+     These exist so the rules further down stop hardcoding light-mode colours.
+     Each one was a literal rgba() or hex in a component rule that would have
+     been invisible, or glaringly wrong, the moment a dark palette existed:
+     a near-black card shadow on a near-black page, a white shimmer, a
+     dark-to-darker text gradient, a warm tan contour line. */
+  --shadow-key: rgba(34, 29, 21, 0.04);
+  --shadow-ambient: rgba(34, 29, 21, 0.14);
+  --shadow-key-lift: rgba(34, 29, 21, 0.05);
+  --shadow-ambient-lift: rgba(34, 29, 21, 0.22);
+  /* Dark mode swaps this for a hairline rim light — a shadow cannot read on a
+     dark ground, so elevation there is carried by a lit top edge instead. */
+  --rim: transparent;
+  --glass: rgba(255, 253, 248, 0.75);
+  --glass-solid: rgba(255, 253, 248, 0.97);
+  --shimmer: rgba(255, 255, 255, 0.75);
+  --topo-ink: #c9b99a;
+  --grain-opacity: 0.02;
+  --grain-blend: normal;
+  --shine-a: #2b251b;
+  --shine-b: #55503f;
+  --focus-ring: var(--ink);
+  --selection: rgba(245, 158, 11, 0.3);
+  /* The pale wash a chart draws under the hovered column. */
+  --hover-wash: rgba(34, 29, 21, 0.045);
+  /* Roster avatars: per-athlete hue, theme-owned lightness/chroma. */
+  --avatar-bg-l: 0.92;     --avatar-bg-c: 0.055;
+  --avatar-fg-l: 0.45;     --avatar-fg-c: 0.11;
+  --avatar-border-l: 0.82; --avatar-border-c: 0.07;
+
+  /* Training-intensity heat ramp, easiest → hardest, plus the rest-day tile. */
+  --heat-1: #fcd9c2;
+  --heat-2: #f9b08a;
+  --heat-3: #f0805a;
+  --heat-4: #dd4f2e;
+  --heat-5: #b53214;
+  --heat-rest: #f1ece2;
+
+  /* Categorical series — sleep stages and effort zones. Distinguishable to the
+     common forms of colour blindness by lightness order as well as hue. */
+  --cat-blue: #2f74c9;
+  --cat-green: #0f7f5a;
+  --cat-amber: #a06a00;
+  --cat-orange: #c2531f;
+  --cat-red: #b53232;
+  --cat-violet: #6f63cf;
 
   /* motion */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -45,8 +140,97 @@
   --dur-enter: 500ms;
 }
 
-html {
-  color-scheme: light;
+/* ---------------------------------------------------------------------------
+ * DARK
+ *
+ * Token redefinitions only. Nothing here introduces a new name or touches a
+ * component rule, which is what keeps the two themes from drifting.
+ *
+ * It is a WARM dark, not a neutral one: the identity is "sunrise", and a
+ * neutral #111 under an amber brand reads as a different product with the
+ * lights off. Surfaces get LIGHTER with elevation, the reverse of the light
+ * theme, because on a dark ground raised things catch light.
+ *
+ * Ratios below are against `--surface` #201b15.
+ * ------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --page: #17140f;
+    --page-top: #1f1a13;
+    --surface: #201b15;
+    --surface-2: #2a241c;
+    --surface-3: #352d23;
+    --ink: #f5efe4;          /* 14.93 */
+    --ink-2: #cabfae;        /* 9.42 */
+    --ink-muted: #a89d8c;    /* 6.40 */
+    --hairline: rgba(245, 239, 228, 0.10);
+    --hairline-strong: rgba(245, 239, 228, 0.22);
+    --grid: #2f2820;
+    --baseline: #4a4034;
+
+    /* Amber is already luminous on dark, so the brand needs no compensation —
+       but it does need to stop being the same value as the warning. */
+    --brand: #fbbf24;
+    --brand-strong: #f59e0b;
+    --ember-hot: #fb923c;
+    --ember: linear-gradient(135deg, #fcd34d 0%, #fbbf24 45%, #fb923c 100%);
+    --ember-glow: rgba(251, 146, 60, 0.20);
+    --ember-hairline: linear-gradient(
+      135deg,
+      rgba(252, 211, 77, 0.55),
+      rgba(251, 191, 36, 0.12) 45%,
+      rgba(251, 146, 60, 0.5) 100%
+    );
+    --brand-text: #fbbf24;   /* 10.24 — legible on dark, unlike its light twin */
+
+    --status-good: #4ade80;     /* 9.81 */
+    --status-warning: #fb923c;  /* 7.55 — orange against the brand's yellow */
+    --status-serious: #fb7185;  /* 6.35 */
+    --status-critical: #f87171; /* 6.18 */
+    --series-1: #7cb3f0;        /* 7.78 */
+
+    /* Elevation inverts: shadows go to near-nothing and a rim light does the
+       work instead. Keeping the light theme's ink shadows here would draw
+       black smudges on an almost-black page. */
+    --shadow-key: rgba(0, 0, 0, 0.30);
+    --shadow-ambient: rgba(0, 0, 0, 0.50);
+    --shadow-key-lift: rgba(0, 0, 0, 0.34);
+    --shadow-ambient-lift: rgba(0, 0, 0, 0.62);
+    --rim: rgba(255, 246, 230, 0.06);
+    --glass: rgba(32, 27, 21, 0.72);
+    --glass-solid: rgba(32, 27, 21, 0.97);
+    --shimmer: rgba(255, 246, 230, 0.07);
+    --topo-ink: #4a3f2e;
+    /* The grain is a dark noise texture; screened rather than laid over, so on
+       a dark ground it lifts the surface instead of muddying it. */
+    --grain-opacity: 0.035;
+    --grain-blend: screen;
+    --shine-a: #f5efe4;
+    --shine-b: #b8ab97;
+    --focus-ring: #fcd34d;
+    --selection: rgba(251, 191, 36, 0.32);
+    --hover-wash: rgba(245, 239, 228, 0.06);
+    --avatar-bg-l: 0.32;     --avatar-bg-c: 0.05;
+    --avatar-fg-l: 0.86;     --avatar-fg-c: 0.10;
+    --avatar-border-l: 0.44; --avatar-border-c: 0.07;
+
+    /* Lightness runs the other way so "hotter" stays "brighter" on dark. */
+    --heat-1: #4a2c1c;
+    --heat-2: #7a4326;
+    --heat-3: #b35c30;
+    --heat-4: #e2703c;
+    --heat-5: #ff9259;
+    --heat-rest: #241f18;
+
+    --cat-blue: #6aaef5;
+    --cat-green: #43c39a;
+    --cat-amber: #e0a93c;
+    --cat-orange: #f4884f;
+    --cat-red: #f07070;
+    --cat-violet: #a99cf5;
+  }
 }
 
 body {
@@ -64,12 +248,13 @@ body::after {
   inset: 0;
   z-index: 50;
   pointer-events: none;
-  opacity: 0.02;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 ::selection {
-  background: rgba(245, 158, 11, 0.3);
+  background: var(--selection);
 }
 
 /* ---------- cards & elevation: soft, sunny, real shadows ---------- */
@@ -77,8 +262,11 @@ body::after {
 .card,
 .rounded-2xl.border {
   box-shadow:
-    0 1px 2px rgba(34, 29, 21, 0.04),
-    0 10px 28px -16px rgba(34, 29, 21, 0.14);
+    0 1px 2px var(--shadow-key),
+    0 10px 28px -16px var(--shadow-ambient),
+    /* Rim light — transparent in the light theme, a lit top edge in dark,
+       where a drop shadow has nothing to fall on. */
+    inset 0 1px 0 0 var(--rim);
 }
 
 .lift {
@@ -92,8 +280,9 @@ body::after {
   transform: translateY(-2px);
   border-color: var(--hairline-strong);
   box-shadow:
-    0 2px 4px rgba(34, 29, 21, 0.05),
-    0 16px 34px -14px rgba(34, 29, 21, 0.22);
+    0 2px 4px var(--shadow-key-lift),
+    0 16px 34px -14px var(--shadow-ambient-lift),
+    inset 0 1px 0 0 var(--rim);
 }
 .lift:active {
   transform: translateY(0);
@@ -110,12 +299,7 @@ body::after {
   inset: 0;
   border-radius: inherit;
   padding: 1.5px;
-  background: linear-gradient(
-    135deg,
-    rgba(251, 191, 36, 0.65),
-    rgba(245, 158, 11, 0.15) 45%,
-    rgba(249, 115, 22, 0.6) 100%
-  );
+  background: var(--ember-hairline);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
@@ -139,27 +323,29 @@ body::after {
 
 /* glass for sticky chrome */
 .glass {
-  background: rgba(255, 253, 248, 0.75);
+  background: var(--glass);
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
 }
 @supports not (backdrop-filter: blur(1px)) {
   .glass {
-    background: rgba(255, 253, 248, 0.97);
+    background: var(--glass-solid);
   }
 }
 
 /* ---------- typography ---------- */
 
+/* Decorative brand gradient. Not for text that has to be READ on light —
+   amber is 2.98:1 on cream; use --brand-text there instead. */
 .text-ember {
-  background: linear-gradient(135deg, #f59e0b 0%, #f97316 60%, #ea580c 100%);
+  background: linear-gradient(135deg, var(--brand) 0%, var(--ember-hot) 60%, var(--brand-strong) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 .text-shine {
-  background: linear-gradient(180deg, #2b251b 0%, #55503f 100%);
+  background: linear-gradient(180deg, var(--shine-a) 0%, var(--shine-b) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -257,7 +443,10 @@ body::after {
   z-index: -1;
   pointer-events: none;
   opacity: 0.5;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='300' viewBox='0 0 420 300'%3E%3Cg fill='none' stroke='%23c9b99a' stroke-width='1'%3E%3Cpath d='M-20 60c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 96c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 132c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 168c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 204c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 240c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 276c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3C/g%3E%3C/svg%3E");
+  /* `currentColor` inside the data URI resolves against this, so the contour
+     lines re-tint per theme instead of staying a light-mode tan. */
+  color: var(--topo-ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='300' viewBox='0 0 420 300'%3E%3Cg fill='none' stroke='currentColor' stroke-width='1'%3E%3Cpath d='M-20 60c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 96c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 132c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 168c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 204c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 240c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3Cpath d='M-20 276c60-40 140-40 200 0s140 40 200 0 60-40 60-40'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 620px auto;
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 25%, #000 20%, transparent 75%);
   mask-image: radial-gradient(ellipse 70% 60% at 50% 25%, #000 20%, transparent 75%);
@@ -281,7 +470,7 @@ body::after {
  */
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: inherit;
 }
@@ -295,7 +484,7 @@ body::after {
    that already has a border reads as a rendering glitch rather than focus. */
 :where(input, select, textarea):focus-visible {
   border-color: var(--brand-strong);
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+  box-shadow: 0 0 0 3px var(--ember-glow);
 }
 
 /* ---------- disabled ----------
@@ -335,7 +524,7 @@ body::after {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.75) 50%,
+    var(--shimmer) 50%,
     transparent 100%
   );
   background-size: 180% 100%;

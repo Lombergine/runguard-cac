@@ -70,6 +70,46 @@ export function checkedInToday(p: Profile): boolean {
   return c.energy != null || c.rpe != null || c.motivation != null;
 }
 
+/**
+ * Did the sensors say anything the score could be built from?
+ *
+ * Mirrors `readinessScore`'s own `sensed` condition in the engine exactly —
+ * the same three fields, the same OR:
+ *
+ *     const sensed =
+ *       r.hrvDeltaPct !== null || r.restingHrDelta !== null || r.sleepAvg !== null;
+ *
+ * Deliberately NOT `recovery.hasData`: that is `metrics.length > 0` over a long
+ * window, so it stays true for a watch that stopped syncing months ago — the
+ * same never-goes-false shape as `hasActivityHistory`. Any ONE live reading is
+ * enough for a partial objective score; none of them is no score.
+ */
+export function hasSensorData(p: Profile): boolean {
+  const r = p.risk.recovery;
+  return r.hrvDeltaPct !== null || r.restingHrDelta !== null || r.sleepAvg !== null;
+}
+
+/**
+ * ── WHY THIS IS NOT `checkedInToday` ALONE ─────────────────────────────────
+ * It was, and that was too strict in the other direction.
+ *
+ * `readinessScore` has two independent halves and each falls back to the other:
+ *
+ *     subjective === null ? objective ?? 100
+ *                         : objective === null ? subjective : weighted(both)
+ *
+ * A number derived from NOTHING is exactly the `?? 100` branch — reached only
+ * when the athlete has not self-reported AND no sensor read anything. An
+ * athlete who skipped the check-in but whose watch synced has a real objective
+ * score, and withholding it printed "Readiness — unknown until you check in"
+ * directly above a Recovery block reading 7.9 h of sleep, 94 ms of HRV and a
+ * resting heart rate of 48. Observed on the simulator, athlete 1. That is the
+ * same contradiction this gate exists to prevent, pointed the other way.
+ *
+ * The empty case is unaffected: no check-in and no readings is still unknown.
+ * `website/src/lib/readiness.ts` carries the identical condition — the two
+ * surfaces read the same API and must not disagree about the same athlete.
+ */
 export function readinessState(p: Profile): ReadinessState {
   // The second half of the same guard. `readiness` is typed `number`, but if it
   // ever arrives missing or non-numeric, `readinessBand` compares with `<` —
@@ -77,7 +117,8 @@ export function readinessState(p: Profile): ReadinessState {
   // "recovered" and prints "Good to go" in green beside a numeral that is not a
   // number. Withholding is the only safe direction: the `known: false` arm
   // already renders "— unknown".
-  return checkedInToday(p) && Number.isFinite(p.readiness)
+  const derivable = checkedInToday(p) || hasSensorData(p);
+  return derivable && Number.isFinite(p.readiness)
     ? { known: true, value: p.readiness }
     : { known: false };
 }

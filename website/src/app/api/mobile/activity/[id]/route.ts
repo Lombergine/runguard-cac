@@ -1,5 +1,6 @@
 import { resolveAthlete } from "@/lib/apiAuth";
-import { getActivityById } from "@/lib/db";
+import { getActivityById, parseStream } from "@/lib/db";
+import type { Split, SeriesSample } from "@/lib/db";
 
 /**
  * One activity's detail, for the app's run detail screen. The web equivalent is
@@ -123,5 +124,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     calories: activity.calories,
     cadence: activity.cadence,
     route: parseRoute(activity.route ?? null),
+    /*
+     * The same three streams the coach route sends and the deployed web page
+     * draws. Absent from the SQLite schema until now — see
+     * `db/schema.sqlite.ts`, which explains why local dev rendered "not
+     * recorded" for every run while production drew all three.
+     */
+    splits: parseStream<Split>(activity.splits),
+    hrSeries: parseStream<SeriesSample>(activity.hr_series)
+      .filter((p) => typeof p.bpm === "number")
+      .map((p) => ({ tS: p.t_s, bpm: p.bpm as number })),
+    elevSeries: parseStream<SeriesSample>(activity.elev_series)
+      .filter((p) => typeof p.m === "number")
+      .map((p) => ({ tS: p.t_s, m: p.m as number })),
   });
 }

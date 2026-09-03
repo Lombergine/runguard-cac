@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   note: { ...text.meta, color: color.muted },
   body: { marginTop: space.md },
   /** Ember-coloured meta, the same pairing `countdown` uses on this surface. */
-  attribution: { ...text.meta, color: color.brandText, marginTop: space.xs },
+  attribution: { ...text.meta, color: color.muted, marginTop: space.xs },
   /** A note, not a warning: it reports a disagreement, it does not resolve it. */
   eased: { ...text.meta, color: color.ink2, marginTop: space.sm },
   status: { ...text.meta, color: color.ink2, marginTop: space.md },

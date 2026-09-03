@@ -338,8 +338,8 @@ function SpecimenSheet() {
           note="Desaturate this block — every cell must still read apart"
         />
         <Text style={styles.note}>
-          Colour is the last cue, never the only one. Dashed means "we don't
-          know" and nothing else does; zero is a fact and looks like every other
+          Colour is the last cue, never the only one. Dashed means &quot;we
+          don&apos;t know&quot; and nothing else does; zero is a fact and looks like every other
           fact; rest recedes.
         </Text>
         <View style={styles.trio}>
@@ -411,7 +411,7 @@ function SpecimenSheet() {
         <Section title="Card" note="White on the warm ground" />
         <Specimen label="padded (default)">
           <Card>
-            <Text style={styles.cardTitle}>Yesterday's run</Text>
+            <Text style={styles.cardTitle}>Yesterday&apos;s run</Text>
             <Text style={styles.cardBody}>
               Any elevation is shadow.card — never a hand-rolled one, and never
               used to make one card louder than its neighbour.
@@ -483,8 +483,9 @@ function SpecimenSheet() {
         {/* ---------------------------------------------------------- */}
         <Section title="Chat" note="A safety reply can never reach a bubble" />
         <Text style={styles.note}>
-          Side and geometry separate the speakers, not hue: the athlete's bubble
-          is right-aligned and unruled, the coach's is left and held by a rule.
+          Side and geometry separate the speakers, not hue: the athlete&apos;s
+          bubble is right-aligned and unruled, the coach&apos;s is left and held
+          by a rule.
           The safety notice has no bubble geometry at all — no radius, no side,
           one heavy left rule; it is full-bleed in the thread and only inset
           here by the page. In greyscale the three stay unmistakable.

@@ -97,7 +97,7 @@ const CHRONIC = color.series1;
  * are drawn after the bars and in saturated colour, so they still read as the
  * layer on top.
  */
-const BAR = color.ink2;
+const BAR = color.ok;
 
 /* ------------------------------------------------------------------ *
  * Panel — the stats screen's information unit (`(tabs)/stats.tsx:107`). Local
@@ -125,12 +125,21 @@ function Panel({
   );
 }
 
-export function LoadChart({ series }: { series?: DailyPoint[] }) {
-  const s = loadSeries(series);
+export function LoadChart({
+  series,
+  windowDays,
+}: {
+  series?: DailyPoint[];
+  /** Optional. Omitted, the chart keeps its own fixed window — see chartData. */
+  windowDays?: number;
+}) {
+  // See AcwrChart: the note must describe the window actually plotted.
+  const shownDays = windowDays ?? DAILY_DAYS;
+  const s = loadSeries(series, new Date(), windowDays);
   const recorded = s.points.filter((p) => !isAbsent(p.value)).length;
 
   return (
-    <Panel title="Training load" note={`last ${DAILY_DAYS} days`}>
+    <Panel title="Training load" note={`last ${shownDays} days`}>
       <Text style={styles.lede}>
         Each bar is one day&apos;s training load — how long you ran multiplied by
         how hard it was, with the effort estimated from your heart rate, or from
@@ -149,7 +158,7 @@ export function LoadChart({ series }: { series?: DailyPoint[] }) {
                beneath it. The two jargon words are what the key below decodes. */
             readout={s.readout}
             accessibilityLabel={
-              `Daily training load over the last ${DAILY_DAYS} days, with the ` +
+              `Daily training load over the last ${shownDays} days, with the ` +
               `7-day and 28-day averages drawn over it. ${recorded} days are ` +
               `recorded and ${DAILY_DAYS - recorded} are not.`
             }

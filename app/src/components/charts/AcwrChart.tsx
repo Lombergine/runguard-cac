@@ -134,14 +134,24 @@ function Panel({
  * only reads `acwr`, which survives both, but taking the same leg as its
  * sibling `LoadChart` keeps one answer to "which series is the series".
  */
-export function AcwrChart({ series }: { series?: DailyPoint[] }) {
-  const s = acwrSeries(series);
+export function AcwrChart({
+  series,
+  windowDays,
+}: {
+  series?: DailyPoint[];
+  /** Optional. Omitted, the chart keeps its own fixed window — see chartData. */
+  windowDays?: number;
+}) {
+  // The note and the screen-reader summary both quote this, so a window
+  // the caller chose can never be described as the default one.
+  const shownDays = windowDays ?? DAILY_DAYS;
+  const s = acwrSeries(series, new Date(), windowDays);
   const recorded = s.points.filter((p) => !isAbsent(p.value)).length;
 
   return (
     <Panel
       title="Workload ratio"
-      note={`last ${DAILY_DAYS} days · a ratio, so no unit`}
+      note={`last ${shownDays} days · a ratio, so no unit`}
     >
       <Text style={styles.lede}>
         This compares how much you ran in the last week with how much you have
@@ -160,7 +170,7 @@ export function AcwrChart({ series }: { series?: DailyPoint[] }) {
             /* Names the explicit local day itself, from `points[i].label`. */
             readout={s.readout}
             accessibilityLabel={
-              `Workload ratio over the last ${DAILY_DAYS} days. ` +
+              `Workload ratio over the last ${shownDays} days. ` +
               `${recorded} days have a ratio and ${DAILY_DAYS - recorded} are ` +
               `not recorded. A shaded band runs from ${ACWR_BAND[0]} to ` +
               `${ACWR_BAND[1]}, and a dashed line marks ${ACWR_DANGER}.`

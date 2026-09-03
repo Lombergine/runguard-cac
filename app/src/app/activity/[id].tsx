@@ -166,6 +166,17 @@ function RouteMap({ route }: { route: RoutePoint[] | null }) {
         accessibilityRole="image"
         accessibilityLabel="The GPS route of this run."
       >
+        {/* A soft halo under the line, so the route reads as lit rather than
+            drawn. Same colour, wider, mostly transparent. */}
+        <Path
+          d={path}
+          fill="none"
+          stroke={color.brand}
+          strokeOpacity={0.35}
+          strokeWidth={STROKE * 2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <Path
           d={path}
           fill="none"

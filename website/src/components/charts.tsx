@@ -17,13 +17,27 @@ import { InsufficientData, hasEnoughData } from "./EmptyState";
 import { NOT_ENOUGH_ACWR_HISTORY } from "@/lib/risk";
 import { miNum, KM_PER_MI } from "@/lib/units";
 
-const INK_MUTED = "#94897b";
-const GRID = "#ece6da";
-const SURFACE = "#ffffff";
-const SERIES_1 = "#2a78d6";
-const BRAND = "#f59e0b";
-const CRITICAL = "#dc2626";
-const GOOD = "#16a34a";
+/*
+ * Chart colours as tokens, not hex.
+ *
+ * These were seven module-level literals frozen at the light theme's values,
+ * so every axis, gridline and tooltip drew light-mode colours regardless of
+ * the palette. On a dark ground `#ece6da` gridlines rendered as bright white
+ * rules straight across each plot — the single most obviously broken thing in
+ * the dark theme.
+ *
+ * `var()` resolves inside inline SVG presentation attributes, which is what
+ * Recharts renders, so a token here re-themes the chart with no JS and no
+ * media query of its own.
+ */
+const INK_MUTED = "var(--ink-muted)";
+const GRID = "var(--grid)";
+const SURFACE = "var(--surface)";
+const BASELINE = "var(--baseline)";
+const SERIES_1 = "var(--series-1)";
+const BRAND = "var(--brand)";
+const CRITICAL = "var(--status-critical)";
+const GOOD = "var(--status-good)";
 const GLOW = (c: string) => ({ filter: `drop-shadow(0 0 5px ${c}55)` });
 
 export type SeriesPoint = {
@@ -50,15 +64,20 @@ function TooltipBox({
   return (
     <div
       className="rounded-lg border px-3 py-2 text-xs shadow-xl"
-      style={{ background: SURFACE, borderColor: GRID, color: "#55503f", boxShadow: "0 8px 24px -10px rgba(34,29,21,0.25)" }}
+      style={{
+        background: SURFACE,
+        borderColor: "var(--hairline-strong)",
+        color: "var(--ink-2)",
+        boxShadow: "0 8px 24px -10px var(--shadow-ambient-lift)",
+      }}
     >
-      <div className="font-medium mb-1" style={{ color: "#221d15" }}>
+      <div className="font-medium mb-1" style={{ color: "var(--ink)" }}>
         {label}
       </div>
       {rows.map(([k, v]) => (
         <div key={k} className="flex justify-between gap-4">
           <span>{k}</span>
-          <span style={{ color: "#221d15" }}>{v}</span>
+          <span style={{ color: "var(--ink)" }}>{v}</span>
         </div>
       ))}
     </div>
@@ -138,7 +157,7 @@ export function AcwrChart({ data }: { data: SeriesPoint[] }) {
               tickFormatter={fmtDay}
               tick={{ fill: INK_MUTED, fontSize: 11 }}
               tickLine={false}
-              axisLine={{ stroke: "#d8d0c0" }}
+              axisLine={{ stroke: BASELINE }}
               minTickGap={40}
             />
             <YAxis
@@ -215,7 +234,7 @@ export function LoadChart({ data }: { data: SeriesPoint[] }) {
                 tickFormatter={fmtDay}
                 tick={{ fill: INK_MUTED, fontSize: 11 }}
                 tickLine={false}
-                axisLine={{ stroke: "#d8d0c0" }}
+                axisLine={{ stroke: BASELINE }}
                 minTickGap={40}
               />
               <YAxis
@@ -224,7 +243,7 @@ export function LoadChart({ data }: { data: SeriesPoint[] }) {
                 axisLine={false}
               />
               <Tooltip
-                cursor={{ fill: "rgba(34,29,21,0.045)" }}
+                cursor={{ fill: "var(--hover-wash)" }}
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
                   const p = payload[0].payload as SeriesPoint;
@@ -243,7 +262,7 @@ export function LoadChart({ data }: { data: SeriesPoint[] }) {
               />
               <Bar
                 dataKey="load"
-                fill="rgba(34,29,21,0.30)"
+                fill="var(--hairline-strong)"
                 radius={[3, 3, 0, 0]}
                 maxBarSize={6}
                 isAnimationActive={false}
@@ -268,7 +287,7 @@ export function LoadChart({ data }: { data: SeriesPoint[] }) {
               />
             </ComposedChart>
           </ResponsiveContainer>
-          <div className="flex gap-4 pl-2 pt-1 text-xs" style={{ color: "#55503f" }}>
+          <div className="flex gap-4 pl-2 pt-1 text-xs" style={{ color: "var(--ink-2)" }}>
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block w-3 h-0.5 rounded" style={{ background: BRAND }} />
               Acute load (7d)
@@ -280,7 +299,7 @@ export function LoadChart({ data }: { data: SeriesPoint[] }) {
             <span className="inline-flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-sm"
-                style={{ background: "rgba(34,29,21,0.30)" }}
+                style={{ background: "var(--hairline-strong)" }}
               />
               Daily load
             </span>
@@ -306,11 +325,11 @@ export function WeeklyKmChart({
           dataKey="week"
           tick={{ fill: INK_MUTED, fontSize: 11 }}
           tickLine={false}
-          axisLine={{ stroke: "#d8d0c0" }}
+          axisLine={{ stroke: BASELINE }}
         />
         <YAxis tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
         <Tooltip
-          cursor={{ fill: "rgba(34,29,21,0.045)" }}
+          cursor={{ fill: "var(--hover-wash)" }}
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null;
             const p = payload[0].payload as { week: string; km: number };
@@ -353,7 +372,7 @@ export function PaceChart({ data }: { data: { week: string; pace: number | null 
           dataKey="week"
           tick={{ fill: INK_MUTED, fontSize: 11 }}
           tickLine={false}
-          axisLine={{ stroke: "#d8d0c0" }}
+          axisLine={{ stroke: BASELINE }}
           minTickGap={30}
         />
         <YAxis
@@ -394,7 +413,7 @@ export function FitnessChart({ data }: { data: { week: string; score: number }[]
     <ResponsiveContainer width="100%" height={190}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-        <XAxis dataKey="week" tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={30} />
+        <XAxis dataKey="week" tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: BASELINE }} minTickGap={30} />
         <YAxis domain={[0, 100]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
         <Tooltip
           cursor={{ stroke: INK_MUTED, strokeWidth: 1 }}
@@ -420,11 +439,11 @@ export function SleepChart({ data }: { data: { date: string; hours: number | nul
     <ResponsiveContainer width="100%" height={190}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-        <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={40} />
+        <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: BASELINE }} minTickGap={40} />
         <YAxis domain={[0, 10]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
         <ReferenceLine y={8} stroke={GOOD} strokeDasharray="5 4" strokeWidth={1.5} />
         <Tooltip
-          cursor={{ fill: "rgba(34,29,21,0.045)" }}
+          cursor={{ fill: "var(--hover-wash)" }}
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null;
             const p = payload[0].payload as { date: string; hours: number | null };
@@ -452,7 +471,7 @@ export function PRChart({ data, event }: { data: { date: string; timeS: number }
     <ResponsiveContainer width="100%" height={150}>
       <ComposedChart data={pts} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-        <XAxis dataKey="label" tick={{ fill: INK_MUTED, fontSize: 10 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} />
+        <XAxis dataKey="label" tick={{ fill: INK_MUTED, fontSize: 10 }} tickLine={false} axisLine={{ stroke: BASELINE }} />
         <YAxis reversed domain={[Math.min(...times) - pad, Math.max(...times) + pad]} tickFormatter={fmt} tick={{ fill: INK_MUTED, fontSize: 10 }} tickLine={false} axisLine={false} width={44} />
         <Tooltip
           cursor={{ stroke: INK_MUTED, strokeWidth: 1 }}
@@ -476,7 +495,7 @@ export function MentalChart({ data }: { data: { date: string; energy: number | n
       <ResponsiveContainer width="100%" height={170}>
         <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
           <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-          <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={40} />
+          <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: BASELINE }} minTickGap={40} />
           <YAxis domain={[0, 10]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip
             cursor={{ stroke: INK_MUTED, strokeWidth: 1 }}
@@ -503,7 +522,7 @@ export function MentalChart({ data }: { data: { date: string; energy: number | n
           <Line type="monotone" dataKey="motivation" stroke={SERIES_1} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: SERIES_1 }} isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="flex gap-4 pl-2 pt-1 text-xs" style={{ color: "#55503f" }}>
+      <div className="flex gap-4 pl-2 pt-1 text-xs" style={{ color: "var(--ink-2)" }}>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 rounded" style={{ background: BRAND }} />Energy</span>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 rounded" style={{ background: SERIES_1 }} />Motivation</span>
       </div>
@@ -519,7 +538,7 @@ export function LoadSpark({ data }: { data: SeriesPoint[] }) {
       <ComposedChart data={recent} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
         <Bar
           dataKey="load"
-          fill="rgba(34,29,21,0.32)"
+          fill="var(--hairline-strong)"
           radius={[1, 1, 0, 0]}
           maxBarSize={4}
           isAnimationActive={false}
@@ -551,7 +570,7 @@ export function ActivityHrChart({ data }: { data: { t_s: number; bpm: number }[]
     <ResponsiveContainer width="100%" height={180}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-        <XAxis dataKey="t_s" tickFormatter={fmtClock} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={44} />
+        <XAxis dataKey="t_s" tickFormatter={fmtClock} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: BASELINE }} minTickGap={44} />
         <YAxis domain={[Math.max(0, Math.floor(lo - 6)), Math.ceil(hi + 6)]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
         <Tooltip
           cursor={{ stroke: INK_MUTED, strokeDasharray: "3 3" }}
@@ -577,7 +596,7 @@ export function ActivityElevChart({ data }: { data: { t_s: number; ft: number }[
     <ResponsiveContainer width="100%" height={150}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-        <XAxis dataKey="t_s" tickFormatter={fmtClock} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d8d0c0" }} minTickGap={44} />
+        <XAxis dataKey="t_s" tickFormatter={fmtClock} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: BASELINE }} minTickGap={44} />
         <YAxis domain={[Math.floor(lo - pad), Math.ceil(hi + pad)]} tick={{ fill: INK_MUTED, fontSize: 11 }} tickLine={false} axisLine={false} />
         <Tooltip
           cursor={{ stroke: INK_MUTED, strokeDasharray: "3 3" }}

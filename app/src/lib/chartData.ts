@@ -305,8 +305,19 @@ export const ACWR_DANGER = 1.5;
 export function acwrSeries(
   series: DailyPoint[] | undefined,
   now = new Date(),
+  /**
+   * How many days to plot. Defaults to `DAILY_DAYS`, which is what the
+   * athlete's own screens have always shown and must keep showing.
+   *
+   * The coach side passes a window the coach chose. It is a PARAMETER rather
+   * than a second function because the two must densify identically: the whole
+   * point of `densify` is that a day with no row becomes an explicit absent
+   * rather than a gap the line closes over, and a parallel implementation is
+   * how that guarantee gets lost on one side.
+   */
+  windowDays: number = DAILY_DAYS,
 ): ChartSeries {
-  const days = densify(series, DAILY_DAYS, now);
+  const days = densify(series, windowDays, now);
   const points: ChartPoint[] = days.map((d) => ({
     label: dayLabel(d.iso),
     // Two different unknowns collapse to the same null on purpose: no row for
@@ -358,8 +369,10 @@ export type LoadSeries = ChartSeries & {
 export function loadSeries(
   series: DailyPoint[] | undefined,
   now = new Date(),
+  /** See `acwrSeries` — defaults to the athlete screens' fixed window. */
+  windowDays: number = DAILY_DAYS,
 ): LoadSeries {
-  const days = densify(series, DAILY_DAYS, now);
+  const days = densify(series, windowDays, now);
   const label = (iso: string) => dayLabel(iso);
 
   const points: ChartPoint[] = days.map((d) => ({

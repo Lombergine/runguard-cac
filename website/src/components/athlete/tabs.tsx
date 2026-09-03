@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CoreProfile } from "@/lib/profile";
 import { aiEnabled, assistantName } from "@/lib/ai";
 import { miNum } from "@/lib/units";
+import { readinessState, readinessZone, verdictFor } from "@/lib/readiness";
 import {
   AcwrChart,
   LoadChart,
@@ -163,14 +164,23 @@ function BentoTile({
 }
 
 export function HomeTab({ p }: { p: CoreProfile }) {
-  const z = readyColor(p.readiness);
   const nextRace = p.races.upcoming[0] ?? null;
   const today = p.plan.days.find((d) => d.isToday);
   const rawPct = Math.round((p.risk.weekKm / p.weeklyTargetKm) * 100);
   const pct = Math.min(100, rawPct);
   const r = p.risk.recovery;
-  const high = p.readiness < 40;
-  const verdict = p.readiness >= 65 ? "Good to go" : p.readiness >= 40 ? "Train with care" : "Take it easy today";
+  /*
+    Everything below reads `ready`, never `p.readiness`.
+
+    `readinessScore` returns 100 from no check-in and no wearable data, so the
+    raw number said "Good to go" in success green beside a gauge that said "No
+    data yet — sync to see your readiness". Same screen, opposite claims.
+  */
+  const ready = readinessState(p);
+  const verdict = verdictFor(ready);
+  const high = ready.known && ready.value < 40;
+  // Muted ink, not a status hue: an unknown must not be readable as a verdict.
+  const z = ready.known ? readyColor(ready.value) : "var(--ink-muted)";
   const todayBlocks = today ? workoutBlocks(today) : [];
 
   return (
@@ -178,23 +188,66 @@ export function HomeTab({ p }: { p: CoreProfile }) {
       {/* HERO — one number that answers "how should I train today?", with the coaching inside it */}
       <div
         className="enter card-ember rounded-2xl p-6 flex flex-wrap items-center gap-6 glow-ember"
-        style={{ ["--i" as string]: 0, ...riskSurface(z, high) }}
+        style={{
+          ["--i" as string]: 0,
+          // No tint at all when nothing is known. `riskSurface` would wash the
+          // whole card in the colour of whichever band the placeholder number
+          // happened to land in — which for 100 is the reassuring one.
+          ...(ready.known
+            ? riskSurface(z, high)
+            : { borderColor: "var(--hairline)", background: "var(--surface)" }),
+        }}
       >
-        {p.risk.hasActivityHistory ? (
-          <Gauge value={p.readiness} color={z} size={132} stroke={10} label="readiness" />
+        {ready.known ? (
+          <Gauge value={ready.value} color={z} size={132} stroke={10} label="readiness" />
         ) : (
+          /*
+            A dashed ring, matching every other unknown in the product. The
+            solid ring is reserved for a real measurement, so the two are
+            distinguishable without reading the label.
+          */
           <div
-            className="rounded-full flex items-center justify-center text-center px-3"
-            style={{ width: 132, height: 132, border: "10px solid var(--surface-2)", color: "var(--ink-muted)" }}
+            className="rounded-full flex flex-col items-center justify-center text-center px-3 gap-1"
+            style={{
+              width: 132,
+              height: 132,
+              border: "2px dashed var(--hairline-strong)",
+              color: "var(--ink-muted)",
+            }}
           >
-            <span className="text-xs">No data yet — sync to see your readiness</span>
+            <span className="text-3xl font-extrabold leading-none">—</span>
+            <span className="text-[11px] leading-tight">readiness<br />unknown</span>
           </div>
         )}
         <div className="flex-1 min-w-60">
-          <div className="text-2xl font-extrabold" style={{ color: z }}>{verdict}</div>
+          {verdict ? (
+            <div className="text-2xl font-extrabold" style={{ color: z }}>{verdict}</div>
+          ) : (
+            /*
+              Not a fourth verdict. This slot is styled as a decision, so an
+              unknown gets a setup instruction in plain ink instead of a
+              confident-looking sentence in a status colour.
+            */
+            <div className="text-2xl font-extrabold" style={{ color: "var(--ink)" }}>
+              Nothing to go on yet
+            </div>
+          )}
           <p className="text-base mt-1.5 leading-relaxed" style={{ color: "var(--ink-2)" }}>
-            <span className="text-ember font-semibold">{assistantName()}: </span>
-            {p.aiInsight}
+            {p.risk.hasActivityHistory ? (
+              <>
+                <span className="text-ember font-semibold">{assistantName()}: </span>
+                {p.aiInsight}
+              </>
+            ) : (
+              /*
+                `aiInsight` has no no-data branch — it falls through to
+                "Everything's stable. Stack another clean week." for an athlete
+                who has never synced a run. Stating that as coaching is the
+                failure the visual spec names, so the assistant does not speak
+                until it has something to speak about.
+              */
+              "Connect Apple Health and log a check-in. RunGuard needs both before it can tell you anything about today."
+            )}
           </p>
         </div>
         {nextRace && (
@@ -210,10 +263,13 @@ export function HomeTab({ p }: { p: CoreProfile }) {
         <BentoTile
           i={1}
           label="Readiness"
-          value={String(p.readiness)}
-          unit="/100"
-          sub={verdict}
-          accent={z}
+          // The tile that sat directly under "No data yet" reading 100/100.
+          value={ready.known ? String(ready.value) : "—"}
+          unit={ready.known ? "/100" : undefined}
+          // Reached only when neither a check-in nor a sensor reading exists,
+          // so it names both rather than blaming the missing check-in.
+          sub={verdict ?? "no check-in or sensor data"}
+          accent={ready.known ? z : undefined}
           big
           info="0–100, built from your sleep, HRV and resting heart rate against your own baselines, then adjusted down for soreness you reported. It answers one question: how ready are you to absorb hard work today. Under 40 means back off; 65 and up means you're clear to run it as written. It is not a fitness score — you can be very fit and very flat."
         />
@@ -250,7 +306,14 @@ export function HomeTab({ p }: { p: CoreProfile }) {
 
       {/* weekly mileage progress — wide */}
       <div className="enter" style={{ ["--i" as string]: 5 }}>
-        <Panel title="Weekly mileage" note={`${miNum(p.risk.weekKm)} of ${miNum(p.weeklyTargetKm)} mi target`}>
+        <Panel
+          title="Weekly mileage"
+          note={
+            p.risk.hasActivityHistory
+              ? `${miNum(p.risk.weekKm)} of ${miNum(p.weeklyTargetKm)} mi target`
+              : "not enough history to set a target"
+          }
+        >
           <div className="h-3 rounded-full overflow-hidden" style={{ background: "var(--surface-2)" }}>
             <div
               className="h-full rounded-full bar-fill"
@@ -262,13 +325,27 @@ export function HomeTab({ p }: { p: CoreProfile }) {
             />
           </div>
           <div className="text-xs mt-2" style={{ color: rawPct > 115 ? "var(--status-warning)" : "var(--ink-muted)" }}>
-            {rawPct}% of weekly target{rawPct > 115 ? " — well over plan, this is the spike RunGuard is flagging" : ""}
+            {/*
+              "0% of weekly target" is technically true and still misleading:
+              it presents a target derived from no training history as a plan
+              the athlete is behind on. With nothing synced there is no target.
+            */}
+            {p.risk.hasActivityHistory
+              ? `${rawPct}% of weekly target${rawPct > 115 ? " — well over plan, this is the spike RunGuard is flagging" : ""}`
+              : "No target yet — it's set from your training history"}
           </div>
         </Panel>
       </div>
 
-      {/* today's workout — Runna-style blocks */}
-      {today && (
+      {/*
+        Today's workout, only once there is training history behind it.
+
+        Without it the plan still renders — a 5x1000m at a threshold pace
+        computed from no runs at all. Prescribing paces to an athlete the
+        system has never seen is the one failure on this page with a physical
+        consequence, so it is gated on history rather than dimmed.
+      */}
+      {today && p.risk.hasActivityHistory && (
         <div className="enter" style={{ ["--i" as string]: 6 }}>
           <Panel
             title={today.type === "Rest" ? "Today · Rest day" : `Today · ${today.type}`}
@@ -474,13 +551,16 @@ export function StatsTab({ p }: { p: CoreProfile }) {
     ...p.injuries.filter((i) => !i.resolved_at).map((i) => ({ part: i.body_part, kind: "injury" as const })),
     ...p.todaySoreness.map((s) => ({ part: s.part, severity: s.severity, kind: "soreness" as const })),
   ];
+  // The body scan tinted itself green and printed 100 for an athlete who had
+  // never checked in — the ambient tint is the largest thing on this screen.
+  const modelReady = readinessState(p);
   return (
     <div className="space-y-4">
       {/* hero: rotating 3D athlete on the left, headline stats on the right */}
       <div className="grid lg:grid-cols-[1.05fr_1fr] gap-4 items-stretch">
         <AthleteModel
-          readiness={p.readiness}
-          zone={p.readiness < 40 ? "high" : p.readiness < 65 ? "caution" : "ready"}
+          readiness={modelReady.known ? modelReady.value : null}
+          zone={readinessZone(modelReady)}
           hotspots={hotspots}
         />
         <div className="grid grid-cols-2 gap-3 content-start">
@@ -532,14 +612,14 @@ export function StatsTab({ p }: { p: CoreProfile }) {
           {(["z1", "z2", "z3", "z4", "z5"] as const).map((z, i) => {
             const total = Object.values(p.load.weekZones).reduce((s, x) => s + x, 0) || 1;
             const w = (p.load.weekZones[z] / total) * 100;
-            const colors = ["#3987e5", "#199e70", "#c98500", "#ec835a", "#d03b3b"];
+            const colors = ["var(--cat-blue)", "var(--cat-green)", "var(--cat-amber)", "var(--cat-orange)", "var(--cat-red)"];
             return w > 0 ? <div key={z} style={{ width: `${w}%`, background: colors[i] }} title={`${z.toUpperCase()}: ${p.load.weekZones[z]} min`} /> : null;
           })}
         </div>
         <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: "var(--ink-muted)" }}>
           {(["z1", "z2", "z3", "z4", "z5"] as const).map((z, i) => (
             <span key={z} className="inline-flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: ["#3987e5", "#199e70", "#c98500", "#ec835a", "#d03b3b"][i] }} />
+              <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: ["var(--cat-blue)", "var(--cat-green)", "var(--cat-amber)", "var(--cat-orange)", "var(--cat-red)"][i] }} />
               {z.toUpperCase()} {p.load.weekZones[z]}m
             </span>
           ))}
@@ -596,7 +676,8 @@ export function StatsTab({ p }: { p: CoreProfile }) {
 
 export function RecoveryTab({ p }: { p: CoreProfile }) {
   const r = p.risk.recovery;
-  const z = readyColor(p.readiness);
+  const ready = readinessState(p);
+  const z = ready.known ? readyColor(ready.value) : "var(--ink-muted)";
   const stages = p.sleep30.slice(-7);
   const avg = (k: "deep" | "rem" | "light") => {
     const v = stages.map((s) => s[k]).filter((x): x is number => x != null);
@@ -614,14 +695,28 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
       <div className="rounded-2xl border p-5 flex flex-wrap items-center gap-6" style={{ borderColor: "color-mix(in oklab, " + z + " 45%, transparent)", background: "color-mix(in oklab, " + z + " 8%, var(--surface))" }}>
         <div>
           <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Today&apos;s recovery status</div>
+          {/*
+            A traffic light with nothing behind it is worse than no light: this
+            block's whole job is to be read in one glance, so an unreported day
+            says so rather than showing green.
+          */}
           <div className="text-2xl font-extrabold mt-0.5" style={{ color: z }}>
-            {p.readiness >= 65 ? "Green — recovered" : p.readiness >= 40 ? "Yellow — partial" : "Red — under-recovered"}
+            {!ready.known
+              ? "Not reported yet"
+              : ready.value >= 65
+                ? "Green — recovered"
+                : ready.value >= 40
+                  ? "Yellow — partial"
+                  : "Red — under-recovered"}
           </div>
         </div>
         <div className="flex-1" />
         <div className="text-right">
           <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>Readiness</div>
-          <div className="text-3xl font-extrabold tabular-nums" style={{ color: z }}>{p.readiness}<span className="text-base" style={{ color: "var(--ink-muted)" }}>/100</span></div>
+          <div className="text-3xl font-extrabold tabular-nums" style={{ color: z }}>
+            {ready.known ? ready.value : "—"}
+            {ready.known && <span className="text-base" style={{ color: "var(--ink-muted)" }}>/100</span>}
+          </div>
         </div>
       </div>
 
@@ -680,7 +775,7 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
         </Panel>
         <Panel title="Sleep stages — 7-day average" note="from Apple Watch">
           <div className="space-y-3 pt-2">
-            {([["Deep", avg("deep"), "#3987e5"], ["REM", avg("rem"), "#9085e9"], ["Light", avg("light"), "#199e70"]] as const).map(([label, val, color]) => (
+            {([["Deep", avg("deep"), "var(--cat-blue)"], ["REM", avg("rem"), "var(--cat-violet)"], ["Light", avg("light"), "var(--cat-green)"]] as const).map(([label, val, color]) => (
               <div key={label} className="flex items-center gap-3">
                 <span className="w-12 text-xs" style={{ color: "var(--ink-muted)" }}>{label}</span>
                 <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "var(--surface-2)" }}>

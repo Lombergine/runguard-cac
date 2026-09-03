@@ -19,7 +19,7 @@
 import { View, StyleSheet } from "react-native";
 
 import { CardProps } from "../lib/types";
-import { color, shadow } from "../theme/tokens";
+import { color } from "../theme/tokens";
 import { layout, radius, ruleWidth } from "../theme/space";
 
 export function Card({ children, padded = true }: CardProps) {
@@ -30,12 +30,16 @@ export function Card({ children, padded = true }: CardProps) {
 
 const styles = StyleSheet.create({
   card: {
+    /*
+     * The edge, not a shadow. On the dark theme the surface step from `bg` to
+     * `card` does most of the work and this rule is nearly invisible; on the
+     * light theme a WHITE card on a near-white ground has no step at all, so
+     * the rule is the only thing separating them.
+     */
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.rule,
     borderRadius: radius.card,
-    // iOS reads shadow*, Android reads elevation. Both are in the token.
-    ...shadow.card,
   },
   padded: { padding: layout.cardPadding },
 });
