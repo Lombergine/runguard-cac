@@ -77,17 +77,13 @@ export type AthleteRow = {
   event_group: string | null;
   avatar_hue: number;
   device_token: string | null;
-  // DEPRECATED — Strava is gone from the product. Kept so `SELECT *` keeps
-  // type-checking against databases that still have the columns.
-  strava_athlete_id: string | null;
-  strava_access_token: string | null;
-  strava_refresh_token: string | null;
-  strava_expires_at: number | null;
   team_id: number | null;
   email: string | null;
   password_hash: string | null;
   hr_max: number | null;
   hr_max_source: string | null; // 'manual' | 'calibrated'; null = resolve automatically
+  /** Bumped by a password reset; folded into the session HMAC so old tokens die. */
+  token_version: number;
 };
 
 export type TeamRow = {
@@ -97,6 +93,8 @@ export type TeamRow = {
   coach_name: string | null;
   coach_email: string | null;
   coach_password_hash: string | null;
+  /** Bumped by a password reset; folded into the session HMAC so old tokens die. */
+  token_version: number;
 };
 
 /* ---------------- teams + accounts ---------------- */
@@ -145,10 +143,10 @@ export async function athletesForTeam(teamId: number): Promise<AthleteRow[]> {
  * Most recent activity per athlete on a team, as `athlete_id -> start_time`.
  *
  * The Data sources page needs one fact per athlete — "is anything actually
- * arriving?" — and used to answer it with `strava_athlete_id IS NOT NULL`,
- * which was a link state, not a sync state: an athlete could be linked and
- * sending nothing. Reading the real last activity is one grouped query for the
- * whole roster rather than N per-athlete lookups.
+ * arriving?" — and used to answer it from a stored link column, which was a
+ * link state, not a sync state: an athlete could be linked and sending
+ * nothing. Reading the real last activity is one grouped query for the whole
+ * roster rather than N per-athlete lookups.
  */
 export async function lastSyncForTeam(teamId: number): Promise<Map<number, string>> {
   const rows = await all<{ athlete_id: number; last_at: string | null }>(
@@ -164,40 +162,36 @@ export async function lastSyncForTeam(teamId: number): Promise<Map<number, strin
   return out;
 }
 
+/**
+ * Athletes whose phone has actually delivered HealthKit data since `cutoff`,
+ * mapped to when it last arrived.
+ *
+ * NOT the same question as `lastSyncForTeam`, which reads MAX(start_time) — the
+ * date of the most recent *run*. A team that imported a year of history through
+ * the coach's ZIP upload has recent runs and has never synced. This reads
+ * `created_at`, the moment the row was written, which is the only column that
+ * records ingest rather than exercise.
+ *
+ * `source = 'healthkit'` alone is not enough either: the seeded roster carries
+ * that value on every row. Recency is what separates them — seed rows share one
+ * frozen `created_at` and age out of the window, while a phone that is really
+ * syncing pushes its athlete's timestamp forward on every sync.
+ */
+export async function healthkitIngestSince(cutoff: string): Promise<Map<number, string>> {
+  const rows = await all<{ athlete_id: number; last_at: string | null }>(
+    `SELECT athlete_id, MAX(created_at) AS last_at
+       FROM activities
+      WHERE source = 'healthkit' AND created_at > ?
+      GROUP BY athlete_id`,
+    [cutoff]
+  );
+  const out = new Map<number, string>();
+  for (const r of rows) if (r.last_at) out.set(r.athlete_id, r.last_at);
+  return out;
+}
+
 export async function getAthleteByEmail(email: string): Promise<AthleteRow | undefined> {
   return one<AthleteRow>("SELECT * FROM athletes WHERE lower(email) = lower(?)", [email.trim()]);
-}
-
-// The one credential compared non-constant-time, and deliberately so. Making it
-// constant-time means splitting the token into a non-secret lookup prefix and a
-// timingSafeEqual'd remainder — a schema change plus a backfill on both drivers.
-// Against 160 bits of CSPRNG (newDeviceToken) the channel is a B-tree descent
-// under pooler and network jitter, not a byte-at-a-time string compare, so it
-// buys nothing measurable. Revisit if tokens ever get shorter or structured.
-export async function getAthleteByToken(token: string): Promise<AthleteRow | undefined> {
-  return one<AthleteRow>("SELECT * FROM athletes WHERE device_token = ?", [token]);
-}
-
-/**
- * Mint a fresh device token for one athlete and return it.
- *
- * Because `getAthleteByToken` is a plain equality lookup on this column, the
- * overwrite IS the revocation: every previously issued copy of the old token —
- * phone, athlete web cookie, anything leaked into a log — stops resolving to any
- * row the moment this returns. There is no separate revocation list to keep in
- * step, and no window where both values work.
- *
- * Throws if no such athlete, rather than returning a token that authenticates
- * nothing: a caller storing that string would believe it had rotated.
- */
-export async function rotateDeviceToken(athleteId: number): Promise<string> {
-  const token = newDeviceToken();
-  const row = await one<{ device_token: string }>(
-    "UPDATE athletes SET device_token = ? WHERE id = ? RETURNING device_token",
-    [token, athleteId]
-  );
-  if (!row) throw new Error(`rotateDeviceToken: no athlete ${athleteId}`);
-  return row.device_token;
 }
 
 export async function setAthleteTeam(athleteId: number, teamId: number | null): Promise<void> {

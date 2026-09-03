@@ -28,7 +28,7 @@
  * The cost is that a coach token cannot be revoked individually — the only
  * lever is rotating `SESSION_SECRET`, which signs everyone out. That is the
  * same lever the web has today, so this adds no new weakness, but it is worth
- * knowing before a lost phone. `mintCoachToken`'s docblock says the rest.
+ * knowing before a lost phone. `signTeam`'s docblock says the rest.
  *
  * ── SCOPE ──────────────────────────────────────────────────────────────────
  * This returns a TEAM, never an athlete. Every caller must scope its own reads
@@ -49,7 +49,10 @@ import { verifyCoachToken, currentTeamId } from "./session";
 export async function coachTeamId(request: Request): Promise<number | null> {
   const auth = request.headers.get("authorization") || "";
   if (auth.startsWith("Bearer ")) {
-    const viaToken = verifyCoachToken(auth.slice(7));
+    // `await`: verification now reads the team's `token_version`, so a coach
+      // session can actually be revoked rather than being valid until the
+      // secret rotates. See lib/session.ts.
+      const viaToken = await verifyCoachToken(auth.slice(7));
     // A Bearer header that fails to verify FALLS THROUGH to the cookie rather
     // than rejecting outright: the web app sends no Authorization header at
     // all, so anything here came from a client that meant it, and an athlete

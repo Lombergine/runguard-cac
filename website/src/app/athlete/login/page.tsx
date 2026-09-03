@@ -1,15 +1,25 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { GoogleSignIn } from "@/components/GoogleSignIn";
 
-export default function AthleteLogin() {
+/** What a returning Google redirect is telling us, if anything. */
+function ssoMessage(sso: string | null): string {
+  if (sso === "failed") return "That Google sign-in didn't complete. Try again.";
+  if (sso === "off") return "Google sign-in isn't set up on this deployment.";
+  return "";
+}
+
+function AthleteLoginForm() {
+  const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState(() => ssoMessage(params.get("sso")));
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +89,26 @@ export default function AthleteLogin() {
             {busy ? "Signing in…" : "Open my RunGuard app"}
           </button>
         </form>
+
+        <div className="mt-3 text-center">
+          <Link
+            href="/forgot?role=athlete"
+            className="text-sm"
+            style={{ color: "var(--ink-muted)" }}
+          >
+            Forgot your password?
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-3 my-4">
+          <span className="h-px flex-1" style={{ background: "var(--hairline)" }} />
+          <span className="text-xs" style={{ color: "var(--ink-muted)" }}>
+            or
+          </span>
+          <span className="h-px flex-1" style={{ background: "var(--hairline)" }} />
+        </div>
+        <GoogleSignIn role="athlete" />
+
         {/*
           A LINK, not a fetch — and no athlete named in the label.
           
@@ -100,5 +130,16 @@ export default function AthleteLogin() {
         </Link>
       </div>
     </div>
+  );
+}
+
+/* useSearchParams must sit inside a Suspense boundary: unsuspended, it fails
+   the BUILD rather than the request. Same reason RangePicker is wrapped in
+   dashboard/page.tsx. */
+export default function AthleteLogin() {
+  return (
+    <Suspense>
+      <AthleteLoginForm />
+    </Suspense>
   );
 }

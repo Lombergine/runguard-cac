@@ -1,14 +1,26 @@
-import { getAthlete, getAthleteByToken, AthleteRow } from "./db";
-import { athleteTokenFromCookie, currentTeamId } from "./session";
+import { getAthlete, AthleteRow } from "./db";
+import { isDemoAthlete, isWrite } from "./demoAthlete";
+import { demoTeamId } from "./demo";
+import {
+  athleteTokenFromCookie,
+  currentTeamId,
+  verifyAthleteToken,
+  verifyCoachToken,
+} from "./session";
 
 /** Which of the three auth paths matched. */
 export type AuthPath = "bearer" | "athlete" | "coach";
 
 /**
  * Resolve which athlete a request acts for, and say HOW it resolved. Three paths:
- *  - iOS app: Authorization: Bearer <device_token> → that athlete
+ *  - iOS app: Authorization: Bearer <athlete session token> → that athlete
  *  - Athlete web portal: athlete session cookie → that athlete (themselves only)
  *  - Coach web session: coach cookie + explicit athleteId, scoped to their team
+ *
+ * The first two carry the SAME value — `signAthleteToken(id)` from lib/session.ts
+ * — so both resolve the same way: verify the HMAC, then load the athlete the
+ * signature names. Neither reads `athletes.device_token`; that column authenticates
+ * nothing any more.
  *
  * Callers need the path, not just the row: a coach reading an athlete's chat is
  * a different thing from the athlete reading their own, and only one of them
@@ -22,20 +34,46 @@ export async function resolveAthleteWithPath(
   // it and return the token's own athlete no matter which id the caller asked
   // for, so `resolveAthlete(request, victimId)` answered truthily for any device
   // token — an IDOR wherever the route then trusted the client's id (it did, in
-  // the old strava/connect and strava/sync). Applying it by construction here means a
+  // two now-deleted sync routes). Applying it by construction here means a
   // fourth auth path cannot reintroduce the hole by forgetting the comparison.
   const scoped = (a: AthleteRow | null | undefined, via: AuthPath) =>
     a && (athleteId == null || athleteId === a.id) ? { athlete: a, via } : null;
 
+  /**
+   * The demo athlete never resolves for a WRITE, on any route, by construction.
+   *
+   * `middleware.ts` already makes the web demo read-only, but it does that by
+   * looking for the `rg_demo` COOKIE — and the phone sends a Bearer token and no
+   * cookies, so none of it applies to `/api/mobile/*`. Middleware cannot cover
+   * this case either: telling whether a token belongs to the demo athlete needs
+   * a database read, and it runs on the edge runtime without one.
+   *
+   * So the check lands here, in the one function every route already calls to
+   * ask who is speaking. A route added later is covered without its author
+   * knowing this exists. Expressed as "does not resolve" rather than as its own
+   * error, so callers take the not-authorised branch they already have.
+   *
+   * See `lib/demoAthlete.ts` for why this is the demo ATHLETE and not the demo
+   * team (freezing the team would freeze the roster local development runs on).
+   */
+  const guard = async (r: { athlete: AthleteRow; via: AuthPath } | null) => {
+    if (!r || !isWrite(request.method)) return r;
+    return (await isDemoAthlete(r.athlete)) ? null : r;
+  };
+
+  // The token names the athlete and the HMAC proves it, so the lookup is by id.
+  // There is no secret in the database to compare against and nothing to leak by
+  // comparing it — a forged or expired-by-secret-rotation token fails before any
+  // query runs.
   const auth = request.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (token) {
-    const r = scoped(await getAthleteByToken(token), "bearer");
+  const bearerId = auth.startsWith("Bearer ") ? await verifyAthleteToken(auth.slice(7)) : null;
+  if (bearerId !== null) {
+    const r = await guard(scoped(await getAthlete(bearerId), "bearer"));
     if (r) return r;
   }
-  const cookieToken = await athleteTokenFromCookie();
-  if (cookieToken) {
-    const r = scoped(await getAthleteByToken(cookieToken), "athlete");
+  const cookieId = await verifyAthleteToken((await athleteTokenFromCookie()) ?? undefined);
+  if (cookieId !== null) {
+    const r = await guard(scoped(await getAthlete(cookieId), "athlete"));
     if (r) return r;
   }
   if (athleteId != null && Number.isInteger(athleteId)) {
@@ -49,6 +87,57 @@ export async function resolveAthleteWithPath(
     if (a && a.team_id === teamId) return scoped(a, "coach");
   }
   return null;
+}
+
+/**
+ * Which TEAM a request acts for, for the coach-on-a-phone routes.
+ *
+ * A SEPARATE function from `resolveAthleteWithPath` on purpose, and the comment
+ * inside that one says why: it is a scope gate whose whole value is that every
+ * path through it is compared against the requested athlete id by construction.
+ * A coach branch bolted in there would resolve to a TEAM, which has no athlete
+ * id to compare against, so it would have to sidestep the gate — reintroducing
+ * exactly the IDOR the gate exists to make impossible. Two questions, two
+ * functions: "may this act for athlete N" and "which team is this".
+ *
+ * The credential is the same signed value the web coach session carries
+ * (`signTeam` in lib/session.ts), sent as `Authorization: Bearer` because the
+ * phone has no cookie jar. It is self-describing and HMAC-verified, so this
+ * needs no database read and cannot be pointed at another team by editing it.
+ *
+ * Returns null for anything that is not a valid coach token — including a valid
+ * ATHLETE session token. Those are `a.<athleteId>.<sig>`, so `Number("a.<id>")`
+ * is NaN and this bails before verifying; and even if the parse were looser, the
+ * two kinds sign different strings (`coach:<id>` vs `athlete:<id>`), so an
+ * athlete's signature can never match a team's. Domain separation is in the
+ * signed message, not in the parsing.
+ *
+ * ── THE DEMO TEAM CANNOT BE WRITTEN ─────────────────────────────────────────
+ *
+ * `/api/mobile/demo/coach` hands a real coach token for the demo team to anyone
+ * who asks — that is the point of a demo. A coach token is strictly more than an
+ * athlete one, and unlike the athlete demo there is now a coach WRITE behind it:
+ * `POST /api/mobile/coach/plan` sets the team's training calendar. Without this
+ * branch any visitor could rewrite what the demo team is told to run, and every
+ * later visitor would see it.
+ *
+ * So it is refused HERE rather than in the plan route, for the reason
+ * `demoAthlete.ts` gives for doing the same thing one function up: a guard on
+ * the route is a guard someone forgets to copy onto the next route. This is the
+ * single place a coach request becomes a team id, so a write that gets past it
+ * does not exist. `isWrite` is everything but GET and HEAD — not a list of
+ * mutating routes, because a list is the convention that drifts.
+ *
+ * `demoTeamId()` is null whenever `DEMO_TEAM_ID` is unset, and null never equals
+ * a real team id, so with the demo off this branch changes nothing.
+ */
+export async function resolveCoachTeam(request: Request): Promise<number | null> {
+  const auth = request.headers.get("authorization") || "";
+  if (!auth.startsWith("Bearer ")) return null;
+  const teamId = await verifyCoachToken(auth.slice(7));
+  if (teamId === null) return null;
+  if (isWrite(request.method) && teamId === demoTeamId()) return null;
+  return teamId;
 }
 
 export async function resolveAthlete(

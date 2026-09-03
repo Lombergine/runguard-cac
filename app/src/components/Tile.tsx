@@ -148,6 +148,10 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.rule,
     borderRadius: radius.card,
+    // The squircle iOS draws itself, as <Card/> does and as space.ts asks of
+    // every radius but `pill`. Free, and most of what separates a native
+    // surface from a web page in a wrapper.
+    borderCurve: "continuous",
     padding: layout.cardPadding,
   },
   label: { ...text.micro, color: color.muted },

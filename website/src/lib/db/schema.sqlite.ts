@@ -29,11 +29,11 @@ export function applySqliteSchema(db: Database.Database): void {
       sex TEXT,
       event_group TEXT,               -- 'distance' | 'mid' | 'sprint'
       avatar_hue INTEGER DEFAULT 210,
-      device_token TEXT UNIQUE,       -- iOS app auth token
-      strava_athlete_id TEXT,
-      strava_access_token TEXT,
-      strava_refresh_token TEXT,
-      strava_expires_at INTEGER,
+      device_token TEXT UNIQUE,       -- VESTIGIAL: authenticates nothing. Athletes
+                                      -- sign in with email + password and carry a
+                                      -- signed session (lib/session.ts). Kept only
+                                      -- because dropping it is a migration and
+                                      -- scripts/seed.ts still writes it.
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -55,6 +55,11 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_activities_athlete_time
       ON activities(athlete_id, start_time);
+    -- The snapshot job's HealthKit gate: which athletes' phones have delivered
+    -- anything lately. Filters on source + created_at with no athlete bound, so
+    -- it shares no prefix with the index above. See migration 0006.
+    CREATE INDEX IF NOT EXISTS idx_activities_source_created
+      ON activities(source, created_at);
 
     CREATE TABLE IF NOT EXISTS waitlist (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -203,24 +208,6 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_athlete_date
       ON risk_snapshots(athlete_id, date);
-
-    -- DEPRECATED. Strava was removed from the product; nothing reads or writes
-    -- this table or the four strava_* columns on the athletes table any more.
-    -- They are
-    -- left in place because dropping columns is a migration that has to run
-    -- against the live Supabase database, and empty columns cost nothing.
-    --
-    -- Historical note, for whoever does eventually drop them:
-    -- One row per outstanding Strava OAuth handshake. The row WAS the permission
-    -- to write tokens onto an athlete: /api/strava/connect created it after
-    -- authenticating the caller, and the callback deletes it as it redeems it.
-    -- A replayed callback URL therefore finds nothing and is refused. See the
-    -- state notes in src/lib/strava.ts.
-    CREATE TABLE IF NOT EXISTS strava_oauth_states (
-      nonce TEXT PRIMARY KEY,
-      athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      expires_at INTEGER NOT NULL     -- unix seconds
-    );
   `);
 
   db.exec(`
@@ -256,6 +243,30 @@ export function applySqliteSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_team_plan_days_team_date
       ON team_plan_days(team_id, date);
+
+    -- Pending Google sign-in handshakes. Deliberately names no user: nobody is
+    -- authenticated when one starts, so it records only which door was knocked
+    -- on. The identity arrives from Google's verified email. See migration 0007.
+    CREATE TABLE IF NOT EXISTS google_oauth_states (
+      nonce TEXT PRIMARY KEY,
+      role TEXT NOT NULL,               -- 'coach' | 'athlete'
+      code_verifier TEXT NOT NULL,      -- PKCE; never leaves the server
+      expires_at INTEGER NOT NULL       -- unix seconds
+    );
+    CREATE INDEX IF NOT EXISTS idx_google_oauth_states_expires
+      ON google_oauth_states(expires_at);
+
+    -- Pending password resets. The PRIMARY KEY is the sha256 of the emailed
+    -- secret, never the secret itself, so reading this table whole yields
+    -- nothing that can reset anyone's password. See migration 0008.
+    CREATE TABLE IF NOT EXISTS password_resets (
+      token_hash TEXT PRIMARY KEY,
+      subject TEXT NOT NULL,            -- 'athlete' | 'coach'
+      subject_id INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL       -- unix seconds
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_resets_expires
+      ON password_resets(expires_at);
   `);
 
   // Additive migrations for columns introduced after first release.
@@ -326,6 +337,10 @@ export function applySqliteSchema(db: Database.Database): void {
   // user and assistant rows of a safety-intercepted exchange, which is what lets
   // chatSummary keep those disclosures off the coach's screen.
   addColumn("chat_messages", "engine TEXT");
+  // Session generation. Folded into the session HMAC, so bumping it on a password
+  // reset stops every token issued before it from verifying. See migration 0008.
+  addColumn("athletes", "token_version INTEGER NOT NULL DEFAULT 0");
+  addColumn("teams", "token_version INTEGER NOT NULL DEFAULT 0");
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_races_created_by ON races(created_by_athlete_id);

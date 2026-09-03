@@ -9,7 +9,7 @@
  * (`accentSoft`, ink on it 14.4:1), the coach's a plain white card held off the
  * cream ground by a soft rule.
  *
- * The bubble geometry — radius, 84% max width, a side — is also what makes
+ * The bubble geometry — radius, 82% max width, a side — is also what makes
  * `SafetyNotice` legible as NOT a message. Do not lend any of it to that
  * component, and do not take its full-bleed flatness for this one.
  *
@@ -144,7 +144,8 @@ const styles = StyleSheet.create({
   rowMine: { alignItems: "flex-end" },
   rowTheirs: { alignItems: "flex-start" },
   bubble: {
-    maxWidth: "84%",
+    /** The design's measure. It was 84 — set before there was one to match. */
+    maxWidth: "82%",
     borderRadius: radius.card,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,

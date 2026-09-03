@@ -79,10 +79,18 @@ const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
 
 type Mode = "password" | "pairing";
 
-const MODES = [
-  { id: "password", label: "Password" },
-  { id: "pairing", label: "Pairing code" },
-] as const;
+/*
+ * PAIRING IS GONE — the server no longer accepts a device token.
+ *
+ * `/api/mobile/me` authenticates with `verifyAthleteToken` now (a signed,
+ * revocable athlete session minted by `/api/athlete-login`), and
+ * `website/src/lib/apiAuth.ts` says in as many words that nothing reads
+ * `athletes.device_token` any more. A "Pairing code" door would therefore fail
+ * every time it was opened, so it is not offered.
+ *
+ * The pairing code paths below are unreachable while this list has one entry.
+ */
+const MODES = [{ id: "password", label: "Password" }] as const;
 
 /**
  * The outcomes worth telling apart, in the shape `pair.tsx` uses, widened to

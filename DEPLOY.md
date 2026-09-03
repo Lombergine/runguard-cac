@@ -48,9 +48,15 @@ Required for `DB_DRIVER=supabase`:
 | Name | Value |
 |---|---|
 | `DB_DRIVER` | `supabase` |
-| `DB_PASSWORD` | the database password from Supabase → *Project Settings → Database*. Preferred over `DATABASE_URL`: the app fills in host/user/db itself, so a password containing `@ # : /` needs no URL-encoding. |
-| `DATABASE_URL` | full connection string, as an alternative to `DB_PASSWORD` |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_NAME` | optional overrides; defaults target the Supabase pooler on 6543 |
+| `DATABASE_URL` | the full pooler URI, from Supabase → **Connect**. Preferred: it names the project it connects to, so it cannot silently resolve to a different one. |
+| `DB_PASSWORD` | the database password, as an alternative to `DATABASE_URL`. Avoids URL-encoding a password containing `@ # : /` — but see the warning below. |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_NAME` | overrides for the `DB_PASSWORD` form; the defaults target one specific project's pooler on 6543 |
+
+> **`DB_PASSWORD` alone is only safe when there is one project.** The host and
+> username fall back to defaults hardcoded in `src/lib/db/driver.ts`, so setting
+> the password for a *second* project and forgetting `DB_HOST`/`DB_USER`
+> connects to the first one — with no error, because those credentials are
+> valid. Once more than one database exists, use `DATABASE_URL`.
 
 Required for SQLite hosts (Options B–D):
 
@@ -64,7 +70,6 @@ Optional:
 |---|---|
 | `COACH_PASSWORD` | demo-team unlock password (defaults to `milemarker` — change it) |
 | `OLLAMA_MODEL`, `OLLAMA_BASE_URL` | the local AI coach. Unset means the rule engine answers everything; there is no hosted-model path. |
-| `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_VERIFY_TOKEN` | Strava sync |
 
 None of these carry the `NEXT_PUBLIC_` prefix, so they stay server-side and never
 reach the browser bundle.
@@ -76,16 +81,25 @@ reach the browser bundle.
 
 ## Credentials
 
-These six things are credentials. Handling is the same for all of them.
+These eight things are credentials. Handling is the same for all of them.
 
 | Credential | What it opens |
 |---|---|
-| `athletes.device_token` | a minor's whole account — reads their profile, writes HealthKit data on their behalf. Never expires; rotation (below) is the only thing that invalidates one. |
-| the athlete session cookie (`core_athlete`) | the raw `device_token`, not a signed reference to one — a second copy of the same secret. `website/src/lib/session.ts` explains that choice. |
-| `SESSION_SECRET` | signs coach sessions; whoever holds it can mint one for any team |
+| the athlete session token | one athlete's whole account — reads their profile, writes HealthKit data on their behalf. `a.<athleteId>.<hmac>`, minted by `signAthleteToken()` at login. It is the same value in the `core_athlete` cookie on the web and in `Authorization: Bearer` from the phone. |
+| the coach session token | one team — its roster, every athlete's profile, the training calendar. `<teamId>.<hmac>`, minted by `signTeam()`. Same value in the `mm_session` cookie and in the app's Bearer header. |
+| `SESSION_SECRET` | signs **both** of the above; whoever holds it can mint one for any athlete or any team |
 | `DB_PASSWORD` / `DATABASE_URL` | the database, and every athlete in it |
 | `COACH_PASSWORD` | the demo team's roster |
-| `STRAVA_CLIENT_SECRET` | the Strava integration |
+| `GOOGLE_CLIENT_SECRET` | the web Google client — with it, someone else's server can complete a sign-in as this deployment |
+| `CRON_SECRET` | the nightly snapshot job; it walks the whole roster and writes to `risk_snapshots` |
+| `RESEND_API_KEY` | sending mail as your domain — and password-reset mail is the most impersonated message there is |
+
+`GOOGLE_CLIENT_ID` and `GOOGLE_IOS_CLIENT_ID` are deliberately **not** on this
+list. A client id is public by construction — it appears in every authorization
+URL and, for the iOS client, ships inside the app binary. Google issues iOS
+clients no secret at all, which is why `/api/mobile/google` redeems their codes
+as a public client with PKCE. Treating a client id as secret would be cargo cult;
+treating `GOOGLE_CLIENT_SECRET` as anything but secret hands over the door.
 
 **The rules: never logged, never rendered, never in an error message, never in a
 commit.** Two of those get broken by accident rather than by decision. *Never in
@@ -94,68 +108,89 @@ an error message* dies to a caught exception printed whole, or a
 screen still showing athlete data is a screen still holding the token that
 fetched it, so signing out has to clear the store, not just navigate away.
 
-### Why the app deletes the token rather than declaring it absent
+### Sessions are derived, not stored
 
-`/api/mobile/me` and `/api/mobile/home` both return the server's `athlete`
-object wholesale, `deviceToken` included — they share a builder with the coach
-dashboard, which legitimately needs the field. `stripDeviceToken()` in
-`app/src/lib/api.ts` `delete`s the key from the parsed JSON before any caller
-sees it.
+Neither token exists in the database. Each one is an HMAC-SHA256 over a domain
+string — `athlete:<id>` or `coach:<id>` — under `SESSION_SECRET`, and verifying
+one is recomputing that HMAC and comparing with `timingSafeEqual`. Nothing is
+looked up, so there is nothing to leak from a row and nothing to keep in step.
 
-Omitting `deviceToken` from the `Profile` type would not do that. A type is a
-compile-time claim, not a fence: the runtime object still carries every key the
-server sent, so an undeclared field survives any cast and is still there for a
-log line to serialise, for a `{...athlete}` spread to copy into a debug view,
-and for a later `<Text>` to render. Deleting the field is the version a future
-edit cannot quietly undo — a component cannot render what the object does not
-have. Use the same move anywhere a secret would otherwise cross a boundary
-protected only by a type.
+The two kinds cannot be confused for each other, because the domain is inside
+the signed message: the same id under the same key produces different signatures
+for a coach and for an athlete, so `verifyCoachToken` can never accept an
+athlete's value and `verifyAthleteToken` can never accept a coach's.
 
-### Demo tokens
+**Rotating `SESSION_SECRET` is the revocation.** Set a new one and every athlete
+session and every coach session in existence stops verifying, everywhere, at
+once — old phones, web cookies, a token pasted into a support thread, tokens in
+a log. That is a blunt instrument by design; it cannot revoke one device and
+spare another, and everyone signs in again afterwards. Anything that spills a
+token is handled by rotating the secret, and then by the athlete or coach
+signing in again with their password.
 
-Seeded athletes get random device tokens by default, and `npm run seed` prints
-them once — that print is the only copy, since the next seed issues different
-ones. `npm run seed -- --demo-tokens` brings back the guessable `demo_<name>`
-form that the athlete demo button expects; the seed refuses to run against
-anything but local SQLite, with no override, so a guessable token cannot reach a
-deployment.
+There is no per-athlete revocation and no expiry beyond the cookie's `maxAge`.
+If one is ever needed, it is a stored `token_version` column folded into the
+signed string — not a return to a permanent secret in a row.
 
-If you lost the print, read the token from the running app rather than the
-database: the athlete sees their own under **Profile → Pair the RunGuard iPhone
-app**, a coach sees the roster's at `/dashboard/connect`. Both are UI built to
-hand one token to one person — not a licence to paste it anywhere else.
+### `athletes.device_token` is vestigial
 
-### Rotation
+The column is still there and `scripts/seed.ts` still writes it, because
+dropping it is a migration. **Nothing reads it for authentication.** It used to
+be the entire credential for a minor's health data — 40 hex characters that
+never expired and could not be revoked — handed to a coach to copy off a laptop
+screen at a meet. There is no code path left that turns that string into a
+session, and no payload that carries it.
 
-`POST /api/athlete/rotate-token`, authenticated as the athlete themself
-(`Authorization: Bearer` or their own session cookie — the coach path is
-rejected). It overwrites `athletes.device_token` and returns the new value.
+### Do not let a secret cross a boundary protected only by a type
 
-**Rotation is revocation.** Auth is an equality lookup on that one column, so
-the moment it returns, every previously issued copy of the old token is dead:
-old phone, web cookie, a token pasted into a support thread, tokens in a log.
-There is no per-device record and no grace period — which is also its limit, as
-it cannot revoke one device and spare another. After rotating, the athlete
-re-pairs their phone; a rotation done from the web portal re-issues that tab's
-cookie so they are not signed out mid-click.
+No mobile payload carries a credential now: `buildProfile()` does not select one,
+and every `/api/mobile/*` response allow-lists its fields rather than spreading a
+row. Keep it that way — an allow-list makes a new field invisible until someone
+chooses to publish it, while a spread publishes it the moment it exists.
 
-Anything that spills a token — a log, a screenshot, a commit — is handled by
-rotating it, once per token exposed.
+If a secret ever does have to cross into a client, `delete` the key rather than
+omitting it from the type. A type is a compile-time claim, not a fence: the
+runtime object still carries every key the server sent, so an undeclared field
+survives any cast and is still there for a log line to serialise, for a
+`{...athlete}` spread to copy into a debug view, and for a later `<Text>` to
+render.
+
+### Signing in
+
+An athlete signs in at `/athlete/login` or in the app with the email and password
+they signed up with (`/api/athlete-login`, `/api/athlete-signup`). A coach signs
+in at `/login` or in the app (`/api/mobile/coach-login`). Pairing the phone is
+just signing in on the phone — there is no pairing code, and no screen anywhere
+renders a token.
+
+Athletes join a team with the team's **join code**, which the coach sees on the
+dashboard and on `/dashboard/connect`. That code adds an account to a roster; it
+is not a credential and it opens nothing on its own.
 
 ## Option A — Vercel + Supabase (recommended)
 
 1. Push this repo to GitHub. `.gitignore` covers `.env*`, so no secret is
    committed — keep it that way.
-2. Apply the schema once: run
-   `website/supabase/migrations/0001_risk_snapshots_and_chat_engine.sql` in the
-   Supabase SQL editor (or via the Supabase MCP `apply_migration`).
+2. Apply the schema once: run `website/supabase/migrations/0000_base_schema.sql`
+   in the Supabase SQL editor (or via the Supabase MCP `apply_migration`). That
+   one file builds the whole database — the numbered migrations after it are
+   deltas already folded into it, needed only by projects that predate it.
 3. https://vercel.com → **Add New → Project** → import the repo.
    Then **Settings → Build & Deployment → Root Directory** → `website`.
-4. **Settings → Environment Variables** (Production, and Preview if you use it):
-   set `DB_DRIVER=supabase`, `DB_PASSWORD`, `SESSION_SECRET`, `COACH_PASSWORD`.
-   `cd website && vercel env pull .env.local` copies them to your machine, into
-   the already-ignored `website/.env.local` — Next only reads `.env.local` from
-   its own project root.
+4. **Settings → Environment Variables**: set `DB_DRIVER=supabase`,
+   `DATABASE_URL` and `SESSION_SECRET`. See *Environments* below for which value
+   each target gets — they are not the same.
+
+   Prefer `DATABASE_URL` (the pooler URI from Supabase → **Connect**) over
+   `DB_PASSWORD`. Both work, but `DB_PASSWORD` leans on the default host and
+   username baked into `db/driver.ts`, so a target that sets the password and
+   forgets `DB_HOST` connects to whichever project those defaults name — quietly,
+   and successfully. A full URI cannot point somewhere you did not write down.
+
+   `cd website && vercel env pull .env.local` copies the **Development** values
+   to your machine, into the already-ignored `website/.env.local` — Next only
+   reads `.env.local` from its own project root. It OVERWRITES that file, so
+   anything you keep there and have not also set in Vercel is lost.
 5. Deploy. Coaches go to `/signup`, athletes to `/athlete/signup`.
 
 The connection uses Supabase's **transaction pooler on port 6543** with
@@ -169,6 +204,102 @@ To copy an existing local database up (this **replaces** the target):
 cd website
 DB_DRIVER=supabase DB_PASSWORD=... npx tsx scripts/migrate-to-pg.ts --yes
 ```
+
+To copy one deployed database into another — moving accounts, or filling a new
+project — use `scripts/copy-pg-to-pg.ts` instead. It intersects the columns of
+the two schemas, so a target that has deliberately dropped a column still takes
+the copy, which `pg_dump --data-only` cannot do. Do not route a Postgres-to-
+Postgres move through the local SQLite file: the two drift independently, and
+whichever table the file is behind on is silently overwritten with the older
+copy.
+
+```bash
+cd website
+export SRC_DB_URL='…'   # export, not inline: an inline password enters shell history
+export DST_DB_URL='…'
+npx tsx scripts/copy-pg-to-pg.ts          # dry run — reports both sides
+npx tsx scripts/copy-pg-to-pg.ts --yes
+```
+
+## Environments
+
+Vercel decides the target from the branch: the production branch deploys to
+**Production**, every other branch to **Preview**, and **Development** is what
+`vercel env pull` and `vercel dev` read. Point them at different databases —
+a preview branch sharing production's database writes real athletes' check-ins,
+and a bad migration on a branch corrupts live data.
+
+| | `DB_DRIVER` | `DATABASE_URL` | `SESSION_SECRET` |
+|---|---|---|---|
+| Production | `supabase` | the PROD project | its own |
+| Preview | `supabase` | the DEV project | its own, **different** |
+| Development | `supabase` | the DEV project | **shared with Preview** |
+
+The two Supabase projects, both in the RealRunGuard org (project refs are not
+secrets — the password in the connection string is):
+
+| | project ref | region |
+|---|---|---|
+| PROD | `xgcxfvsezsfxdujzjexd` | `us-east-1` |
+| DEV | `mwwhgnrdownzbnwmbsgi` | `us-east-1` |
+
+**Set `DATABASE_URL`, not `DB_PASSWORD`.** `db/driver.ts` falls back to a
+hardcoded host and username when only a password is given, and those defaults
+name a project this deployment no longer uses. A forgotten `DB_HOST` would then
+connect somewhere unintended and succeed silently. A full `DATABASE_URL` names
+its project and cannot resolve elsewhere.
+
+**Development mirrors Preview.** `vercel env pull` returns
+`DB_DRIVER=supabase` and the DEV `DATABASE_URL`, so `npm run dev` and
+`vercel dev` both serve `http://localhost:3000` against the shared DEV project
+rather than the local SQLite file. Preview and Development are written from one
+source so the two are provably the same target — Vercel will not read Preview
+values back (`vercel env pull` yields the literal `[SENSITIVE]`), so "I set both
+the same" is not verifiable after the fact; rewriting both together is.
+
+Development also carries `COACH_PASSWORD`, `DEMO_TEAM_ID`, `DEMO_ATHLETE_ID` and
+the `OLLAMA_*` pair, purely so `vercel env pull` returns a working file. That
+command **overwrites** `website/.env.local`; before those five were mirrored, a
+pull silently destroyed the local demo setup.
+
+`SESSION_SECRET` is shared between Preview and Development on purpose — both
+reach the same DEV database, so a session valid on one is valid on the other and
+crosses no boundary. **Production keeps its own**, which is the split that
+matters: a shared secret there would make a session minted on any preview URL
+valid against production.
+
+To go back to the local SQLite file, comment out `DB_DRIVER` in
+`website/.env.local`. Nothing else needs changing.
+
+Two things follow from running on Supabase locally, both deliberate:
+
+- **`SESSION_SECRET` becomes required.** `secret()` fails closed the moment
+  `DB_DRIVER=supabase`, even on localhost, because cookies minted against a
+  shared database must not be signed with the default published in `session.ts`.
+- **The password login on `/login` stops working.** `api/login/route.ts`
+  refuses the shared `COACH_PASSWORD` unless the driver is sqlite. Do not widen
+  that gate. The demo itself is unaffected: the landing page's "See the coach
+  dashboard" link goes through `/api/demo/coach` → `demoLogIn()`, which has no
+  driver gate.
+
+Cookie `secure` is **not** tied to `DB_DRIVER` — it follows `NODE_ENV`, which is
+the transport question rather than the database question. It was tied to
+`DB_DRIVER` once, and that made `DB_DRIVER=supabase npm run dev` mark cookies
+`secure` over plain HTTP; browsers disagree about localhost in that case
+(Chrome and Firefox allow it, Safari does not), so sign-in broke on some
+machines and not others.
+
+**A different `SESSION_SECRET` per target, not one shared value.** It signs coach
+sessions, so a single secret makes a session minted on any preview URL valid on
+production. `SESSION_SECRET` is required on Preview too: Vercel builds set
+`NODE_ENV=production`, so `secret()` throws rather than falling back.
+
+**Never set `OLLAMA_MODEL` or `OLLAMA_BASE_URL` on a deployment** — see the table
+above and the note in `.env.example`. **Never point `DEMO_TEAM_ID` at a team with
+real athletes**: it is read at build time and makes that roster public.
+
+Environment variables apply to *new* deployments. Changing one does not affect
+what is already running — redeploy.
 
 ## Option B — Railway (SQLite, persistent volume)
 
@@ -212,25 +343,63 @@ DB_DRIVER=supabase DB_PASSWORD=... npx tsx scripts/migrate-to-pg.ts --yes
   `/signup` and `/athlete/signup`. To get the demo team into Supabase anyway,
   seed locally and run `scripts/migrate-to-pg.ts`.
 
+## The nightly snapshot job
+
+`vercel.json` schedules `GET /api/cron/snapshot` at 10:00 UTC. It writes one
+`risk_snapshots` row per athlete per day — the feature vector the engine saw,
+which nothing displays. It exists because `computeRisk()` recomputes from
+scratch on every request, so a day nobody wrote down is gone, and a season of
+these rows labelled by what actually happened is the only thing that could ever
+justify showing a real risk number again.
+
+- **Set `CRON_SECRET`**, or the route answers 503 and nothing accumulates. Vercel
+  sends it as `Authorization: Bearer <CRON_SECRET>`.
+- **Production only.** Vercel runs crons on the production deployment, and the
+  route independently refuses unless `DB_DRIVER=supabase` — a preview deployment
+  writing to the dev database would interleave two engines' output into the same
+  `(athlete, date)` rows.
+- **It skips athletes whose phone has sent nothing in 30 days.** The gate reads
+  `activities.created_at` — when the row *arrived* — not `start_time`, which is
+  when the athlete ran. A team whose coach uploaded a year of history through the
+  Apple Health ZIP has recent runs and has never synced a phone.
+- **10:00 UTC is chosen, not arbitrary.** `localDay()` uses the process-local
+  calendar day; a cron early in UTC writes tomorrow's date relative to what the
+  athletes see.
+- **Backfilling** is a hand-run, not part of a deploy. From `website/`:
+
+  ```
+  DATABASE_URL=... DB_DRIVER=supabase npx tsx scripts/snapshot.ts --backfill 365
+  ```
+
+  Use `DATABASE_URL`, not `DB_PASSWORD` — the password-only path falls back to a
+  hardcoded host naming a project this deployment no longer uses. Add `--all` to
+  ignore the HealthKit gate, which is what you want against seeded data where
+  every row shares one frozen `created_at` and nobody passes.
+
+Re-running is safe: `upsertRiskSnapshot` is idempotent per `(athlete, date)`, so
+a partial run is repaired by the next one rather than duplicated.
+
 ## Point the mobile app at it
 
 The app lives in [`app/`](app/README.md) and talks to this deployment over
-`/api/mobile/*` with `Authorization: Bearer <device_token>`.
+`/api/mobile/*` with `Authorization: Bearer <session token>` — the athlete or
+coach session it received when the person signed in.
 
-> **Status:** the sync described here is the target design. `app/` is currently
-> an empty scaffold — the HealthKit read and its background-delivery entitlement
-> still have to be built.
+**The backend URL is compiled in, not entered.** `src/lib/api.ts` reads
+`EXPO_PUBLIC_API_URL` once at bundle time and there is no field anywhere in the
+app to change it, so the build for TestFlight must carry the production URL and a
+build for testing must carry the preview one. Unset, it falls back to
+`http://localhost:3000` — which on a phone is the phone, and fails on every
+screen. See `app/.env.example`.
 
 To put it on real phones you will need an Apple Developer account and
-TestFlight. Each athlete enters your deployed URL and pastes the pairing token
-from their web **Profile → Pair the RunGuard iPhone app**, then grants Apple
-Health access once.
+TestFlight. Each athlete pastes the pairing token from their web **Profile → Pair
+the RunGuard iPhone app**, then grants Apple Health access once.
 
 ## Custom domain
 
 All four hosts let you add a custom domain (e.g. `runguard.run`) in their
-dashboard — add the domain, set the DNS record they show you, done. Then set
-your Strava callback domain to match if you use Strava.
+dashboard — add the domain, set the DNS record they show you, done.
 
 ## Before a real deployment
 

@@ -47,15 +47,22 @@
  * every bar is `color.series1`, which is the app's one data fill. Nothing is
  * lost: the label and the figure were always what carried the meaning.
  *
- * ── This component renders its own panel head ──────────────────────────────
+ * ── This component renders its own labelled group ──────────────────────────
  * A caller drops it in bare — `<SleepStages sleep30={profile.sleep30} />` —
- * and must not add a heading of its own.
+ * and must not wrap it in a `Section` of its own.
+ *
+ * The head was a local panel title at `text.title` (19 display) and is now the
+ * shared `Section`, for the reason `SleepChart` gives: it is the label rank the
+ * design draws above a group, and the two sleep groups sit next to each other,
+ * so one converting and the other not would be visible drift rather than a
+ * hierarchy.
  */
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Absent } from "../Nothing";
 import { Card } from "../Card";
+import { Section } from "../Section";
 import { isAbsent } from "../chart/scales";
 import type { SleepDay } from "../../lib/types";
 import { radius, ruleWidth, space } from "../../theme/space";
@@ -126,15 +133,6 @@ export type SleepStagesProps = {
    */
   sleep30?: SleepDay[];
 };
-
-function Head({ note }: { note?: string }) {
-  return (
-    <View style={styles.head}>
-      <Text style={styles.title}>Sleep stages</Text>
-      {note ? <Text style={styles.note}>{note}</Text> : null}
-    </View>
-  );
-}
 
 /** One stage: the word, the meter, the figure with its unit welded on. */
 function StageRow({
@@ -215,8 +213,7 @@ export function SleepStages({ sleep30 }: SleepStagesProps) {
   // worst night on record rather than as no record at all.
   if (known.length === 0) {
     return (
-      <View style={styles.section}>
-        <Head />
+      <Section label="Sleep stages" style={styles.section}>
         <Absent
           label={
             // The two are genuinely different facts, so they get different
@@ -227,22 +224,23 @@ export function SleepStages({ sleep30 }: SleepStagesProps) {
               : "No sleep synced yet, so there are no stages to average."
           }
         />
-      </View>
+      </Section>
     );
   }
 
   return (
-    <View style={styles.section}>
-      {/* Not "7-day average", which is what the website's panel title claims:
-          the window is the last seven ENTRIES of a SPARSE array, so on a patchy
-          month it spans well over a week and can hold fewer than seven nights
-          with stages in it. The note quotes what was actually averaged. It is a
-          count, not a date — no date is derived here (non-negotiable #2). */}
-      <Head
-        note={`averaged over ${contributing} recent ${
-          contributing === 1 ? "night" : "nights"
-        }`}
-      />
+    /* Not "7-day average", which is what the website's panel title claims: the
+       window is the last seven ENTRIES of a SPARSE array, so on a patchy month
+       it spans well over a week and can hold fewer than seven nights with
+       stages in it. The note quotes what was actually averaged. It is a count,
+       not a date — no date is derived here (non-negotiable #2). */
+    <Section
+      label="Sleep stages"
+      note={`averaged over ${contributing} recent ${
+        contributing === 1 ? "night" : "nights"
+      }`}
+      style={styles.section}
+    >
       <Card>
         {keys.map((k, i) => (
           <StageRow
@@ -259,22 +257,13 @@ export function SleepStages({ sleep30 }: SleepStagesProps) {
           did not get.
         </Text>
       ) : null}
-    </View>
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
   /** `recovery.tsx`'s `styles.section`. */
   section: { gap: space.md },
-  head: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: space.md,
-  },
-  title: { ...text.title, color: color.ink },
-  note: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   row: { flexDirection: "row", alignItems: "center", gap: space.md },
   rowNext: {

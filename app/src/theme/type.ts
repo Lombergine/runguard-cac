@@ -91,6 +91,18 @@ export const text = {
   } as TextStyle,
 
   /**
+   * A figure sitting INSIDE a line of prose — "82% of weekly target". Body-sized
+   * so it does not break the line's rhythm, mono so it is still visibly a
+   * number rather than a word.
+   */
+  statInline: {
+    fontFamily: font.monoBold,
+    fontSize: 15,
+    lineHeight: 22,
+    ...tabular,
+  } as TextStyle,
+
+  /**
    * 30–40 display 800, -0.02em — the check-in prompt, and nothing else.
    * Sized at 34 to sit mid-range and survive Dynamic Type scaling at 360px.
    */

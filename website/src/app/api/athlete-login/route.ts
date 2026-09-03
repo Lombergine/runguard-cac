@@ -1,58 +1,46 @@
-import { getAthleteByEmail, getAthleteByToken, verifyPassword } from "@/lib/db";
-import { athleteLogIn, athleteLogOut } from "@/lib/session";
+import { getAthleteByEmail, verifyPassword } from "@/lib/db";
+import { athleteLogIn, athleteLogOut, signAthleteToken } from "@/lib/session";
 import { checkAuthRate, recordAuthFailure, tooManyAttempts } from "@/lib/rateLimit";
 
+/**
+ * Athlete sign-in. Email and password, and nothing else.
+ *
+ * There used to be a second branch here that accepted a raw
+ * `athletes.device_token` as a login credential. It is gone. That column was a
+ * permanent, unrevocable secret for one minor's health data, and every place it
+ * could be typed in was a place it could be phished, pasted or logged. What this
+ * returns instead is `signAthleteToken(id)` — an HMAC over the athlete's id under
+ * `SESSION_SECRET`, stored nowhere, so rotating that secret ends every session.
+ *
+ * The response body carries the token because the phone has no cookie jar and
+ * must put it in the Keychain; the browser gets the same value in an httpOnly
+ * cookie via `athleteLogIn`. One credential, two transports.
+ */
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  const token = typeof body.token === "string" ? body.token.trim() : "";
 
-  // Email + password (real accounts)
-  if (email && password) {
-    // Checked before the lookup, so a throttled attempt never reaches scrypt and
-    // its 429 says nothing about whether the address exists.
-    const gate = await checkAuthRate(request, email);
-    if (!gate.allowed) return tooManyAttempts(gate.retryAfter);
-
-    const athlete = await getAthleteByEmail(email);
-    // Not `!athlete || verifyPassword(...)`: || would skip scrypt when no such
-    // account exists, and the fast 401 tells an attacker the email is unused.
-    const ok = verifyPassword(password, athlete?.password_hash);
-    if (!athlete || !ok) {
-      await recordAuthFailure(request, email);
-      return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
-    }
-    // athletes still authenticate downstream via their device token cookie
-    const t = athlete.device_token;
-    if (!t) {
-      return Response.json({ error: "This account can't be opened yet — contact your coach." }, { status: 400 });
-    }
-    await athleteLogIn(t);
-    return Response.json({ ok: true, name: athlete.name, token: t });
+  if (!email || !password) {
+    return Response.json({ error: "Enter your email and password." }, { status: 400 });
   }
 
-  // Legacy / demo app-token path
-  if (token) {
-    // The bucket is keyed on the literal "device-token", never on the token that
-    // was submitted: keying on the guess would open a fresh counter per guess and
-    // count nothing, which is exactly the oracle this path was.
-    const gate = await checkAuthRate(request, "device-token");
-    if (!gate.allowed) return tooManyAttempts(gate.retryAfter);
+  // Checked before the lookup, so a throttled attempt never reaches scrypt and
+  // its 429 says nothing about whether the address exists.
+  const gate = await checkAuthRate(request, email);
+  if (!gate.allowed) return tooManyAttempts(gate.retryAfter);
 
-    const athlete = await getAthleteByToken(token);
-    if (!athlete) {
-      await recordAuthFailure(request, "device-token");
-      return Response.json(
-        { error: "That token doesn't match any athlete. Try your email + password, or the demo token." },
-        { status: 401 }
-      );
-    }
-    await athleteLogIn(token);
-    return Response.json({ ok: true, name: athlete.name });
+  const athlete = await getAthleteByEmail(email);
+  // Not `!athlete || verifyPassword(...)`: || would skip scrypt when no such
+  // account exists, and the fast 401 tells an attacker the email is unused.
+  const ok = verifyPassword(password, athlete?.password_hash);
+  if (!athlete || !ok) {
+    await recordAuthFailure(request, email);
+    return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
   }
 
-  return Response.json({ error: "Enter your email and password." }, { status: 400 });
+  await athleteLogIn(athlete.id);
+  return Response.json({ ok: true, name: athlete.name, token: signAthleteToken(athlete.id, athlete.token_version) });
 }
 
 export async function DELETE() {

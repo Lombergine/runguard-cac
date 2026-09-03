@@ -1,5 +1,5 @@
-import { getAthleteByToken } from "@/lib/db";
 import { buildProfile } from "@/lib/profile";
+import { verifyAthleteToken } from "@/lib/session";
 
 /**
  * The home screen's slice of the profile.
@@ -22,20 +22,16 @@ import { buildProfile } from "@/lib/profile";
  */
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  const athlete = token ? await getAthleteByToken(token) : undefined;
-  if (!athlete) {
-    return Response.json({ error: "Invalid device token" }, { status: 401 });
+  const athleteId = auth.startsWith("Bearer ") ? await verifyAthleteToken(auth.slice(7)) : null;
+  if (athleteId === null) {
+    return Response.json({ error: "Invalid session token" }, { status: 401 });
   }
-  const profile = await buildProfile(athlete.id);
+  const profile = await buildProfile(athleteId);
   if (!profile) return Response.json({ error: "Not found" }, { status: 404 });
 
   return Response.json({
-    // WITHOUT `deviceToken` — see the note in ../me/route.ts. `buildProfile`
-    // attaches it for the coach dashboard's pairing panel, and returning
-    // `profile.athlete` whole put the app's own bearer credential inside every
-    // home-screen response.
-    athlete: (({ deviceToken: _t, ...rest }) => rest)(profile.athlete),
+    // No `deviceToken` to strip any more — see the note in ../me/route.ts.
+    athlete: profile.athlete,
     readiness: profile.readiness,
     prePractice: profile.prePractice,
     todayCheckin: profile.todayCheckin,

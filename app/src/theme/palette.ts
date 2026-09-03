@@ -86,6 +86,8 @@ export const lightColors = {
 
   /** Absent. ALWAYS paired with a dashed border and a label, never colour alone. */
   unknown: "#5F6875",
+  /** TextInput placeholder. Lighter than `muted`: it is a hint, not content. */
+  placeholder: "#8C94A1",
 
   accent: "#FF5A36",
   accentSoft: "rgba(255,90,54,0.12)",
@@ -152,6 +154,7 @@ export const darkColors: { [K in keyof typeof lightColors]: string } = {
   series1Text: "#8B7CFF",
 
   unknown: "#7D8797",
+  placeholder: "#6B7484",
 
   accent: "#FF5A36",
   accentSoft: "rgba(255,90,54,0.18)",

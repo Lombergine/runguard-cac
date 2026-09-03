@@ -52,26 +52,59 @@ const ALLOWED_WRITES = [
   "/api/chat",
 ];
 
+/**
+ * Keep API responses out of every cache, including the browser's disk.
+ *
+ * `/api/mobile/me` and `/api/mobile/home` return an athlete's whole record, and
+ * the default header on them is `no-cache, must-revalidate`. `no-cache` does not
+ * mean "do not store" — it means "store it, but revalidate before reusing it" —
+ * and without `private` an intermediary may keep a copy of its own. `no-store`
+ * is the directive that forbids writing it down at all.
+ *
+ * Set here rather than per route for the same reason the demo gate is: a
+ * per-route header is a convention, and the next route added would not have it.
+ *
+ * PAGES ARE NOT COVERED BY THIS, and cannot be from middleware. Next.js sets its
+ * own Cache-Control on a rendered page response and overwrites whatever
+ * middleware put there — measured, not assumed: with this function matching
+ * /dashboard, the page still came back `no-cache, must-revalidate` while
+ * /api/mobile/me came back `private, no-store`. Matching page routes therefore
+ * costs an invocation per navigation and changes nothing, so it does not.
+ *
+ * That leaves one open question worth checking against a real deployment: Next
+ * emits a stricter header for dynamic responses in production than the dev
+ * server shows, and it may already include `no-store`. If it does not, the fix
+ * belongs wherever the platform lets a page header be overridden — not here.
+ * Until then the residual risk is a browser disk-caching a signed-in page, which
+ * matters because this is used on shared school computers.
+ */
+function uncacheable(response: NextResponse): NextResponse {
+  response.headers.set("Cache-Control", "private, no-store, must-revalidate");
+  return response;
+}
+
 export function middleware(request: NextRequest) {
   const { method, nextUrl } = request;
-  if (method === "GET" || method === "HEAD") return NextResponse.next();
-  if (request.cookies.get(DEMO_COOKIE)?.value !== "1") return NextResponse.next();
+  if (method === "GET" || method === "HEAD") return uncacheable(NextResponse.next());
+  if (request.cookies.get(DEMO_COOKIE)?.value !== "1") return uncacheable(NextResponse.next());
 
   const path = nextUrl.pathname;
   if (ALLOWED_WRITES.some((allowed) => path === allowed || path.startsWith(`${allowed}/`))) {
-    return NextResponse.next();
+    return uncacheable(NextResponse.next());
   }
 
   // A sentence for a person, in the shape every form in this app already reads
   // (`{ error }` lifted onto the message it shows), so a refused save explains
   // itself where the athlete or coach is looking instead of failing silently.
-  return NextResponse.json(
-    {
-      error:
-        "This is the read-only demo, so nothing you change here is saved — the sample team stays the same for the next person. Create a free team and everything on this screen becomes yours to edit.",
-      demo: true,
-    },
-    { status: 403 }
+  return uncacheable(
+    NextResponse.json(
+      {
+        error:
+          "This is the read-only demo, so nothing you change here is saved — the sample team stays the same for the next person. Create a free team and everything on this screen becomes yours to edit.",
+        demo: true,
+      },
+      { status: 403 }
+    )
   );
 }
 
@@ -79,7 +112,9 @@ export function middleware(request: NextRequest) {
  * API routes only.
  *
  * Page navigations are GETs and would pass anyway, but matching them would put
- * this function on the hot path of every image and font request for no reason.
+ * this function on the hot path of every image and font request for no reason —
+ * and, as the note above records, would not even set the header, because Next
+ * overwrites it on page responses.
  */
 export const config = {
   matcher: "/api/:path*",

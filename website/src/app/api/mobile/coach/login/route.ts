@@ -1,4 +1,4 @@
-import { mintCoachToken } from "@/lib/session";
+import { signTeam } from "@/lib/session";
 import { getTeamByCoachEmail, verifyPassword } from "@/lib/db";
 import { checkAuthRate, recordAuthFailure, tooManyAttempts } from "@/lib/rateLimit";
 
@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
  *     would skip scrypt and time-leak which emails exist.
  *
  * The token it returns is a full credential for the whole team's health data.
- * See `mintCoachToken` — Keychain only, never logged, never rendered.
+ * See `signTeam` — Keychain only, never logged, never rendered.
  */
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -53,7 +53,9 @@ export async function POST(request: Request) {
 
   return Response.json({
     ok: true,
-    token: mintCoachToken(team.id),
+    token: // The version is part of the signed value, so bumping `token_version`
+      // on the team invalidates every coach token already issued.
+      signTeam(team.id, team.token_version),
     team: team.name,
     coach: team.coach_name ?? null,
   });

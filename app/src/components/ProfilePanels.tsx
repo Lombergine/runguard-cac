@@ -6,8 +6,8 @@
  * in one file because they are only ever used together, on one screen, and four
  * files of thirty lines would be filing rather than structure.
  *
- * Each owns its own `Card`; the screen supplies the heading above it, matching
- * how `profile.tsx` already sets out Team and Max heart rate.
+ * Each owns its own `Card`; `profile.tsx` supplies the `Section` eyebrow above
+ * it, matching how that screen already sets out Team and Max heart rate.
  *
  * ── THREE ABSENCES THAT ARE NOT FAILURES ───────────────────────────────────
  * Non-negotiable #4 says absent, zero and no-run are three different objects.
@@ -24,12 +24,12 @@
  */
 import { StyleSheet, Text, View } from "react-native";
 
-import { Card } from "./Card";
 import { Absent } from "./Nothing";
+import { Card } from "./Card";
 import { storedPartLabel } from "../lib/bodyParts";
 import { dayLabel } from "../lib/dates";
 import type { Badge, Goal, Injury } from "../lib/types";
-import { ruleWidth, space } from "../theme/space";
+import { layout, radius, ruleWidth, space } from "../theme/space";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
@@ -52,6 +52,39 @@ const APPS = ["Apple Health", "Apple Watch", "Garmin", "COROS", "WHOOP"] as cons
  */
 const APPLE_ALIASES = ["apple watch", "apple health", "healthkit", "apple_export"];
 
+/**
+ * One row in a card of rows.
+ *
+ * The separator is absolutely positioned rather than a `borderTopWidth`: the
+ * design insets it 16 from the left so it starts under the row's text, and a
+ * border is all-or-nothing across the row. `ListRow` draws its own the same way
+ * and at the same inset, so a fact row and a goal row line up.
+ *
+ * It hangs off the bottom of every row BUT THE LAST. The design emits one after
+ * the last row too, which puts a hairline just above the card's bottom edge and
+ * reads as a clipped row (docs/design-port.md #6).
+ */
+function GroupRow({ last, children }: { last: boolean; children: React.ReactNode }) {
+  return (
+    <View style={styles.row}>
+      {children}
+      {last ? null : <View style={styles.separator} pointerEvents="none" />}
+    </View>
+  );
+}
+
+/**
+ * EACH OF THESE DRAWS ITS OWN `Card`, and that is the port rather than a
+ * regression.
+ *
+ * They used to draw none, because `profile.tsx` wrapped every one in a `Panel`
+ * — itself a `Card` — and two nested cards meant 16pt of padding inside another
+ * 16pt, a rule inside a rule, and the one elevation shadow cast twice. The
+ * screen is now a stack of `Section`s, and a `Section` is a LABEL, not a
+ * surface. So the surface comes back here, where it can also be omitted: an
+ * `Absent` is a hole in the page and must not be handed a raised white card to
+ * sit in, which is exactly what a wrapper at the call site would have done.
+ */
 export function ConnectedApps({ sources }: { sources: string[] | undefined }) {
   const on = new Set((sources ?? []).map((s) => s.toLowerCase()));
   const isOn = (name: string) =>
@@ -59,6 +92,8 @@ export function ConnectedApps({ sources }: { sources: string[] | undefined }) {
     (name === "Apple Health" && APPLE_ALIASES.some((a) => on.has(a)));
 
   return (
+    // Prose, chips and a footnote — not rows, so this one keeps the card's
+    // padding rather than running its content edge to edge.
     <Card>
       <Text style={styles.prose}>
         RunGuard reads what your watch already records. Nothing is typed in by
@@ -91,9 +126,9 @@ export function SeasonGoals({ goals }: { goals: Goal[] | undefined }) {
     return <Absent label="No season goals set." />;
   }
   return (
-    <Card padded={false}>
+    <Card padded={false} style={styles.group}>
       {goals.map((g, i) => (
-        <View key={`${g.event}-${i}`} style={[styles.row, i > 0 && styles.divided]}>
+        <GroupRow key={`${g.event}-${i}`} last={i === goals.length - 1}>
           <Text style={styles.rowTitle}>{g.event}</Text>
           <View style={styles.figures}>
             <View style={styles.figure}>
@@ -123,7 +158,7 @@ export function SeasonGoals({ goals }: { goals: Goal[] | undefined }) {
                 ? "Your current prediction is inside this target."
                 : "Your current prediction is outside this target."}
           </Text>
-        </View>
+        </GroupRow>
       ))}
     </Card>
   );
@@ -155,18 +190,22 @@ export function Achievements({ badges }: { badges: Badge[] | undefined }) {
   }
   const earned = badges.filter((b) => b.earned).length;
   return (
-    <Card padded={false}>
+    <Card padded={false} style={styles.group}>
       {badges.map((b) => (
-        <View key={b.id} style={[styles.row, styles.dividedFirst]}>
+        // Every badge row is separated from the next. They were not: the row
+        // carried an empty `dividedFirst` style, so the whole list ran together
+        // and only the footnote below it had a rule.
+        <GroupRow key={b.id} last={false}>
           <Text style={b.earned ? styles.rowTitle : styles.rowTitleMuted}>{b.label}</Text>
           <Text style={styles.rowNote}>{b.detail}</Text>
-        </View>
+        </GroupRow>
       ))}
-      <View style={[styles.row, styles.divided]}>
+      {/* The count closes the group, so it is the last row and wears no rule. */}
+      <GroupRow last>
         <Text style={styles.footnote}>
           {`${earned} of ${badges.length} earned so far. The rest are things that have not happened yet, not things that went wrong.`}
         </Text>
-      </View>
+      </GroupRow>
     </Card>
   );
 }
@@ -195,7 +234,7 @@ export function InjuryHistory({ injuries }: { injuries: Injury[] | undefined }) 
   const ordered = [...open, ...healed];
 
   return (
-    <Card padded={false}>
+    <Card padded={false} style={styles.group}>
       {ordered.map((inj, i) => {
         // ONE resolver, shared with the Stats body scan — see lib/bodyParts.
         // This used to be `getBodyPart(body_part)` plus `injuryLabel(key, null)`,
@@ -207,7 +246,7 @@ export function InjuryHistory({ injuries }: { injuries: Injury[] | undefined }) 
         // itself: a flagged injury that vanishes is worse than one shown plainly.
         const name = storedPartLabel(inj.body_part);
         return (
-          <View key={inj.id} style={[styles.row, i > 0 && styles.divided]}>
+          <GroupRow key={inj.id} last={i === ordered.length - 1}>
             <Text style={styles.rowEyebrow}>
               {inj.resolved_at === null ? "OPEN" : "HEALED"}
             </Text>
@@ -219,7 +258,7 @@ export function InjuryHistory({ injuries }: { injuries: Injury[] | undefined }) 
                 : `${dayLabel(inj.date)} — healed ${dayLabel(inj.resolved_at)}`}
             </Text>
             {inj.note ? <Text style={styles.rowNote}>{inj.note}</Text> : null}
-          </View>
+          </GroupRow>
         );
       })}
     </Card>
@@ -234,7 +273,7 @@ const styles = StyleSheet.create({
   pill: {
     paddingVertical: space.xs,
     paddingHorizontal: space.md,
-    borderRadius: space.lg,
+    borderRadius: radius.pill,
     borderWidth: ruleWidth,
     borderColor: color.rule,
   },
@@ -243,9 +282,31 @@ const styles = StyleSheet.create({
   pillText: { ...text.meta, color: color.muted },
   pillTextOn: { color: color.ink },
 
-  row: { padding: space.lg, gap: space.xs },
-  divided: { borderTopWidth: ruleWidth, borderTopColor: color.ruleSoft },
-  dividedFirst: {},
+  /**
+   * `overflow: "hidden"` on the card of rows, from the design. It clips a
+   * separator to the corner rather than letting it run out of the curve.
+   * Layout only — `Card` owns the ground, the corner and the shadow.
+   */
+  group: { overflow: "hidden" },
+  /**
+   * The design's row: 16 in from each side, 12 top and bottom. `ListRow` insets
+   * its own content by the same `layout.cardPadding`, so a fact row on this
+   * screen and a goal row underneath it start at the same x.
+   */
+  row: {
+    paddingVertical: space.md,
+    paddingHorizontal: layout.cardPadding,
+    gap: space.xs,
+  },
+  /** Inset 16 from the left, full-bleed right — `ListRow`'s own separator. */
+  separator: {
+    position: "absolute",
+    left: layout.cardPadding,
+    right: 0,
+    bottom: 0,
+    height: ruleWidth,
+    backgroundColor: color.ruleSoft,
+  },
   rowEyebrow: { ...text.micro, color: color.muted },
   rowTitle: { ...text.base, color: color.ink },
   /** Unearned: quieter, never struck through, never in a status colour. */

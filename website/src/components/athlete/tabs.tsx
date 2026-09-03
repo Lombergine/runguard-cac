@@ -17,7 +17,7 @@ import IntensityCalendar from "@/components/IntensityCalendar";
 import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "./AthleteModel";
-import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, RaceForm, RaceEditControls, CopyToken, TeamMembership, HrMaxSetting } from "./widgets";
+import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, RaceForm, RaceEditControls, TeamMembership, HrMaxSetting } from "./widgets";
 
 /* ---------------- shared bits ---------------- */
 
@@ -1111,18 +1111,21 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
         />
       </Panel>
 
-      {p.athlete.deviceToken && (
-        <Panel title="Pair the RunGuard iPhone app" note="turns on live background sync">
-          <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--ink-2)" }}>
-            Install <b>RunGuard</b> on your iPhone, open it, enter your team&apos;s web address, then paste
-            this pairing token. Grant Apple Health access once and it syncs on its own from then on.
-          </p>
-          <CopyToken token={p.athlete.deviceToken} />
-          <p className="text-xs mt-2" style={{ color: "var(--ink-muted)" }}>
-            Keep this private — it links the app to your account.
-          </p>
-        </Panel>
-      )}
+      {/*
+        No pairing token. This used to hand the athlete their `device_token` to
+        copy into the app — a permanent credential for their own health data,
+        rendered on screen. The app now signs in the way this page did.
+      */}
+      <Panel title="Get the RunGuard iPhone app" note="turns on live background sync">
+        <p className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
+          Install <b>RunGuard</b> on your iPhone, open it, enter your team&apos;s web address, and sign in
+          with <b>this same email and password</b>. Grant Apple Health access once and it syncs on its
+          own from then on.
+        </p>
+        <p className="text-xs mt-2" style={{ color: "var(--ink-muted)" }}>
+          There is nothing to copy across and no pairing code to keep private.
+        </p>
+      </Panel>
 
       <Panel title="How your data syncs" note="Apple Health is the hub">
         <div className="flex items-center gap-3 mb-4">

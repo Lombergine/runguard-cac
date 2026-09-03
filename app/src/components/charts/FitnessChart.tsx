@@ -58,46 +58,22 @@
  * The only real guard here is `fitnessSeries`' three-week threshold
  * (`charts.tsx:319`).
  */
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 import { ChartAbsent, Plot } from "../chart/Plot";
 import { AbsentMarks, LinePath } from "../chart/marks";
 import { isAbsent } from "../chart/scales";
 import { fitnessSeries } from "../../lib/chartData";
 import type { Fitness } from "../../lib/types";
-import { layout, radius, ruleWidth, space } from "../../theme/space";
-import { color, shadow } from "../../theme/tokens";
+import { space } from "../../theme/space";
+import { Panel } from "../Panel";
+import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
 const TITLE = "Fitness score";
 /** The caveat lives in the note, which is the slot the app reserves for one. */
 const NOTE = "season · 0–100, a model output";
 
-/**
- * The website's Panel (`athlete/tabs.tsx:22`): semibold title left, muted note
- * right, content under. Spelled out locally from tokens, as it is in
- * `(tabs)/stats.tsx`, `profile.tsx` and `chat.tsx` — no file owns a shared one
- * yet, and every value here is a token, so the copies cannot drift.
- */
-function Panel({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.panel}>
-      <View style={styles.panelHead}>
-        <Text style={styles.panelTitle}>{title}</Text>
-        {note ? <Text style={styles.panelNote}>{note}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
 
 export function FitnessChart({ weekly }: { weekly?: Fitness["weekly"] }) {
   /*
@@ -153,25 +129,6 @@ export function FitnessChart({ weekly }: { weekly?: Fitness["weekly"] }) {
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: color.card,
-    borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
-    borderRadius: radius.card,
-    padding: layout.cardPadding,
-    // Elevation, never emphasis.
-    ...shadow.card,
-  },
-  panelHead: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  panelTitle: { ...text.baseSemi, color: color.ink },
-  panelNote: { ...text.meta, color: color.muted, flexShrink: 1 },
 
   /** `ink2` — this has to be read, not merely noticed. 6.4:1 on card. */
   key: { ...text.meta, color: color.ink2, marginTop: space.md },

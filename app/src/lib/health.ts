@@ -41,12 +41,12 @@
  * ─────────────────────────────────────────────────────────────────────────
  * SAFETY
  *
- * Nothing in this file logs. Not the device token (same rule as `lib/auth.ts`:
- * it is a minor's permanent, non-revocable credential), and not raw health
- * samples either — a resting heart rate in a crash report is still a health
- * record. Thrown values from `fetch` can echo the request with its
- * Authorization header, so they are discarded rather than re-used, exactly as
- * `lib/api.ts` and `app/pair.tsx` do.
+ * Nothing in this file logs. Not the session token (same rule as `lib/auth.ts`:
+ * it is a minor's credential), and not raw health samples either — a resting
+ * heart rate in a crash report is still a health record. Thrown values from
+ * `fetch` can echo the request with its Authorization header, so they are
+ * discarded rather than re-used, exactly as `lib/api.ts` and `app/login.tsx`
+ * do.
  */
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
@@ -495,7 +495,7 @@ export type HealthFailure =
   | "unavailable"
   /** The query itself failed. */
   | "read"
-  /** No device token, or the server rejected it. Pair again. */
+  /** No session token, or the server rejected it. Sign in again. */
   | "unauthorized"
   /** Server unreachable, wrong LAN address, or timed out. */
   | "network"

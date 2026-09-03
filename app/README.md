@@ -35,22 +35,24 @@ Production is HTTPS, so this is a dev-build concern only.
 
 ## Auth
 
-`Authorization: Bearer <device_token>`, where the token is `dt_` followed by 40
-hex characters (`newDeviceToken()`, `website/src/lib/db.ts`).
+`Authorization: Bearer <session_token>`, where the token is
+`a.<athleteId>.<hmac>` (`website/src/lib/session.ts`).
 
-Three ways to obtain one:
+Two ways to obtain one, and there is no third:
 
 - `POST /api/athlete-signup` → returns `{ ok, token }`; the route comments call
   this out as the path that "lets the iOS app sign up directly"
 - `POST /api/athlete-login` with `{ email, password }` → returns `{ ok, name, token }`
-- Manual fallback: the athlete copies it from the web **Profile → Pair the
-  RunGuard iPhone app**
+
+`athletes.device_token` — a permanent `dt_` credential the athlete used to copy
+out of the web app — **has been removed**. There is no pairing screen, no code
+to paste, and no way to hold a credential without having signed in for it.
 
 Store it in the **Keychain** (`expo-secure-store`), not `AsyncStorage`.
 
-> Tokens **never expire and cannot be revoked**. A leaked token is permanent
-> access to that athlete's health data until someone edits the database by hand.
-> Treat it accordingly, and don't log it.
+> A session token is still a bearer credential for a minor's health data. Never
+> render it, never log it, and clear it on sign-out along with every other
+> stored key.
 
 ## `POST /api/mobile/ingest`
 
@@ -103,7 +105,7 @@ trusting this paragraph if the two disagree.
 ## Other endpoints already reachable
 
 `apiAuth.ts` checks `Authorization: Bearer` *before* any cookie, so these accept
-the same device token without any new server work: `/api/checkin`, `/api/chat`,
+the same session token without any new server work: `/api/checkin`, `/api/chat`,
 `/api/goal`, `/api/hrmax`, `/api/injury`, `/api/race`, `/api/race/[id]`,
 `/api/race-result`, `/api/workout-status`, `/api/athlete/join-team`,
 `/api/mobile/ingest`.

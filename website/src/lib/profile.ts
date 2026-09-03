@@ -71,7 +71,11 @@ const DAY_MS = 86400000;
 export type PRRecord = { event: EventName; timeS: number; label: string } | { event: EventName; timeS: null; label: string };
 
 export type CoreProfile = {
-  athlete: { id: number; name: string; grade: number | null; school: string; events: string[]; hue: number; deviceToken: string | null; teamName: string | null };
+  // No credential field, deliberately. This object is spread into the coach
+  // dashboard, the athlete portal and two mobile payloads, so anything on it is
+  // published to all four. It used to carry `deviceToken`, and two routes had to
+  // remember to delete the key on the way out.
+  athlete: { id: number; name: string; grade: number | null; school: string; events: string[]; hue: number; teamName: string | null; coachName: string | null };
   risk: RiskSnapshot;
   series: DailyPoint[];
   yearDays: { date: string; load: number; km: number }[];
@@ -126,10 +130,9 @@ export type CoreProfile = {
 /**
  * What is actually feeding this athlete's data.
  *
- * Strava used to be listed here, both from the link column and from any
- * activity carrying `source === "strava"`. Both are gone with the integration:
- * everything now arrives through Apple Health, either live from the iPhone app
- * (`healthkit`) or from a one-off export backfill (`apple_export`).
+ * Everything arrives through Apple Health, either live from the iPhone app
+ * (`healthkit`) or from a one-off export backfill (`apple_export`). There is no
+ * third-party sync and no link column to read.
  *
  * `a` is still taken so callers do not have to change and so the athlete row is
  * at hand if a future source is stored as a column again.
@@ -387,8 +390,17 @@ export async function buildProfile(
       school: team?.name ?? "Independent",
       events: ["800m", "Mile", "5K", "XC 5K"],
       hue: athlete.avatar_hue,
-      deviceToken: athlete.device_token,
       teamName: team?.name ?? null,
+      /*
+       * Who the coach is. The design's Profile has a `Coach` row and the app
+       * could not build one, because this was the only thing about the team the
+       * payload withheld — `team` is already loaded two lines up.
+       *
+       * The NAME only. Not `coach_email`, which is on the same row and is a
+       * teacher's work address: an athlete does not need it to know who their
+       * coach is, and a payload is a thing that gets written down.
+       */
+      coachName: team?.coach_name ?? null,
     },
     risk,
     series: risk.series,

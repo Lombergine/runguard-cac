@@ -142,7 +142,6 @@ function Gate() {
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="login" options={{ animation: "fade" }} />
           <Stack.Screen name="signup" options={{ animation: "fade" }} />
-          <Stack.Screen name="pair" options={{ animation: "fade" }} />
         </Stack.Protected>
 
         {/*

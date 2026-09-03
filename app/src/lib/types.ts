@@ -7,6 +7,7 @@
  *   1. Server data — the subset of GET /api/mobile/me the app actually uses.
  *   2. Component props — the shared UI vocabulary.
  */
+import type { StyleProp, ViewStyle } from "react-native";
 
 /* ------------------------------------------------------------------ *
  * 1. Server data
@@ -577,12 +578,16 @@ export type Goal = {
 /** The slice of CoreProfile the app consumes. The endpoint returns much more. */
 export type Profile = {
   /**
-   * HAZARD — `/api/mobile/me` and `/api/mobile/home` both send
-   * `athlete.deviceToken` inside this object. It is the bearer credential the
-   * app authenticates with, and it is DELIBERATELY NOT DECLARED HERE so that
-   * no component can reach it: it must never be rendered, logged, put in a
-   * debug dump, or included in a screenshot or share sheet. If you find
-   * yourself widening this object to add it, that is the bug.
+   * NO CREDENTIAL FIELD, EVER. `/api/mobile/me` and `/api/mobile/home` used to
+   * send `athlete.deviceToken` inside this object; `athletes.device_token` has
+   * since been removed from the product, and the athlete's session token is
+   * obtained by signing in and lives only in the Keychain (`lib/auth.ts`).
+   *
+   * It stayed undeclared then and stays undeclared now: whatever a response
+   * carries, nothing in this object may be a bearer credential — it must never
+   * be rendered, logged, put in a debug dump, or included in a screenshot or
+   * share sheet. `lib/api.ts` strips the old field anyway. If you find yourself
+   * widening this object to add a token, that is the bug.
    */
   athlete: {
     id: number;
@@ -590,6 +595,12 @@ export type Profile = {
     grade: number | null;
     school: string;
     teamName: string | null;
+    /**
+     * The coach's name, or null when the athlete has no team. NOT their email:
+     * the server withholds that deliberately (`profile.ts`), and this is only
+     * ever the answer to "who is my coach".
+     */
+    coachName?: string | null;
     hue: number;
     /**
      * Events contested — but `profile.ts:337` returns the LITERAL CONSTANT
@@ -651,6 +662,18 @@ export type Profile = {
    * Nothing in the payload distinguishes a real goal from the fallback.
    */
   weeklyTargetKm?: number;
+  /**
+   * The training-load series, oldest first — the LAST 60 DAYS ONLY, and only
+   * four of `DailyPoint`'s eight fields. Both `/api/mobile/me` and the coach's
+   * `/api/mobile/coach/athlete/[id]` trim it identically before sending, so a
+   * chart wired to this copy draws no EWMA: `acute` and `chronic` are not here.
+   * The full-width, full-field copy is `risk.series`.
+   *
+   * Optional because `/api/mobile/home` drops it deliberately — it is one of the
+   * three heavy fields that route omits to keep the tab-open payload small.
+   * Absent therefore means "this endpoint did not send it", never "no history".
+   */
+  series?: Pick<DailyPoint, "date" | "load" | "km" | "acwr">[];
   /** One server-written sentence about this athlete's current training. */
   aiInsight?: string;
   notifications?: Notification[];
@@ -744,7 +767,7 @@ export type Profile = {
    */
   calendar?: { date: string; load: number; km: number }[];
   /**
-   * Every source that has ever written data for this athlete, e.g. "strava".
+   * Every source that has ever written data for this athlete, e.g. "healthkit".
    *
    * NEVER EMPTY, AND THAT IS THE TRAP. `profile.ts:131` substitutes the
    * one-element array `["No data yet"]` when the real set is empty, so an
@@ -832,6 +855,16 @@ export type CardProps = {
   children: React.ReactNode;
   /** Omits the default 16px padding when false. */
   padded?: boolean;
+  /**
+   * Layout only — margin, flex, width. Merged LAST so a caller can place a card
+   * without editing it.
+   *
+   * Deliberately not a way to restyle one: the ground, the hairline, the corner
+   * and the shadow are what make a card a card, and a screen that overrides them
+   * is describing a component the system is missing. `shadow.card` in particular
+   * is elevation and never emphasis.
+   */
+  style?: StyleProp<ViewStyle>;
 };
 
 export type StatProps = {

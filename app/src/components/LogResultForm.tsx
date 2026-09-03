@@ -490,7 +490,7 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
           onChangeText={setEntry}
           editable={!busy}
           placeholder="18:42"
-          placeholderTextColor={color.muted}
+          placeholderTextColor={color.placeholder}
           keyboardType="numbers-and-punctuation"
           autoCorrect={false}
           autoComplete="off"
@@ -509,7 +509,7 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
           onChangeText={(next) => setPlace(next.replace(/[^0-9]/g, ""))}
           editable={!busy}
           placeholder="—"
-          placeholderTextColor={color.muted}
+          placeholderTextColor={color.placeholder}
           keyboardType="number-pad"
           maxLength={4}
           accessibilityLabel="Finishing place"
@@ -566,7 +566,7 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
           onChangeText={setSplitsEntry}
           editable={!busy}
           placeholder="74, 76, 79  or  1:14 1:16 1:19"
-          placeholderTextColor={color.muted}
+          placeholderTextColor={color.placeholder}
           keyboardType="numbers-and-punctuation"
           autoCorrect={false}
           autoComplete="off"
@@ -583,7 +583,7 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
           onChangeText={setConditions}
           editable={!busy}
           placeholder="Hot, windy, muddy course"
-          placeholderTextColor={color.muted}
+          placeholderTextColor={color.placeholder}
           maxLength={120}
           accessibilityLabel="Race conditions"
         />
@@ -596,7 +596,7 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
           onChangeText={setNotes}
           editable={!busy}
           placeholder="How it went, tactics, anything worth remembering"
-          placeholderTextColor={color.muted}
+          placeholderTextColor={color.placeholder}
           multiline
           numberOfLines={3}
           maxLength={1000}
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
   dot: {
     width: space.lg,
     height: space.lg,
-    borderRadius: space.sm,
+    borderRadius: radius.pill,
     borderWidth: ruleWidth,
     borderColor: color.ruleStrong,
     backgroundColor: color.card,

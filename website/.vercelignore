@@ -1,0 +1,16 @@
+# Vercel uses THIS FILE INSTEAD OF .gitignore when it exists, so everything that
+# must not ship has to be listed here — including the .env rules that
+# website/.gitignore would otherwise have covered.
+#
+# node_modules and .next are ignored in the REPO ROOT .gitignore, which is above
+# the deployment root and so never consulted: deploying from website/ without
+# this file uploads ~1.6 GB and stalls.
+node_modules
+.next
+
+# The local SQLite database. Deployments read Supabase; shipping this would put
+# a copy of the roster in the build.
+data
+
+.env*
+.vercel

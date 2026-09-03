@@ -43,7 +43,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Card } from "./Card";
 import { StatusDot } from "./StatusDot";
 import type { Flag, Notification } from "../lib/types";
-import { space } from "../theme/space";
+import { ruleWidth, space } from "../theme/space";
 import { color } from "../theme/tokens";
 import { text } from "../theme/type";
 
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     padding: space.lg,
   },
   /** A hairline between entries, the same rule the race log divides rows with. */
-  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.ruleSoft },
+  divided: { borderTopWidth: ruleWidth, borderTopColor: color.ruleSoft },
   /** Nudged onto the first line's optical centre rather than its box top. */
   dot: { marginTop: space.xs },
   /**

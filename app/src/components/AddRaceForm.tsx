@@ -175,7 +175,7 @@ function Field({
       <Head title={label} note={note} />
       <TextInput
         style={[styles.input, style]}
-        placeholderTextColor={color.muted}
+        placeholderTextColor={color.placeholder}
         accessibilityLabel={label}
         {...input}
       />
@@ -597,7 +597,8 @@ export function AddRaceForm({ onChanged }: { onChanged: () => void }) {
  *
  * Removing is confirmed because it cannot be undone from here: there is no
  * restore, and re-entering a coach's meet is not something the athlete can do
- * at all. `profile.tsx`'s Unpair confirms the same way and for the same reason.
+ * at all. `profile.tsx`'s Sign out confirms the same way and for the same
+ * reason.
  *
  * A failure is surfaced in an Alert rather than inline, also as in `profile.tsx`:
  * `onChanged()` refetches the screen and this control can disappear with the
@@ -730,7 +731,7 @@ const styles = StyleSheet.create({
   dot: {
     width: space.lg,
     height: space.lg,
-    borderRadius: space.sm,
+    borderRadius: radius.pill,
     borderWidth: ruleWidth,
     borderColor: color.ruleStrong,
     backgroundColor: color.card,
