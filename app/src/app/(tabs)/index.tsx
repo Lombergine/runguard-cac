@@ -39,7 +39,7 @@
  *     that says whether the figure was measured at all — `hasActivityHistory`
  *     and `recovery.hasData` — and renders <Absent/> when it was not.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -74,6 +74,7 @@ import { NextRaceBlock, TodayBlock } from "../../components/TodayBlock";
 import { WeekProgress } from "../../components/WeekProgress";
 import { WeekBars } from "../../components/WeekBars";
 import { LastRunCard } from "../../components/LastRunCard";
+import { ConnectHealthPrompt } from "../../components/ConnectHealthPrompt";
 import { ApiError, getHome, isUnauthorized, postCheckin } from "../../lib/api";
 import { committed, failed, useReduceMotion } from "../../lib/motion";
 import InfoDot, { EXPLAINERS } from "../../components/InfoDot";
@@ -257,6 +258,7 @@ export default function CheckInScreen() {
    * it reads as "still working" for a request that was never made.
    */
   const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((n) => n + 1), []);
 
   // Starts opaque: nothing on this screen has an entrance animation. It is only
   // driven for the 180ms reveal after a check-in.
@@ -635,7 +637,7 @@ export default function CheckInScreen() {
               state={readinessState(profile)}
               insight={profile.aiInsight}
             />
-            <TheDay profile={profile} />
+            <TheDay profile={profile} onHealthConnected={reload} />
           </Animated.View>
         ) : (
           <>
@@ -682,7 +684,7 @@ export default function CheckInScreen() {
             {/* The day itself, below the question. None of it is derived from
                 the check-in, so it reads the same before and after — see
                 TheDay's header for why it no longer waits. */}
-            <TheDay profile={profile} />
+            <TheDay profile={profile} onHealthConnected={reload} />
           </>
         )}
       </ScrollView>
@@ -862,12 +864,22 @@ function UnknownReadiness({ pending }: { pending: boolean }) {
  *     for: below the question, never above it.
  * ─────────────────────────────────────────────────────────────────────────
  */
-function TheDay({ profile }: { profile: ProfileWithNextRace }) {
+function TheDay({
+  profile,
+  onHealthConnected,
+}: {
+  profile: ProfileWithNextRace;
+  onHealthConnected: () => void;
+}) {
   const today = profile.plan.days.find((d) => d.isToday);
   const next = profile.races?.upcoming[0];
 
   return (
     <View style={styles.sections}>
+      {/* The ask, first: everything below is computed from data this card is
+          what makes available. `onConnected` refetches, because a first sync
+          can add the very first source this profile has ever had. */}
+      <ConnectHealthPrompt onConnected={onHealthConnected} />
       {profile.recentRuns[0] ? <LastRunCard run={profile.recentRuns[0]} /> : null}
       {profile.risk.hasActivityHistory ? (
         <Card>
