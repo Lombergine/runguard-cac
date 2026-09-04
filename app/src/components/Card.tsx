@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
      */
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
   },
   padded: { padding: layout.cardPadding },

@@ -46,9 +46,9 @@ export const text = {
    */
   micro: {
     fontFamily: font.bodySemi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 1.2,
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.9,
     textTransform: "uppercase",
     ...tabular,
   } as TextStyle,
@@ -77,9 +77,9 @@ export const text = {
   /** 19 display — card titles. */
   title: {
     fontFamily: font.displayBold,
-    fontSize: 18,
-    lineHeight: 22,
-    letterSpacing: -0.2,
+    fontSize: 20,
+    lineHeight: 25,
+    letterSpacing: -0.3,
   } as TextStyle,
 
   /** 22 mono — inline stats. */

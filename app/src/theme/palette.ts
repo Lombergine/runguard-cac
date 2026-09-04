@@ -54,6 +54,16 @@ export const lightColors = {
   /* Rules. In light theme these are visible: a white card on a near-white
      ground needs an edge, where on the dark ground the surface step is enough. */
   rule: "#DFE4EB",
+  /**
+   * The edge of a raised card, and the whole reason it is not just `rule`.
+   *
+   * A white card on a near-white ground has no surface step, so in LIGHT it
+   * needs a hairline or it dissolves. On the dark ground the step from #0A0D12
+   * to #131923 already reads, and drawing a rule on top of it outlines every
+   * card like a wireframe — which is exactly what made the dark app look
+   * boxy. So in dark this is the card's own colour: present, and invisible.
+   */
+  cardEdge: "#E3E8EF",
   ruleSoft: "#E9ECF2",
   ruleStrong: "#C7CEd9",
 
@@ -71,6 +81,13 @@ export const lightColors = {
   emberGlow: "rgba(255,90,54,0.18)",
   /** TEXT: coral at 5.18:1 on white. Any coral-coloured WORD uses this. */
   brandText: "#C2410C",
+  /**
+   * A label sitting ON the coral fill. Fixed in both themes, because the fill
+   * is: `color.bg` reads 6.5:1 in dark and 2.9:1 in light, so a token that
+   * followed the theme silently failed contrast on every primary button the
+   * day light mode arrived.
+   */
+  onBrand: "#25100A",
 
   /* ── Semantic. Teal is the team / fine, violet is the body. ───────────── */
   ok: "#14B8A6",
@@ -124,6 +141,8 @@ export const darkColors: { [K in keyof typeof lightColors]: string } = {
 
   /* Rules — low-contrast. Separation comes from the surface steps. */
   rule: "#232B38",
+  /** The card's own colour: an edge that draws nothing. See the light twin. */
+  cardEdge: "#131923",
   ruleSoft: "#1B2230",
   ruleStrong: "#2E3849",
 
@@ -141,6 +160,7 @@ export const darkColors: { [K in keyof typeof lightColors]: string } = {
   emberHot: "#FF7A5C",
   emberGlow: "rgba(255,90,54,0.35)",
   brandText: "#FF7A5C",
+  onBrand: "#25100A",
 
   ok: "#2DD4BF",
   watch: "#FFB020",

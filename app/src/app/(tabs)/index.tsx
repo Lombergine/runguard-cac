@@ -734,7 +734,6 @@ function ReadinessHero({
               <InfoDot label="Readiness" text={EXPLAINERS.readiness} />
             </View>
           </View>
-          <Text style={styles.panelNote}>higher is fresher</Text>
         </View>
 
         {state.known ? (
@@ -1105,7 +1104,7 @@ const styles = StyleSheet.create({
   page: {
     flexGrow: 1,
     paddingHorizontal: layout.page,
-    paddingTop: space.xl,
+    paddingTop: space.lg,
     paddingBottom: layout.section,
   },
   loadErrorAction: {
@@ -1132,10 +1131,10 @@ const styles = StyleSheet.create({
   /** Keeps the dot level with the first line if the title ever wraps. */
   panelTitleDot: { height: text.title.lineHeight as number, justifyContent: "center" },
   hero: {
-    marginTop: layout.section,
+    marginTop: space.lg,
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
   },
   /** Sits inside the panel's rule, so it takes the same top corners. */
@@ -1175,14 +1174,14 @@ const styles = StyleSheet.create({
   },
 
   /** Prose, not a figure and not a status: base weight, ink2, no ornament. */
-  insight: { ...text.base, color: color.ink2, marginTop: space.md },
+  insight: { ...text.base, color: color.ink2, marginTop: space.lg },
   /**
    * The website's one ember byline (tabs.tsx:184). `brandText`, never `brand`:
    * the brand hex is 2.1:1 on white, this is 5.2:1.
    */
   insightByline: { ...text.baseSemi, color: color.brandText },
 
-  sections: { marginTop: layout.section, gap: layout.section },
+  sections: { marginTop: space.lg, gap: space.lg },
   section: { gap: space.md },
   grid: { gap: space.md },
   // Explicit rows rather than a wrapping grid: `flex: 1` on each tile keeps a
@@ -1201,7 +1200,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
     marginTop: space.md,
   },

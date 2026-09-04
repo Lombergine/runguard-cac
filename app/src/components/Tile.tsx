@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
     // The squircle iOS draws itself, as <Card/> does and as space.ts asks of
     // every radius but `pill`. Free, and most of what separates a native

@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.ruleSoft,
   },
-  sendLabel: { ...text.baseSemi, color: color.bg },
+  sendLabel: { ...text.baseSemi, color: color.onBrand },
   sendLabelOff: { ...text.baseSemi, color: color.muted },
   sendFailed: { ...text.meta, color: color.ink2 },
 });

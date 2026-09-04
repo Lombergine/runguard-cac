@@ -193,10 +193,15 @@ const metrics = {
   /**
    * How tall the card is when it is only a question.
    *
-   * Composed from the pieces rather than picked: the head, the two-line prompt,
-   * the air the spec asks for, and the answer row. It is a FLOOR, not a height —
-   * the panel grows past it once the body map is disclosed, and the spacer takes
-   * up whatever slack the floor leaves when the content is shorter.
+   * Composed from the pieces rather than picked: the head, ONE line of prompt,
+   * the gap, and the answer row. It is a FLOOR, not a height — the panel grows
+   * past it when the prompt wraps to two lines and again once the body map is
+   * disclosed.
+   *
+   * It reserved TWO prompt lines and two gaps, which no state of this card
+   * actually uses: "How did you sleep?" sets on one line, so the floor stood
+   * taller than the content and left a band of dead space under the answers
+   * that read as a broken layout.
    *
    * It is now the ONLY floor. The card used to take `flex: 1` on top of this and
    * stretch to the viewport; see the `panel` style for why that was removed.
@@ -204,8 +209,8 @@ const metrics = {
   panelMin:
     layout.cardPadding * 2 +
     (text.title.lineHeight as number) +
-    PROMPT_LINE * 2 +
-    space.xl * 2 +
+    PROMPT_LINE +
+    space.xl +
     target.min +
     space.sm,
 } as const;
@@ -837,7 +842,15 @@ const styles = StyleSheet.create({
    * there is some and collapses to its minimum when the disclosed content has
    * used it all — otherwise it would fight the map for room.
    */
-  spacer: { flexGrow: 1, flexShrink: 1, minHeight: space.xl },
+  /*
+   * A GAP, not a strut.
+   *
+   * This was `flexGrow: 1`, which is right for a card that owns a whole screen
+   * — the spec wants the answers in the bottom third, one-handed. Inside a
+   * scrolling stack it owns nothing, so it grew into a wide empty band between
+   * the question and the answers and read as a rendering fault.
+   */
+  spacer: { height: space.xl },
   row: { flexDirection: "row", gap: target.gap },
   answer: {
     flex: 1,
@@ -948,7 +961,7 @@ const styles = StyleSheet.create({
   doneReady: { backgroundColor: color.brand, borderColor: color.brand },
   doneLabel: { ...text.baseSemi, color: color.ink },
   /** Ground-coloured on coral: 6.5:1. Ink on coral is 2.6:1. */
-  doneLabelReady: { color: color.bg },
+  doneLabelReady: { color: color.onBrand },
   doneLabelIdle: { color: color.muted },
 
   failed: { ...text.meta, color: color.ink2, marginTop: space.md },

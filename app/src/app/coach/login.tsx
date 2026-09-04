@@ -241,6 +241,6 @@ const styles = StyleSheet.create({
     borderWidth: ruleWidth,
     borderColor: color.rule,
   },
-  submitLabel: { fontFamily: font.bodySemi, fontSize: 16.5, color: color.bg },
+  submitLabel: { fontFamily: font.bodySemi, fontSize: 16.5, color: color.onBrand },
   submitLabelOff: { fontFamily: font.bodySemi, fontSize: 16.5, color: color.muted },
 });

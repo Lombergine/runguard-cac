@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   /** INK on the ember, never white — 5.25:1 on the pressed `brandStrong`. */
-  actionLabel: { ...text.baseSemi, color: color.bg },
+  actionLabel: { ...text.baseSemi, color: color.onBrand },
 
   figures: {
     marginTop: space.xl,

@@ -177,7 +177,17 @@ export function BodyScan({ injuries, soreness }: BodyScanProps) {
         </Text>
       </View>
 
-      <BodyMap marks={marks} accessibilityLabel={summary} />
+      {/*
+        The figure is drawn only when it has something to say.
+
+        An unflagged scan drew the whole 400pt body with nothing on it, which
+        took half the Stats screen to report an absence — and an empty diagram
+        is a worse way to say "nothing hurts" than the sentence below already
+        says. This is NOT the spec's forbidden blank: the empty line is a
+        MEASURED zero ("we asked, nothing was reported"), not an unknown, and it
+        keeps its own words rather than being collapsed into a dash.
+      */}
+      {flagged ? <BodyMap marks={marks} accessibilityLabel={summary} /> : null}
 
       {flagged ? (
         <View style={styles.legend}>

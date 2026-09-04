@@ -124,11 +124,9 @@ export function ConnectHealthPrompt({ onConnected }: { onConnected?: () => void 
   return (
     <View style={styles.card}>
       <Text style={styles.eyebrow}>{STORE}</Text>
-      <Text style={styles.title}>Let RunGuard read your runs</Text>
+      <Text style={styles.title}>Read my runs</Text>
       <Text style={styles.body}>
-        Your workouts, sleep, resting heart rate and HRV are already on this
-        phone. RunGuard reads them to work out your training load — without
-        them, readiness rests on your check-in alone.
+        Your runs, sleep and heart rate are already on this phone.
       </Text>
 
       {result === null ? (
@@ -168,7 +166,6 @@ const styles = StyleSheet.create({
   /* The one card on Home that is asking for something, so it wears the raised
      surface the check-in uses rather than the flat `card` of a reading. */
   card: {
-    marginTop: layout.section,
     padding: layout.cardPadding,
     gap: space.sm,
     backgroundColor: color.raised,
@@ -190,7 +187,7 @@ const styles = StyleSheet.create({
   actionBusy: { backgroundColor: color.surface3 },
   actionPressed: { backgroundColor: color.brandStrong },
   /** Ground on coral: 6.5:1. Ink on coral is 2.6:1. */
-  actionLabel: { ...text.baseSemi, color: color.bg },
+  actionLabel: { ...text.baseSemi, color: color.onBrand },
   result: { ...text.base, color: color.ink2, marginTop: space.xs },
   quiet: {
     minHeight: target.min,

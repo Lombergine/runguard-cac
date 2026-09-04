@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   group: {
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
     overflow: "hidden",
     ...shadow.card,

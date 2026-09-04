@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.rule,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
     padding: layout.cardPadding,
     gap: space.lg,

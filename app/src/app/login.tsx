@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
    * 5.97:1 on the darkest and 10.03:1 on the lightest. Not `brandText`, because
    * here the ember is the ground rather than the glyph.
    */
-  actionLabel: { ...text.baseSemi, color: color.bg },
+  actionLabel: { ...text.baseSemi, color: color.onBrand },
   /** Plain description, not an alarm: no banner, no fill, no warning colour. */
   problem: { ...text.meta, color: color.ink2, marginTop: space.md },
   quiet: {
