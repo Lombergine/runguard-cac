@@ -131,7 +131,7 @@ export default function CoachLoginScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="you@school.edu"
-              placeholderTextColor={color.muted}
+              placeholderTextColor={color.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -146,7 +146,7 @@ export default function CoachLoginScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder="Your password"
-              placeholderTextColor={color.muted}
+              placeholderTextColor={color.placeholder}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}

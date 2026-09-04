@@ -26,7 +26,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "../../components/Card";
@@ -59,7 +58,6 @@ const NO_ADJUSTMENT: PlanAdjustment = { scale: 1, reason: null };
  * viewport rather than scrolled with the list, exactly as `background` on the
  * web body behaves, so the light stays where the light is.
  */
-const SUNRISE_STOPS = [color.bgTop, color.bg] as const;
 const SUNRISE_HEIGHT = 420;
 
 /**
@@ -74,11 +72,6 @@ function countLabel(n: number): string {
 function Screen({ children }: { children: ReactNode }) {
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={SUNRISE_STOPS}
-        style={styles.sunrise}
-        pointerEvents="none"
-      />
       <SafeAreaView style={styles.safe} edges={["top"]}>
         {children}
       </SafeAreaView>

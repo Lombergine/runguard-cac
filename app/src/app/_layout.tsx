@@ -4,8 +4,8 @@ import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Sora_700Bold, Sora_800ExtraBold } from "@expo-google-fonts/sora";
-import { Manrope_500Medium, Manrope_700Bold } from "@expo-google-fonts/manrope";
+import { Outfit_700Bold, Outfit_800ExtraBold } from "@expo-google-fonts/outfit";
+import { Nunito_500Medium, Nunito_700Bold } from "@expo-google-fonts/nunito";
 import {
   JetBrainsMono_500Medium,
   JetBrainsMono_700Bold,
@@ -30,10 +30,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Sora_700Bold,
-    Sora_800ExtraBold,
-    Manrope_500Medium,
-    Manrope_700Bold,
+    Outfit_700Bold,
+    Outfit_800ExtraBold,
+    Nunito_500Medium,
+    Nunito_700Bold,
     JetBrainsMono_500Medium,
     JetBrainsMono_700Bold,
   });

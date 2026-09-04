@@ -385,7 +385,7 @@ export default function CoachPlanScreen() {
                 value={draft?.type ?? ""}
                 onChangeText={(v) => setDraft((d) => (d ? { ...d, type: v } : d))}
                 placeholder="Easy run"
-                placeholderTextColor={color.muted}
+                placeholderTextColor={color.placeholder}
                 editable={!saving}
                 accessibilityLabel="Session name"
               />
@@ -398,7 +398,7 @@ export default function CoachPlanScreen() {
                     value={draft?.miles ?? ""}
                     onChangeText={(v) => setDraft((d) => (d ? { ...d, miles: v } : d))}
                     placeholder="5"
-                    placeholderTextColor={color.muted}
+                    placeholderTextColor={color.placeholder}
                     keyboardType="decimal-pad"
                     editable={!saving}
                     accessibilityLabel="Distance in miles"
@@ -411,7 +411,7 @@ export default function CoachPlanScreen() {
                     value={draft?.targetPace ?? ""}
                     onChangeText={(v) => setDraft((d) => (d ? { ...d, targetPace: v } : d))}
                     placeholder="8:30/mi"
-                    placeholderTextColor={color.muted}
+                    placeholderTextColor={color.placeholder}
                     editable={!saving}
                     accessibilityLabel="Target pace"
                   />
@@ -424,7 +424,7 @@ export default function CoachPlanScreen() {
                 value={draft?.details ?? ""}
                 onChangeText={(v) => setDraft((d) => (d ? { ...d, details: v } : d))}
                 placeholder="Conversational the whole way. Meet at the track."
-                placeholderTextColor={color.muted}
+                placeholderTextColor={color.placeholder}
                 multiline
                 editable={!saving}
                 accessibilityLabel="Session details"

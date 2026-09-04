@@ -2,9 +2,19 @@
  * Type. See ../../../docs/visual-spec.md.
  *
  * Two typographic voices: friendly sentences, precise figures.
- *   Display — Archivo 700/800      headings, card titles, athlete name
- *   Body    — Source Sans 3 400/600 all prose and labels
- *   Mono    — Spline Sans Mono 500  EVERY numeral, tabular-nums mandatory
+ *   Display — Outfit 700/800        headings, card titles, athlete name
+ *   Body    — Nunito 500/700        all prose and labels
+ *   Mono    — JetBrains Mono 500    EVERY numeral, tabular-nums mandatory
+ *
+ * Outfit and Nunito are both rounded — open counters, soft terminals — which is
+ * what makes the app read as friendly rather than clinical to a sixteen-year-old
+ * opening it at 6am.
+ *
+ * THE FIGURES STAY MONOSPACED, and that is not a style choice. A rounded face
+ * has proportional digits, so a column of paces or mileages would jitter as the
+ * values changed and the stat rows would stop lining up. Mono is the only thing
+ * here doing a job the eye depends on, so it keeps its face while everything
+ * around it softens.
  *
  * The scale is one step larger than a normal mobile app throughout.
  *
@@ -15,10 +25,10 @@ import { TextStyle } from "react-native";
 
 /** Font family keys as registered by useFonts() in the root layout. */
 export const font = {
-  displayBold: "Sora_700Bold",
-  displayExtra: "Sora_800ExtraBold",
-  body: "Manrope_500Medium",
-  bodySemi: "Manrope_700Bold",
+  displayBold: "Outfit_700Bold",
+  displayExtra: "Outfit_800ExtraBold",
+  body: "Nunito_500Medium",
+  bodySemi: "Nunito_700Bold",
   mono: "JetBrainsMono_500Medium",
   monoBold: "JetBrainsMono_700Bold",
 } as const;

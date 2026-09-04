@@ -338,7 +338,7 @@ function TeamPanel({
         spellCheck={false}
         editable={!busy}
         placeholder="TEAM CODE"
-        placeholderTextColor={color.muted}
+        placeholderTextColor={color.placeholder}
         accessibilityLabel="Team code"
       />
       <EmberButton

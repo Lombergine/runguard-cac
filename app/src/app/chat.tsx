@@ -394,7 +394,7 @@ export default function ChatScreen() {
               value={draft}
               onChangeText={setDraft}
               placeholder="Ask a question"
-              placeholderTextColor={color.muted}
+              placeholderTextColor={color.placeholder}
               multiline
               accessibilityLabel="Message"
             />
