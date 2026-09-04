@@ -95,11 +95,15 @@ function syncLabel(iso: string): string | null {
   return `${timeLabel(d)} · ${dayLabel(localDay(d))}`;
 }
 
-/** Why HealthKit cannot be used, in words the athlete can act on. */
+/** Why the phone's health store cannot be used, in words the athlete can act on. */
 function explainUnavailable(a: Exclude<Availability, { ok: true }>): string {
   switch (a.reason) {
+    case "noHealthConnect":
+      return "This phone has no Health Connect. It is the app Android uses to hold health data, and RunGuard reads your runs and recovery through it. Install Health Connect from the Play Store, then come back.";
+    case "healthConnectOutdated":
+      return "Health Connect on this phone is too old for RunGuard to read. Update it from the Play Store, then come back.";
     case "notIos":
-      return "Apple Health exists only on iPhone, so there is nothing for RunGuard to read on this device.";
+      return "This device has no health store RunGuard can read — Apple Health on iPhone, Health Connect on Android.";
     case "noModule":
       return "This build of RunGuard cannot open Apple Health. Reading Health data needs a build that carries Apple's HealthKit entitlement, which Expo Go and the iOS Simulator do not.";
     case "noHealthStore":

@@ -58,6 +58,7 @@ import {
 } from "@kingstinct/react-native-healthkit/types";
 
 import { BASE_URL } from "./api";
+import * as hc from "./healthConnect";
 import { getToken } from "./auth";
 import { localDay } from "./dates";
 
@@ -137,8 +138,12 @@ export type IngestPayload = {
  */
 export type Availability =
   | { ok: true }
-  /** Android or web. HealthKit is iOS-only. */
+  /** Web, or a platform with neither health store. */
   | { ok: false; reason: "notIos" }
+  /** Android with no Health Connect installed. Fixable by the athlete. */
+  | { ok: false; reason: "noHealthConnect" }
+  /** Android with a Health Connect too old to talk to. */
+  | { ok: false; reason: "healthConnectOutdated" }
   /** The native module is not in this build — Expo Go, or no prebuild yet. */
   | { ok: false; reason: "noModule" }
   /** The module loaded but iOS says this device has no Health store. */
@@ -184,6 +189,28 @@ export function isAvailable(): boolean {
   return availability().ok;
 }
 
+/**
+ * Availability on EITHER platform.
+ *
+ * Async because Health Connect is a separate app and answering means an IPC
+ * call into it — there is no cached synchronous answer the way `isHealthDataAvailable()`
+ * gives one on iOS. Callers that render a permission affordance should use
+ * this; `availability()` remains the synchronous iOS-only view.
+ */
+export async function availabilityAsync(): Promise<Availability> {
+  if (Platform.OS !== "android") return availability();
+  const a = await hc.availability();
+  if (a.ok) return { ok: true };
+  switch (a.reason) {
+    case "notInstalled":
+      return { ok: false, reason: "noHealthConnect" };
+    case "needsUpdate":
+      return { ok: false, reason: "healthConnectOutdated" };
+    default:
+      return { ok: false, reason: "noModule" };
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Read scopes
  * ------------------------------------------------------------------ */
@@ -221,6 +248,14 @@ const READ_SCOPES = [
  * `HealthError("unavailable")` if HealthKit is not usable on this build.
  */
 export async function requestPermissions(): Promise<void> {
+  if (Platform.OS === "android") {
+    // Health Connect DISCLOSES denial, unlike Apple — but the caller contract
+    // is the same either way, so the granted list is not surfaced here. See
+    // lib/healthConnect.ts, and note it is unverified on device.
+    await hc.requestPermissions();
+    await saveState({ ...(await getState()), requestedAt: new Date().toISOString() });
+    return;
+  }
   const hk = api();
   if (!hk || !isAvailable()) throw new HealthError("unavailable");
   try {
@@ -310,6 +345,7 @@ function round(v: number, dp: number): number {
  * the module IS present is a real failure and throws.
  */
 export async function readSince(since: Date): Promise<IngestPayload> {
+  if (Platform.OS === "android") return hc.readSince(since);
   const hk = api();
   if (!hk || !isAvailable()) return { workouts: [], metrics: [] };
 
@@ -689,7 +725,7 @@ function daysAgo(n: number): Date {
  * an upsert, so the second attempt finishes the job instead of doubling it.
  */
 export async function sync(): Promise<SyncRecord> {
-  if (!isAvailable()) throw new HealthError("unavailable");
+  if (!(await availabilityAsync()).ok) throw new HealthError("unavailable");
 
   const before = await getState();
   const since = before.lastSync

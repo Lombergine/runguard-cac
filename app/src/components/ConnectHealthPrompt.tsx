@@ -1,5 +1,6 @@
 /**
- * The ask. Home's prompt to connect Apple Health, shown until it is answered.
+ * The ask. Home's prompt to connect the phone's health store — Apple Health on
+ * iOS, Health Connect on Android — shown until it is answered.
  *
  * ── WHY THIS EXISTS ────────────────────────────────────────────────────────
  * Everything needed to read Health was already built — the entitlement, both
@@ -18,16 +19,22 @@
  * here asks and then immediately syncs, and why the copy afterwards reports
  * what actually arrived rather than saying "connected".
  *
- * Renders nothing at all when Health cannot be used (Android, no native module,
- * no Health store) — `/connect` explains those cases properly, and a dead
- * button on the home screen explains nothing.
+ * Health Connect DOES disclose denial, so that reasoning is stricter than
+ * Android needs — but reporting what actually arrived is true on both, and one
+ * code path that is honest everywhere beats two that diverge.
+ *
+ * Renders nothing when there is no store to read (no native module, no Health
+ * store, no Health Connect installed) — `/connect` explains those cases
+ * properly, and a dead button on the home screen explains nothing.
+ *
+ * ⚠ The Android half is UNVERIFIED on device — see lib/healthConnect.ts.
  */
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import {
-  availability,
+  availabilityAsync,
   getState,
   requestPermissions,
   sync,
@@ -50,7 +57,9 @@ import { Press } from "./Press";
 function outcome(record: SyncRecord): string {
   const { workouts, metrics } = record.imported;
   if (workouts === 0 && metrics === 0) {
-    return "Nothing came through. If you left any switches off, turn them on in Settings › Privacy & Security › Health › RunGuard.";
+    return Platform.OS === "android"
+      ? "Nothing came through. Open Health Connect and check RunGuard's permissions."
+      : "Nothing came through. If you left any switches off, turn them on in Settings › Privacy & Security › Health › RunGuard.";
   }
   const parts: string[] = [];
   if (workouts > 0) parts.push(`${workouts} ${workouts === 1 ? "run" : "runs"}`);
@@ -58,25 +67,32 @@ function outcome(record: SyncRecord): string {
   return `${parts.join(" and ")} came through.`;
 }
 
+/** Apple Health on iOS, Health Connect on Android. Never the wrong name. */
+const STORE = Platform.OS === "android" ? "Health Connect" : "Apple Health";
+
 export function ConnectHealthPrompt({ onConnected }: { onConnected?: () => void }) {
   const router = useRouter();
-  const avail = availability();
+  /** The store this phone actually has. Health Connect is a separate app, so
+      answering is an IPC call and cannot be done during render. */
+  const [usable, setUsable] = useState<boolean | null>(null);
   const [health, setHealth] = useState<HealthState | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    if (!avail.ok) return;
-    getState()
-      .then((s) => {
-        if (alive) setHealth(s);
-      })
-      .catch(() => {});
+    void (async () => {
+      const ok = (await availabilityAsync()).ok;
+      if (!alive) return;
+      setUsable(ok);
+      if (!ok) return;
+      const state = await getState().catch(() => null);
+      if (alive && state) setHealth(state);
+    })();
     return () => {
       alive = false;
     };
-  }, [avail.ok]);
+  }, []);
 
   const connect = useCallback(async () => {
     if (busy) return;
@@ -92,7 +108,7 @@ export function ConnectHealthPrompt({ onConnected }: { onConnected?: () => void 
     } catch {
       failed();
       setResult(
-        "Apple Health could not be read on this phone. Nothing was sent. Open Settings for the details."
+        `${STORE} could not be read on this phone. Nothing was sent. Open Settings for the details.`
       );
     }
     setHealth(await getState().catch(() => null));
@@ -101,13 +117,13 @@ export function ConnectHealthPrompt({ onConnected }: { onConnected?: () => void 
 
   // Health is unusable here, or the athlete has already been asked and data is
   // flowing. Either way this card has nothing left to say.
-  if (!avail.ok) return null;
+  if (usable !== true) return null;
   if (health === null) return null;
   if (health.requestedAt !== null && result === null) return null;
 
   return (
     <View style={styles.card}>
-      <Text style={styles.eyebrow}>Apple Health</Text>
+      <Text style={styles.eyebrow}>{STORE}</Text>
       <Text style={styles.title}>Let RunGuard read your runs</Text>
       <Text style={styles.body}>
         Your workouts, sleep, resting heart rate and HRV are already on this
@@ -120,13 +136,13 @@ export function ConnectHealthPrompt({ onConnected }: { onConnected?: () => void 
           onPress={() => void connect()}
           disabled={busy}
           accessibilityRole="button"
-          accessibilityLabel="Connect Apple Health"
+          accessibilityLabel={`Connect ${STORE}`}
           accessibilityState={{ disabled: busy }}
           style={[styles.action, busy && styles.actionBusy]}
           pressedStyle={styles.actionPressed}
         >
           <Text style={styles.actionLabel}>
-            {busy ? "Reading Health…" : "Connect Apple Health"}
+            {busy ? "Reading…" : `Connect ${STORE}`}
           </Text>
         </Press>
       ) : (
