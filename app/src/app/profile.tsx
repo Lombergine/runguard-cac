@@ -553,13 +553,6 @@ export default function ProfileScreen() {
         options={{
           headerShown: true,
           title: "Profile",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
         }}
       />
       <KeyboardAvoidingView
@@ -669,7 +662,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.card,
     borderRadius: radius.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.cardEdge,
     padding: layout.cardPadding,
     gap: space.md,
     // Elevation, never emphasis. Every panel carries the same one.

@@ -281,13 +281,6 @@ export default function ChatScreen() {
         options={{
           headerShown: true,
           title: "Ask RunGuard",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
         }}
       />
       <KeyboardAvoidingView
@@ -481,7 +474,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.card,
     borderRadius: radius.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.cardEdge,
     padding: layout.cardPadding,
     gap: space.sm,
     ...shadow.card,

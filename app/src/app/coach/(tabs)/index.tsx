@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   roster: {
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
     overflow: "hidden",
     ...shadow.card,

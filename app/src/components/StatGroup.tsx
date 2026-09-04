@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
     overflow: "hidden",
     ...shadow.card,

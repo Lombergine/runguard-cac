@@ -13,7 +13,7 @@ import {
 
 import { ProfileProvider } from "../lib/profileStore";
 import { SessionProvider, useSession } from "../lib/session";
-import { color } from "../theme/tokens";
+import { color, useColors } from "../theme/tokens";
 import { font } from "../theme/type";
 
 /**
@@ -79,6 +79,7 @@ export default function RootLayout() {
  * frame is exactly how a signed-out phone flashes someone else's readiness.
  */
 function Gate() {
+  const hex = useColors();
   const { status, coachStatus } = useSession();
 
   // BOTH keychain reads must land before anything mounts. Rendering on the
@@ -111,9 +112,21 @@ function Gate() {
           // For the screens that do show a header: no "(tabs)" fallback text
           // beside the chevron, and the bar in the app's own ground and type.
           headerBackButtonDisplayMode: "minimal",
-          headerTintColor: color.ink,
-          headerStyle: { backgroundColor: color.bg },
-          headerTitleStyle: { fontFamily: font.displayBold, fontSize: 17 },
+          /*
+           * RESOLVED HEX, not the dynamic tokens.
+           *
+           * The native stack header is a UIKit surface, and it does not resolve
+           * a `DynamicColorIOS` value the way a React Native style prop does —
+           * it fell back to its own light material, so "Run" and "Profile"
+           * rendered as a white bar with dark text sitting on top of a
+           * near-black app, with the status bar unreadable across the seam.
+           * `useColors()` hands over plain strings, which UIKit does take, and
+           * the hook re-renders on an appearance change so the header still
+           * follows the theme.
+           */
+          headerTintColor: hex.ink,
+          headerStyle: { backgroundColor: hex.bg },
+          headerTitleStyle: { fontFamily: font.displayBold, fontSize: 17, color: hex.ink },
           headerShadowVisible: false,
           /**
            * The platform push — on iOS a slide from the right with the

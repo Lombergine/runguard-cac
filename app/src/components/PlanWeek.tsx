@@ -656,13 +656,12 @@ const styles = StyleSheet.create({
    * not look like one. `brandText` on card measures 5.21:1.
    */
   pill: {
-    borderWidth: ruleWidth,
-    borderColor: color.rule,
-    borderRadius: radius.control,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    backgroundColor: "transparent",
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 3,
   },
-  pillLabel: { ...text.meta, color: color.muted },
+  pillLabel: { ...text.meta, fontSize: 12, lineHeight: 16, color: color.muted },
 
   /*
    * Outlined like the taper pill, but in ember rather than the neutral rule, so
@@ -674,13 +673,12 @@ const styles = StyleSheet.create({
    * card is the pairing `dateToday` and `countdown` already ship.
    */
   coachPill: {
-    borderWidth: ruleWidth,
-    borderColor: color.ruleStrong,
-    borderRadius: radius.control,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    backgroundColor: color.fillStrong,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 3,
   },
-  coachPillLabel: { ...text.meta, color: color.ink2 },
+  coachPillLabel: { ...text.meta, fontSize: 12, lineHeight: 16, color: color.ink2 },
 
   type: { ...text.base, color: color.ink, marginTop: space.xs },
   prescription: { marginTop: space.xs },

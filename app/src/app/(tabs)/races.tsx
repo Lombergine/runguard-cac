@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
    * Mono, with the noun welded on. Never a bare numeral. Ember on type, so it
    * takes `brandText` — 4.88:1 on `bg`, where `brand` itself is 2.01:1.
    */
-  count: { ...text.stat, color: color.ink },
+  count: { ...text.meta, color: color.muted },
   sectionTitle: { ...text.title, color: color.ink },
   sectionNote: { ...text.meta, color: color.muted, flexShrink: 1 },
   note: { ...text.meta, color: color.muted, marginTop: space.xs },

@@ -329,13 +329,6 @@ export default function ActivityScreen() {
         options={{
           headerShown: true,
           title: "Run",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
         }}
       />
       <ScrollView contentContainerStyle={styles.page}>

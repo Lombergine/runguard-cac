@@ -82,13 +82,6 @@ export default function PrivacyScreen() {
         options={{
           headerShown: true,
           title: "Privacy",
-          headerStyle: { backgroundColor: color.bg },
-          headerTintColor: color.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: text.title.fontFamily,
-            fontSize: text.title.fontSize,
-          },
         }}
       />
 

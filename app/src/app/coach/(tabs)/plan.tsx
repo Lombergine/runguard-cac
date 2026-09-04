@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   day: {
     backgroundColor: color.card,
     borderWidth: ruleWidth,
-    borderColor: color.ruleSoft,
+    borderColor: color.cardEdge,
     borderRadius: radius.card,
     padding: layout.cardPadding,
     ...shadow.card,
