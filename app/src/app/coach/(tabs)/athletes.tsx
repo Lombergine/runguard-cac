@@ -48,7 +48,7 @@ import { DEFAULT_RANGE } from "../../../lib/range";
 import { useSession } from "../../../lib/session";
 import { color, shadow } from "../../../theme/tokens";
 import { text } from "../../../theme/type";
-import { layout, radius, space, target } from "../../../theme/space";
+import { layout, radius, space, target, ruleWidth } from "../../../theme/space";
 
 export default function CoachAthletesScreen() {
   const router = useRouter();
@@ -185,6 +185,8 @@ const styles = StyleSheet.create({
   skeleton: { height: 280, borderRadius: radius.card, backgroundColor: color.well },
 
   panel: {
+    borderWidth: ruleWidth,
+    borderColor: color.cardEdge,
     backgroundColor: color.card,
     borderRadius: radius.card,
     padding: layout.cardPadding,

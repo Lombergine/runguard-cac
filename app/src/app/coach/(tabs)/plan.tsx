@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
   },
   primaryOff: { opacity: 0.6 },
   // `ink`, never white: the ember is 5.9:1 against ink and 1.7:1 against white.
-  primaryLabel: { fontFamily: font.bodySemi, fontSize: 16.5, color: color.ink },
+  primaryLabel: { fontFamily: font.bodySemi, fontSize: 16.5, color: color.onBrand },
   secondary: { minHeight: target.min, alignItems: "center", justifyContent: "center" },
   secondaryLabel: { ...text.meta, color: color.muted },
 

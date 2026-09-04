@@ -76,6 +76,8 @@ import { WeekBars } from "../../components/WeekBars";
 import { LastRunCard } from "../../components/LastRunCard";
 import { ConnectHealthPrompt } from "../../components/ConnectHealthPrompt";
 import { ApiError, getHome, isUnauthorized, postCheckin } from "../../lib/api";
+import { useSession } from "../../lib/session";
+import { clearStaleToken } from "../../lib/auth";
 import { committed, failed, useReduceMotion } from "../../lib/motion";
 import InfoDot, { EXPLAINERS } from "../../components/InfoDot";
 import { getBodyPart, sorenessLabel, type Side } from "../../lib/bodyParts";
@@ -181,6 +183,7 @@ function greeting(name: string | null): string {
 }
 
 export default function CheckInScreen() {
+  const { refresh: refreshSession } = useSession();
   const hex = useColors();
   const router = useRouter();
   /**
@@ -280,7 +283,17 @@ export default function CheckInScreen() {
         );
       })
       .catch((err: unknown) => {
-        if (alive) setLoadError(isUnauthorized(err) ? "unpaired" : "failed");
+        if (!alive) return;
+        if (isUnauthorized(err)) {
+          // The stored token is not a session any more. Drop it and re-resolve
+          // rather than sitting "signed in" on an account every request 401s
+          // on — a stored token shadows the dev fallback, so without this the
+          // screen cannot recover on its own. See clearStaleToken.
+          void clearStaleToken().then(() => refreshSession());
+          setLoadError("unpaired");
+          return;
+        }
+        setLoadError("failed");
       });
     return () => {
       alive = false;
@@ -1116,7 +1129,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
     backgroundColor: color.brand,
   },
-  loadErrorActionLabel: { ...text.baseSemi, color: color.ink },
+  loadErrorActionLabel: { ...text.baseSemi, color: color.onBrand },
   loadError: { ...text.base, color: color.ink2 },
   sorenessNote: { marginTop: space.md, gap: space.xs },
   sorenessNoteLine: { ...text.meta, color: color.muted },

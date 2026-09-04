@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.brand,
   },
   retryPressed: { backgroundColor: color.press },
-  retryLabel: { ...text.baseSemi, color: color.ink },
+  retryLabel: { ...text.baseSemi, color: color.onBrand },
 
   /** Two columns; the fifth tile takes the last row on its own, as on the web. */
   tileGrid: {

@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.brand,
   },
   retryPressed: { backgroundColor: color.press },
-  retryLabel: { ...text.baseSemi, color: color.ink },
+  retryLabel: { ...text.baseSemi, color: color.onBrand },
   /** The plan sits on the same section rhythm as the header below it. */
   plan: { marginBottom: layout.section },
   /**

@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.brand,
   },
   retryPressed: { backgroundColor: color.press },
-  retryLabel: { ...text.baseSemi, color: color.ink },
+  retryLabel: { ...text.baseSemi, color: color.onBrand },
 
   skeleton: { borderRadius: radius.card, backgroundColor: color.well },
   skeletonTile: { flex: 1, height: TILE_H },

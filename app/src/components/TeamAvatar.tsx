@@ -25,16 +25,23 @@
  */
 import { StyleSheet, Text, View } from "react-native";
 
+import { useIsDark } from "../theme/tokens";
 import { ruleWidth } from "../theme/space";
 import { font } from "../theme/type";
 
-/** Verified across every hue — see the header before changing these. */
-const FILL_S = 50;
-const FILL_L = 91;
-const INK_S = 55;
-const INK_L = 28;
-const EDGE_S = 45;
-const EDGE_L = 80;
+/**
+ * One set per theme, because these are computed colours and there is no token
+ * to make dynamic.
+ *
+ * The original numbers were verified against white only: a 91%-lightness fill
+ * with 28%-lightness initials is right on paper and, on the #0A0D12 ground the
+ * coach roster actually renders on, a row of bright blobs. Dark keeps the hue
+ * and inverts the relationship — a deep fill carrying light initials — so the
+ * avatar reads as a token of the athlete rather than the loudest thing on the
+ * screen.
+ */
+const LIGHT = { fillS: 50, fillL: 91, inkS: 55, inkL: 28, edgeS: 45, edgeL: 80 };
+const DARK = { fillS: 38, fillL: 26, inkS: 62, inkL: 78, edgeS: 34, edgeL: 36 };
 
 /** Up to two initials. A single-word name gives one, never a blank. */
 export function initials(name: string): string {
@@ -55,6 +62,7 @@ export function TeamAvatar({
   hue: number;
   size?: number;
 }) {
+  const tone = useIsDark() ? DARK : LIGHT;
   return (
     <View
       style={[
@@ -63,8 +71,8 @@ export function TeamAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: `hsl(${hue}, ${FILL_S}%, ${FILL_L}%)`,
-          borderColor: `hsl(${hue}, ${EDGE_S}%, ${EDGE_L}%)`,
+          backgroundColor: `hsl(${hue}, ${tone.fillS}%, ${tone.fillL}%)`,
+          borderColor: `hsl(${hue}, ${tone.edgeS}%, ${tone.edgeL}%)`,
         },
       ]}
       // Decoration: the name is always rendered beside this, so a screen reader
@@ -75,7 +83,7 @@ export function TeamAvatar({
       <Text
         style={[
           styles.text,
-          { fontSize: size * 0.38, color: `hsl(${hue}, ${INK_S}%, ${INK_L}%)` },
+          { fontSize: size * 0.38, color: `hsl(${hue}, ${tone.inkS}%, ${tone.inkL}%)` },
         ]}
       >
         {initials(name)}

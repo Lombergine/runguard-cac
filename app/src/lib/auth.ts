@@ -58,6 +58,24 @@ const COACH_KEY = "runguard.coachToken";
 const DEV_TOKEN = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TOKEN || null : null;
 
 /**
+ * Which side of the app a dev token signs in, read off the token itself.
+ *
+ * `website/scripts/dev-token.ts` mints EITHER role into `EXPO_PUBLIC_DEV_TOKEN`
+ * and says the app reads which from the shape. It did not: the value was only
+ * ever offered as an ATHLETE token, so `dev-token.ts coach 1` put a coach
+ * session in the athlete slot, `/api/mobile/me` refused it, and the app landed
+ * on the athlete tabs reading "this device isn't signed in yet" — with no way
+ * to reach the coach screens at all on a dev build.
+ *
+ * The forms are domain-separated at the signature (`coach:<teamId>` versus
+ * `athlete:<athleteId>`), so neither verifier can accept the other's value.
+ * The `a.` prefix on an athlete token is what makes them tellable apart here
+ * without trying to verify anything — see `signAthleteToken` in
+ * website/src/lib/session.ts.
+ */
+const DEV_TOKEN_IS_COACH = DEV_TOKEN !== null && !DEV_TOKEN.startsWith("a.");
+
+/**
  * Set once someone signs out in this process, to stop the dev fallback signing
  * them straight back in.
  *
@@ -88,6 +106,29 @@ export async function getToken(): Promise<string | null> {
   return devFallbackRevoked ? null : DEV_TOKEN;
 }
 
+/**
+ * Drop a stored athlete token the server has refused.
+ *
+ * A stored token SHADOWS the dev fallback — `getToken` returns it first — so a
+ * keychain entry the server no longer accepts left the app permanently
+ * "signed in" to an account every request 401s on: Home rendered its
+ * signed-out copy while the session said otherwise, and no dev token could get
+ * past it. iOS keychain items outlive the app that wrote them, so reinstalling
+ * did not clear it either.
+ *
+ * The device-token era ended when `/api/mobile/me` moved to a signed athlete
+ * session, which makes every token minted before that switch exactly this
+ * case.
+ */
+export async function clearStaleToken(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(KEY);
+  } catch {
+    // Nothing to do: the entry is unreadable, which is indistinguishable from
+    // absent for every caller.
+  }
+}
+
 export async function setToken(token: string): Promise<void> {
   await SecureStore.setItemAsync(KEY, token);
   // A real sign-in re-arms the dev fallback for the next sign-out cycle.
@@ -106,7 +147,9 @@ export async function setToken(token: string): Promise<void> {
  */
 export async function getCoachToken(): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(COACH_KEY);
+    const stored = await SecureStore.getItemAsync(COACH_KEY);
+    if (stored) return stored;
+    return DEV_TOKEN_IS_COACH ? DEV_TOKEN : null;
   } catch {
     // Same reasoning as getToken: a locked keychain must not crash launch, and
     // the error object could carry the key, so it is not surfaced.

@@ -343,6 +343,8 @@ const styles = StyleSheet.create({
   skeleton: { height: 320, borderRadius: radius.card, backgroundColor: color.well },
 
   panel: {
+    borderWidth: ruleWidth,
+    borderColor: color.cardEdge,
     backgroundColor: color.card,
     borderRadius: radius.card,
     padding: layout.cardPadding,
