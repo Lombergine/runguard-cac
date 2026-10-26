@@ -63,7 +63,13 @@ phone on recording night.
 > labelled sample set, right there: "sample data". The thresholds are
 > heuristics, and the panel says so.
 
-**2:05–2:20, Data check**
+**2:05–2:20, Explain my numbers, tap the button**
+> And if the numbers are too much, the app explains them. The model only
+> gets the numbers the server computed, has to answer in a fixed shape, and
+> every figure in its reply is checked against what it was given. It explains
+> the score. It never makes it.
+
+**(2:05–2:20 alternative) Data check**
 > Before any score, RunGuard checks the log it was given: too little history,
 > a watch left running, a long break, a change of units. It tells you; it never
 > silently fixes anything, because whether a gap was rest or a dead battery is

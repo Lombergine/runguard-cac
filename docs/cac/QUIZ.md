@@ -146,3 +146,83 @@ No. Every 2.0 number is computed by TypeScript from the athlete's own data.
 The athlete chat predates 2.0 and is part of the base product. An
 explanation layer is in the roadmap, with the constraint that the model may
 explain numbers but never generate them.
+
+## H. The team audit (coach dashboard)
+
+**Q. What does "Can the score be trusted on this team?" compute?**
+Three things from the team's own data: each athlete's self-audit ρ, own 95th
+percentile and how often the universal 1.5 would fire; squad counts (median
+ρ, athletes whose own 99th sits below 1.5, athletes whose own 95th sits
+below 1.3); and the 2021 paper's experiment pooled across the roster.
+
+**Q. What is the pooled experiment, exactly?**
+Every athlete-day with a ratio, labelled 1 on days an injury was logged.
+AUC of the shown ratio against those labels, with a bootstrap interval;
+then the same AUC for a ratio whose 4-week denominator was shuffled into
+noise, 120 draws, with its interval. If the real ratio sits inside the noise
+interval, the denominator added nothing on this team.
+
+**Q. Why does it refuse below ten injuries?**
+An AUC from two events is a coin flip dressed as a number. It says what it
+needs and runs itself once the coach has logged enough.
+
+**Q. What did it show on the sample team?**
+0.56 against 0.56: the paper's result, on data generated so that injury
+follows load spikes. That is honest about the ratio, not flattering to it.
+
+## I. "Explain my numbers"
+
+**Q. What does the model receive?**
+A JSON object of numbers the server computed: ratio and its legs, the
+method, personal 95th, the share of days 1.5 flags, the self-audit ρ and
+interval, usable days, optional gait drift from the phone, and the data-check
+flags. No name, no free text, no health conditions.
+
+**Q. How do you stop it making things up?**
+Three gates. The API's structured output forces the JSON shape. The
+citation must be one of four listed references. Every number in the reply
+must be one the model was given, checked by string match at zero, one and
+two decimals. Anything that fails is replaced by RunGuard's own template
+wording and labelled, with the rejected reply kept for inspection.
+
+**Q. What happens without an API key?**
+The same card renders RunGuard's own wording and says "no model configured
+on this server." The feature never blocks the screen and never computes a
+statistic.
+
+**Q. Which model, and why?**
+Claude Haiku 5.5 through the official SDK, at low effort: a sixty-word
+explanation of six numbers does not need more, and the key lives on the
+server only. The first version used a 400-token budget and the model's own
+thinking ate it before any text came out; that showed up as an empty reply
+rejected by the validator, which is the validator doing its job.
+
+## J. The camera gait check
+
+**Q. What does it measure, from what?**
+Apple's Vision body-pose detector finds 19 joints per frame of a ten-second
+side-view clip, on the phone. Cadence from hip bounces per minute; vertical
+bounce as hip peak-to-peak over torso length; ground contact per foot as the
+share of frames each ankle spends within 15% of its lowest position, turned
+into milliseconds with the cadence; asymmetry as the difference between feet.
+
+**Q. Why torso length?**
+Pixels are not centimetres and the camera distance is unknown. The torso is
+the one ruler in every frame, so bounce is reported as a share of it.
+
+**Q. What does it do with a clip where the runner walks in, runs, and stops?**
+It finds the longest stretch of frames with a pose, gaps under a second
+allowed, ranked by frames that carry a pose, and measures that stretch. The
+first version ranked by total frames and a lone detection followed by a
+minute of nothing beat a nine-second run; a public-domain astronaut clip
+caught it.
+
+**Q. Does it work in the Simulator?**
+No. The same code finds a person in 813 of 1,034 frames on a Mac and in
+none in the Simulator, so Vision's pose detector does not run there. The
+screen says so instead of reporting zeros.
+
+**Q. Where does the clip go?**
+Nowhere. The file is read on the phone, the frames are never stored, and
+only the summary numbers cross into JavaScript. History is a few hundred
+bytes in the keychain-backed store.
