@@ -346,7 +346,7 @@ function CoachView({
       {/* RunGuard 2.0 (CAC 2026): the coach sees the same audit the athlete
           does — personal threshold, self-audit, data check. AI-assisted, see
           DISCLOSURE.md. */}
-      <AuditPanels audit={p.audit} whose="their" />
+      <AuditPanels audit={p.audit} whose="their" athleteId={p.athlete.id} />
 
       <Panel title="Weekly distance (12 weeks)">
         <WeeklyKmChart data={p.weeks} />

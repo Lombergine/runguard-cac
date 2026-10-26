@@ -26,6 +26,7 @@ import { Platform, StyleSheet, Switch, Text, View } from "react-native";
 import Svg, { Circle, Line, Rect, Text as SvgText } from "react-native-svg";
 
 import { Press } from "./Press";
+import { ExplainCard } from "./ExplainCard";
 import { readRunningDynamics, isAvailable } from "../lib/health";
 import {
   GROUND_CONTACT_DRIFT_THRESHOLD,
@@ -230,7 +231,7 @@ export function DataCheckPanel({ audit }: { audit?: AthleteAudit | null }) {
  * Gait channel
  * ------------------------------------------------------------------ */
 
-export function GaitPanel({ acwr, caution }: { acwr: number | null; caution: number }) {
+export function GaitPanel({ acwr, caution, onAnalysis }: { acwr: number | null; caution: number; onAnalysis?: (a: GaitAnalysis | null, isSample: boolean) => void }) {
   const [health, setHealth] = useState<GaitAnalysis | null>(null);
   const [sample, setSample] = useState(false);
   const hex = useColors();
@@ -255,6 +256,12 @@ export function GaitPanel({ acwr, caution }: { acwr: number | null; caution: num
   }, []);
 
   const analysis: GaitAnalysis | null = sample ? analyzeGait(sampleGaitRuns()) : health;
+  useEffect(() => {
+    onAnalysis?.(analysis, sample);
+    // The callback identity is the parent's concern; re-reporting on every
+    // render would loop a parent that stores the value in state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysis?.kind, sample, analysis?.kind === "analyzed" ? analysis.drift.groundContactDrift : null]);
   const showSwitch = sample || health?.kind === "noDynamics";
   const d = analysis?.kind === "analyzed" ? analysis.drift : null;
 
@@ -384,12 +391,30 @@ function Quadrant({ acwr, caution, drift, hex }: { acwr: number | null; caution:
 
 export function InsightPanels({ audit, acwr }: { audit?: AthleteAudit | null; acwr: number | null }) {
   const caution = audit?.personalZones?.caution ?? 1.3;
+  // Gait drift from the phone, handed to the explanation as two bounded
+  // percentages. Only real Health data goes to the server; the sample set
+  // explains nothing about this athlete.
+  const [gait, setGait] = useState<{ gctDriftPct: number | null; voDriftPct: number | null } | null>(null);
   return (
     <>
       <ThresholdPanel audit={audit} />
       <AuditPanel audit={audit} />
-      <GaitPanel acwr={acwr} caution={caution} />
+      <GaitPanel
+        acwr={acwr}
+        caution={caution}
+        onAnalysis={(a, isSample) =>
+          setGait(
+            !isSample && a?.kind === "analyzed"
+              ? {
+                  gctDriftPct: a.drift.groundContactDrift === null ? null : Math.round(a.drift.groundContactDrift * 1000) / 10,
+                  voDriftPct: a.drift.verticalOscillationDrift === null ? null : Math.round(a.drift.verticalOscillationDrift * 1000) / 10,
+                }
+              : null,
+          )
+        }
+      />
       <DataCheckPanel audit={audit} />
+      {audit ? <ExplainCard gait={gait} /> : null}
     </>
   );
 }

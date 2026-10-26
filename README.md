@@ -72,12 +72,14 @@ with a bootstrap interval), a data check on the training log, and a gait
 channel from Apple Watch running dynamics. On the coach dashboard, a team
 audit: per-athlete score trust, and the experiment from Impellizzeri et al.
 (2021) run on the team's own injury log, the shown ratio against a ratio whose
-denominator is shuffled noise. The statistics are ported from
+denominator is shuffled noise. And "Explain my numbers": a language model that
+may only repeat the figures the server computed, validated against them, with
+RunGuard's own wording as the fallback. The statistics are ported from
 Aditya's Python package [`acwr`](https://github.com/Lombergine/acwr) into
 `website/src/lib/acwrDiagnostics.ts` and checked against it:
 
 ```bash
-cd website && npm test        # 37 tests against the Python reference, to 1e-9
+cd website && npm test        # 43 tests, the statistics against the Python reference to 1e-9
 ```
 
 AI assistance on this work is disclosed in [`DISCLOSURE.md`](DISCLOSURE.md).

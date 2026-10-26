@@ -586,3 +586,27 @@ export async function postChat(q: string): Promise<ChatMessage> {
   );
   return { role: "assistant", text: reply, safety: safetyOf({ safety }) };
 }
+
+/* ------------------------------------------------------------------ *
+ * RunGuard 2.0: the grounded explanation. AI-assisted, see DISCLOSURE.md.
+ * ------------------------------------------------------------------ */
+
+export type ExplainResult = {
+  input: Record<string, unknown>;
+  explanation: { summary: string; caution: string; citation: string };
+  /** Who wrote the words. "template" means no model was involved. */
+  source: "anthropic" | "ollama" | "template";
+  model: string | null;
+  fallbackReason: string | null;
+  rejectedReply: string | null;
+};
+
+/**
+ * POST /api/mobile/explain. The server explains its own numbers; the only
+ * thing the phone adds is the gait drift it computed from Health samples
+ * that never leave the device. 20 s: with a model configured this waits on
+ * a paid call, and the card shows its own wording if that fails.
+ */
+export async function postExplain(gait: { gctDriftPct: number | null; voDriftPct: number | null } | null): Promise<ExplainResult> {
+  return request<ExplainResult>("/api/mobile/explain", { method: "POST", body: { gait }, timeoutMs: 20_000 });
+}

@@ -9,6 +9,7 @@
  */
 import type { AthleteAudit } from "@/lib/acwrDiagnostics";
 import { Panel } from "./tabs";
+import ExplainButton from "./ExplainButton";
 
 const f2 = (x: number) => x.toFixed(2);
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`;
@@ -23,7 +24,7 @@ function Headline({ children }: { children: React.ReactNode }) {
   return <span className="text-xl font-bold tabular-nums" style={{ color: "var(--brand-text, var(--ink))" }}>{children}</span>;
 }
 
-export default function AuditPanels({ audit, whose = "your" }: { audit?: AthleteAudit | null; whose?: "your" | "their" }) {
+export default function AuditPanels({ audit, whose = "your", athleteId }: { audit?: AthleteAudit | null; whose?: "your" | "their"; athleteId?: number }) {
   if (!audit) return null;
   const t = audit.threshold;
   const r = audit.rescaling;
@@ -112,6 +113,8 @@ export default function AuditPanels({ audit, whose = "your" }: { audit?: Athlete
           </p>
         </Panel>
       ) : null}
+
+      <ExplainButton athleteId={athleteId} />
     </div>
   );
 }

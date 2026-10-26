@@ -58,6 +58,11 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 | `website/src/lib/teamAudit.ts` | Pools the roster's series with the injury log; per-athlete score trust |
 | `website/src/components/TeamAuditPanel.tsx` | The coach dashboard's "Can the score be trusted on this team?" panel |
 | `website/src/components/athlete/AuditPanels.tsx` | The web versions of the threshold, self-audit and data-check panels |
+| `website/src/lib/explain.ts`, `explain.test.ts` | The grounded explanation layer: numbers in, validated JSON out, template fallback |
+| `website/src/app/api/mobile/explain/route.ts`, `website/src/app/api/explain/route.ts` | The explain endpoints (phone and web) |
+| `website/src/components/athlete/ExplainButton.tsx`, `app/src/components/ExplainCard.tsx` | "Explain my numbers" on the web and on the phone |
+| `app/src/components/TeamAuditSection.tsx`, `website/src/app/api/mobile/coach/audit/route.ts` | The team audit in the native coach tabs |
+| `docs/explanation-validation.md` | Real input/output pairs from the explanation layer |
 | `website/src/lib/__fixtures__/generate_reference.py` | Script that produces the Python reference numbers |
 | `website/src/lib/__fixtures__/acwr_reference.json` | Those numbers (generated, not hand-written) |
 | `website/vitest.config.ts` | Test runner config |
@@ -98,13 +103,26 @@ submission.
 ## 4. Runtime AI
 
 RunGuard's athlete chat (`website/src/lib/ai.ts`) predates 2.0 and is part of
-the base product. **No 2.0 feature calls a language model at runtime.** Every
-2.0 number is computed by the server's TypeScript from the athlete's own data,
-and the gait channel is computed on the phone and never sent anywhere.
+the base product.
+
+One 2.0 feature calls a language model at runtime: **"Explain my numbers"**.
+It sends Claude (`claude-haiku-5-5`, through the official SDK, key held on the
+server only) a JSON object of numbers the server computed, with no name and no
+free text, and asks for a three-field JSON explanation. The reply's shape is
+enforced by the API's structured output, its citation must be one of four
+listed references, and every number in it must be one it was given; anything
+else is replaced by RunGuard's own template wording and labelled as such. The
+model explains the statistics; it never computes them. With no key configured
+the feature still works, in RunGuard's own words, and says so.
+`docs/explanation-validation.md` holds real input/output pairs.
+
+Every other 2.0 number is computed by the server's TypeScript from the
+athlete's own data, and the gait channel is computed on the phone and sent
+nowhere except, as two bounded percentages, into that explanation request.
 
 ## 5. Open-source components
 
-Runtime: Next.js, React, React Native, Expo and expo-router,
+Runtime: Next.js, React, React Native, Expo and expo-router, `@anthropic-ai/sdk`,
 `@kingstinct/react-native-healthkit`, `react-native-health-connect`,
 `react-native-svg`, Recharts, better-sqlite3 / postgres, zod, date-fns.
 Development: TypeScript, vitest, ESLint, Tailwind. Reference generation only:
