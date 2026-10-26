@@ -192,7 +192,7 @@ public enum Gait {
 public enum SampleGaitData {
     /// Six weeks of runs, four per week, with a steady baseline and a
     /// mechanics drift in the final week at unchanged pace: contact time up
-    /// about 6%, oscillation up about 3%.
+    /// about 7%, oscillation up about 3%.
     public static func sixWeeksWithDrift(asOf now: Date = .now, calendar: Calendar = .current) -> [GaitRun] {
         let today = calendar.startOfDay(for: now)
         var runs: [GaitRun] = []
@@ -204,7 +204,7 @@ public enum SampleGaitData {
         for daysAgo in stride(from: 41, through: 0, by: -1) where daysAgo % 7 == 6 || daysAgo % 7 == 4 || daysAgo % 7 == 2 || daysAgo % 7 == 0 {
             let date = calendar.date(byAdding: .day, value: -daysAgo, to: today)!
             let inDriftWeek = daysAgo < 7
-            let gct = (inDriftWeek ? 268.0 : 253.0) + jitter(3.0)
+            let gct = (inDriftWeek ? 271.0 : 253.0) + jitter(3.0)
             let vo = (inDriftWeek ? 8.9 : 8.6) + jitter(0.15)
             let speed = 3.35 + jitter(0.05)
             runs.append(GaitRun(

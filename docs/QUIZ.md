@@ -98,7 +98,7 @@ it doesn't give these cut points.
 **Q. Why is my demo on sample data?**
 My watch is a Garmin, which syncs distance and heart rate to Health but not
 running dynamics. The code path is real and tested; the sample is six
-generated weeks with a 6% contact-time rise at unchanged pace, and it's
+generated weeks with a contact-time rise of about 7% at unchanged pace, and it's
 labelled on screen.
 
 ## E. Data check

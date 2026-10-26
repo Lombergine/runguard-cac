@@ -279,7 +279,7 @@ struct GaitCard: View {
                 Text("Load alone is yesterday's model. The gait channel compares this week's mean ground contact time and vertical oscillation, read per run from Apple Watch running dynamics in Health, against the median of the four weeks before it. It flags mechanical drift when contact time rises more than 5% or oscillation more than 8% without a pace increase that would explain it. The baseline window ends before this week begins, so a drifting week cannot pull its own baseline toward itself.")
                 Text("These thresholds are heuristics chosen for this app, not clinically validated cut points. Treat a flag as a reason to pay attention, not a diagnosis.")
                 if display?.isSample == true {
-                    Text("Sample data: six generated weeks of runs, four a week, with a 6% contact-time rise in the final week at unchanged pace. Shown because this device's Health store has no running-dynamics samples.")
+                    Text("Sample data: six generated weeks of runs, four a week, with a contact-time rise of about 7% in the final week at unchanged pace. Shown because this device's Health store has no running-dynamics samples.")
                         .foregroundStyle(.orange)
                 }
             }

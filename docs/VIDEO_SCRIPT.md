@@ -35,10 +35,12 @@ Fill in: [grade], [school], [district].
 **0:45–1:15 — screen: tap "How this is computed" on Your Threshold**
 
 > RunGuard 2.0 puts that cutoff next to the athlete it's being applied to.
-> On my history, 1.5 flags [X]% of my days — it's my [Y]th percentile. My own
-> 95th percentile is [Z]. Once there are sixty days of scores, the app colors
-> the risk card with my percentiles instead of the universal number, and it
-> says so right here. And it says the honest thing too: a cutoff picked from
+> On my history, 1.5 flags 13.1% of my days — it's only my 87th percentile,
+> because I train in blocks with a lot of rest days, so my ratio spikes
+> often. My own 95th percentile is 1.94. Once there are sixty days of
+> scores, the app colors the risk card with my percentiles instead of the
+> universal number — caution from 1.63, high risk above 1.94 — and it says so
+> right here. And it says the honest thing too: a cutoff picked from
 > your own history flags a fixed share of your days by construction. It
 > shows you how arbitrary 1.5 is. It doesn't claim to replace it.
 
@@ -48,9 +50,12 @@ Fill in: [grade], [school], [district].
 > weekly mileage: swap the denominator for noise and the prediction barely
 > changes. RunGuard runs that test on your own data. This is the rank
 > correlation between my score and my last seven days alone, with a
-> bootstrap interval: [ρ]. Above 0.9 the score is mostly repeating my
-> mileage. This is the only running app that tells you whether its own score
-> means anything.
+> bootstrap interval: 0.40, between 0.29 and 0.50. On smooth day-to-day
+> training that number goes above 0.9 and the score is just mileage in
+> different units — the tests show it on a synthetic series. On mine it's
+> 0.40, because my rest days make the four-week baseline actually move. The
+> app doesn't take a side. It tells you which case you're in. No other
+> running app tells you whether its own score means anything.
 
 **1:45–2:15 — screen: Gait card, switch on sample data, point at the badge**
 
@@ -65,7 +70,8 @@ Fill in: [grade], [school], [district].
 **2:15–2:35 — screen: Data Check card (or Settings → RunGuard 2.0 if no warnings)**
 
 > Before any score renders, RunGuard checks the log it was given: too little
-> history, a watch left running, a long break, a change of units. It tells
+> history, a watch left running, a long break, a change of units. On my year
+> it found one: [read the warning off the expanded Data Check card]. It tells
 > you; it doesn't silently fix anything, because whether a gap was rest or a
 > dead battery is your call, not the app's.
 
@@ -96,5 +102,5 @@ check-ins, soreness, settings) is shown as context.
 - [ ] Settings → RunGuard 2.0 → Personal zones ON
 - [ ] Gait card: sample-data switch OFF at first, flip it ON on camera
 - [ ] Terminal: `cd RunGuardCore && swift test 2>&1 | tail -3` ready to run (takes ~1 min; pre-run and show the result)
-- [ ] Read the real numbers off the phone into the script before recording: [X] [Y] [Z] [ρ]
+- [ ] Numbers in the script are from the phone on Oct 25 at 10:51 pm (13.1% / 87th / 1.94 / ρ 0.40, CI 0.29–0.50). If you run before recording, re-read them
 - [ ] Upload to YouTube as unlisted or public; copy the link into the portal
