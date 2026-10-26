@@ -332,6 +332,55 @@ export function getCoachAthlete(id: number): Promise<CoachAthlete> {
 }
 
 /* ------------------------------------------------------------------ *
+ * RunGuard 2.0: the team audit. Mirrors `TeamAudit` in
+ * website/src/lib/teamAudit.ts. AI-assisted, see DISCLOSURE.md.
+ * ------------------------------------------------------------------ */
+
+export type TeamAuditAthlete = {
+  id: number;
+  name: string;
+  hue: number;
+  usableDays: number;
+  rho: number | null;
+  p95: number | null;
+  flaggedBy15: number | null;
+  p99: number | null;
+  injuries: number;
+};
+
+export type NullComparison = {
+  n: number;
+  nEvents: number;
+  measure: "AUC";
+  real: number;
+  realCiLow: number | null;
+  realCiHigh: number | null;
+  null: number;
+  nullCiLow: number;
+  nullCiHigh: number;
+  nullKind: string;
+  nNullDraws: number;
+  realBeatsNull: boolean;
+  realOutsideNull: boolean;
+};
+
+export type TeamAudit = {
+  days: number;
+  athletes: TeamAuditAthlete[];
+  pooled: { days: number; events: number; comparison: NullComparison | null; reason: string | null };
+  summary: {
+    withPersonalZones: number;
+    universalAboveOwn99th: number;
+    own95thBelowCaution: number;
+    medianRho: number | null;
+  };
+};
+
+export function getTeamAudit(): Promise<{ ok: true; audit: TeamAudit }> {
+  return coachRequest<{ ok: true; audit: TeamAudit }>(`/api/mobile/coach/audit`);
+}
+
+/* ------------------------------------------------------------------ *
  * Training calendar
  * ------------------------------------------------------------------ */
 

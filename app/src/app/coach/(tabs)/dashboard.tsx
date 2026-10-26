@@ -20,16 +20,17 @@
  * would report them as sitting in the safe band. `unrated` is stated on screen
  * rather than dropped.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
+  ScrollView,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import type { ColorValue } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { LoadSpark } from "../../../components/LoadSpark";
 import { ListRow, ListSection } from "../../../components/List";
@@ -37,6 +38,7 @@ import { LargeTitle, useScrollTitle } from "../../../components/LargeTitle";
 import { RangePicker } from "../../../components/RangePicker";
 import { StatGroup } from "../../../components/StatGroup";
 import { TeamAvatar } from "../../../components/TeamAvatar";
+import { TeamAuditSection } from "../../../components/TeamAuditSection";
 import { ApiError } from "../../../lib/api";
 import { getRoster, type RosterAthlete, type RosterResponse } from "../../../lib/coachApi";
 import { DEFAULT_RANGE, type RangeKey } from "../../../lib/range";
@@ -55,6 +57,18 @@ export default function CoachDashboardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [range, setRange] = useState<RangeKey>(DEFAULT_RANGE);
+
+  // RunGuard 2.0: `runguard://coach/dashboard?scroll=audit` lands on the
+  // team audit. A deep-link anchor for a future "the test has a result"
+  // notification.
+  const { scroll } = useLocalSearchParams<{ scroll?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
+  const [auditY, setAuditY] = useState<number | null>(null);
+  useEffect(() => {
+    if (scroll === "audit" && auditY !== null) {
+      scrollRef.current?.scrollTo({ y: auditY, animated: false });
+    }
+  }, [scroll, auditY]);
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +131,7 @@ export default function CoachDashboardScreen() {
       />
 
       <Animated.ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.page}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -197,6 +212,12 @@ export default function CoachDashboardScreen() {
                 ))
               )}
             </ListSection>
+
+            {/* RunGuard 2.0 (CAC 2026): can the score be trusted on this team?
+                AI-assisted, see DISCLOSURE.md. */}
+            <View onLayout={(e) => setAuditY(e.nativeEvent.layout.y)}>
+              <TeamAuditSection />
+            </View>
 
             {/* Team distance, complete weeks only — the server drops the week
                 in progress so a Tuesday does not read as a collapse. */}
