@@ -136,8 +136,12 @@ function sliceRange(data: SeriesPoint[], days: number): SeriesPoint[] {
   return data.slice(-days);
 }
 
-/** ACWR over time with the 0.8–1.3 sweet spot shaded and 1.5 danger line. */
-export function AcwrChart({ data }: { data: SeriesPoint[] }) {
+/**
+ * ACWR over time with the 0.8–1.3 sweet spot shaded and 1.5 danger line.
+ * RunGuard 2.0: `personal` draws the athlete's own 95th-percentile line in
+ * the series colour, visibly a different kind of mark from the universal 1.5.
+ */
+export function AcwrChart({ data, personal }: { data: SeriesPoint[]; personal?: number | null }) {
   const [range, setRange] = useState<RangeKey>(DEFAULT_RANGE);
   const windowed = sliceRange(data, rangeDays(range));
   const pts = windowed.filter((d) => d.acwr !== null);
@@ -180,6 +184,15 @@ export function AcwrChart({ data }: { data: SeriesPoint[] }) {
               strokeDasharray="5 4"
               strokeWidth={1.5}
             />
+            {personal != null && personal > 0 ? (
+              <ReferenceLine
+                y={personal}
+                stroke={SERIES_1}
+                strokeDasharray="2 4"
+                strokeWidth={1.5}
+                label={{ value: `${personal.toFixed(2)} yours`, position: "insideBottomRight", fill: SERIES_1, fontSize: 10 }}
+              />
+            ) : null}
             <Tooltip
               cursor={{ stroke: INK_MUTED, strokeWidth: 1 }}
               content={({ active, payload }) => {

@@ -17,6 +17,7 @@ import IntensityCalendar from "@/components/IntensityCalendar";
 import InfoDot from "@/components/InfoDot";
 import Gauge from "@/components/Gauge";
 import AthleteModel from "./AthleteModel";
+import AuditPanels from "./AuditPanels";
 import { CheckinWidget, PlanStatusButtons, ChatBox, RaceLogForm, RaceForm, RaceEditControls, TeamMembership, HrMaxSetting } from "./widgets";
 
 /* ---------------- shared bits ---------------- */
@@ -601,8 +602,12 @@ export function StatsTab({ p }: { p: CoreProfile }) {
         <Panel title="Pace trend — season" note="up = faster"><PaceChart data={p.paceSeason} /></Panel>
         <Panel title="Fitness score trend" note="improving or plateauing?"><FitnessChart data={p.fitness.weekly} /></Panel>
         <Panel title="Weekly mileage"><WeeklyKmChart data={p.weeks} /></Panel>
-        <Panel title="ACWR — your injury risk over time" note="band = safe zone · dashed = danger"><AcwrChart data={p.series} /></Panel>
+        <Panel title="Workload ratio over time" note="band = 0.8–1.3 · dashed = universal 1.5 · violet = your own 95th"><AcwrChart data={p.series} personal={p.audit?.personalZones?.high ?? null} /></Panel>
       </div>
+
+      {/* RunGuard 2.0 (CAC 2026): personal threshold, self-audit, data check.
+          AI-assisted, see DISCLOSURE.md. */}
+      <AuditPanels audit={p.audit} />
 
       <Panel title="Training load history" note="spot exactly when you spiked"><LoadChart data={p.series} /></Panel>
 
