@@ -62,6 +62,24 @@ From the landing page:
 - **Coach demo** — click "Coach demo" (or "Coach login") and enter the password **`milemarker`** (leave email blank). You'll land on the team roster — click any athlete (try **Ethan Park**, who's returning from a shin injury) to see their detail page and body scan.
 - **Athlete demo** — click "Athlete demo" → **"Try the demo athlete (Ethan Park)"**. This opens the athlete's own RunGuard app: Home, Training, Stats (body scan + intensity calendar), Recovery, Race, and AI Chat. That button signs in with a fixed token, so it needs the roster seeded with `npm run seed -- --demo-tokens` (local SQLite only — those tokens are derivable from the athlete names in `scripts/seed.ts`, so never use them anywhere shared). With a default seed, sign in with a token printed by the seeder instead.
 
+## RunGuard 2.0 (Congressional App Challenge 2026)
+
+The `cac-2.0` branch adds, on the athlete's Stats tab: a personal threshold
+(where the universal 1.5 cutoff sits in this athlete's own ratio history, and
+their own 90th/95th percentiles, drawn on the workload chart), a self-audit
+(how much of the score is just the last seven days, Impellizzeri et al. 2021,
+with a bootstrap interval), a data check on the training log, and a gait
+channel from Apple Watch running dynamics. The statistics are ported from
+Aditya's Python package [`acwr`](https://github.com/Lombergine/acwr) into
+`website/src/lib/acwrDiagnostics.ts` and checked against it:
+
+```bash
+cd website && npm test        # 29 tests against the Python reference, to 1e-9
+```
+
+AI assistance on this work is disclosed in [`DISCLOSURE.md`](DISCLOSURE.md).
+Submission documents are in `docs/cac/`.
+
 ## Tech stack
 
 - [Next.js](https://nextjs.org) (App Router) + React + TypeScript

@@ -31,7 +31,7 @@ phone on recording night.
 
 **0:45–1:15, Your threshold**
 > 2.0 puts that cutoff next to the athlete it's applied to. On my history, 1.5
-> flags [X]% of my days, my [Y]th percentile. My own 95th percentile is [Z],
+> flags 3.5% of my days, my 96th percentile. My own 95th percentile is 1.37,
 > and it's drawn on the chart in violet next to the universal line. And it says
 > the honest thing: a cutoff from your own history flags a fixed share of your
 > days by construction. It shows how arbitrary 1.5 is. It doesn't claim to
@@ -41,9 +41,10 @@ phone on recording night.
 > In 2021 the field showed the ratio mostly repeats your weekly mileage: swap
 > the denominator for noise and the prediction barely changes. RunGuard runs
 > that test on your own data. Rank correlation between my score and my last
-> seven days alone, with a bootstrap interval: [ρ]. Near 1 the score is just
-> mileage in different units; mine is [ρ] because [rest days / smooth
-> training]. The app tells you which case you're in.
+> seven days alone, with a bootstrap interval: 0.83, between 0.77 and 0.89.
+> Near 1 the score is just mileage in different units; at 0.83 most of mine
+> is, and the four-week baseline adds a little. The app tells you which case
+> you're in.
 
 **1:45–2:15, Gait, sample switch on, point at the badge**
 > Load alone is yesterday's model. The gait channel reads ground contact time
@@ -75,5 +76,5 @@ phone on recording night.
 - [ ] Phone: RunGuard open and signed in; Stats tab reachable
 - [ ] If demoing your own runs: Home → Connect Apple Health → sync, then pull to refresh Stats
 - [ ] Terminal: `cd website && npm test` pre-run; show the summary line
-- [ ] Read [X] [Y] [Z] [ρ] off the phone into the script
+- [ ] The numbers above are from the seeded account on Oct 26 (3.5% / 96th / 1.37 / ρ 0.83). If you sync your own Garmin runs before recording, re-read them off the Stats tab
 - [ ] Upload to YouTube unlisted or public; link into the portal
