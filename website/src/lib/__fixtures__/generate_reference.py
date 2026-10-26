@@ -109,3 +109,47 @@ for k in ("gamma400", "rhythm500", "lumpy900"):
     d = out[k]["diagnostics_rac"]
     print(k, "rac last", out[k]["rac"]["acwr"][-1], "| spearman", round(d["rescaling"]["spearman"], 4), "ci", [round(x,4) for x in d["rescaling"]["spearman_ci95"]], "| p95", round(d["threshold"]["percentiles"]["95"], 4), "flagged", d["threshold"]["reference_flagged"], "/", d["threshold"]["n"], "| quality", [(f["check"], f["severity"]) for f in d["quality"]["findings"]])
 print("hand", json.dumps(hand, indent=1))
+"""Reference values for compare_to_null, appended to acwr_reference.json."""
+import json, sys
+import numpy as np, pandas as pd
+import acwr
+from acwr.diagnostics import _association
+from scipy import stats
+
+def synthetic_load(n=500, seed=0):
+    rng = np.random.default_rng(seed); t = np.arange(n)
+    weekly = 20.0 * np.sin(2 * np.pi * t / 7.0); block = 15.0 * np.sin(2 * np.pi * t / 90.0)
+    base = np.clip(60.0 + weekly + block + rng.normal(0, 12.0, n), 0.0, None)
+    base[rng.random(n) < 0.12] = 0.0
+    return pd.Series(base, index=pd.date_range("2025-01-01", periods=n, freq="D"), name="load")
+
+out = {}
+# Case A: injury generated from acute load alone (the Impellizzeri result).
+load = synthetic_load(900, seed=11)
+a = acwr.acwr(load, return_components=True)["acute"]
+rng = np.random.default_rng(5)
+p = ((a - a.min()) / (a.max() - a.min())).fillna(0.0)
+outcome = pd.Series((rng.random(len(p)) < 0.02 + 0.30 * p).astype(int), index=load.index)
+res = acwr.compare_to_null(load, outcome, kind="shuffle", n_null_draws=120, seed=2)
+out["acute_driven"] = {"load": [float(v) for v in load], "outcome": [int(v) for v in outcome],
+    "n": res.n, "n_events": res.n_events, "measure": res.measure, "real": res.real, "real_ci95": list(res.real_ci95),
+    "null": res.null, "null_ci95": list(res.null_ci95), "real_beats_null": bool(res.real_beats_null), "null_kind": "shuffle"}
+# Case B: injury depends on the genuine ratio.
+load2 = synthetic_load(900, seed=21)
+r = acwr.acwr(load2).replace([np.inf, -np.inf], np.nan)
+rng = np.random.default_rng(9)
+z = ((r - r.mean()) / r.std()).fillna(0.0)
+outcome2 = pd.Series((rng.random(len(z)) < 1 / (1 + np.exp(-(-2.6 + 1.9 * z)))).astype(int), index=load2.index)
+res2 = acwr.compare_to_null(load2, outcome2, kind="shuffle", n_null_draws=120, seed=4)
+out["ratio_driven"] = {"load": [float(v) for v in load2], "outcome": [int(v) for v in outcome2],
+    "n": res2.n, "n_events": res2.n_events, "measure": res2.measure, "real": res2.real, "real_ci95": list(res2.real_ci95),
+    "null": res2.null, "null_ci95": list(res2.null_ci95), "real_beats_null": bool(res2.real_beats_null), "null_kind": "shuffle"}
+# AUC on a tiny hand case for the Mann-Whitney port.
+x = np.array([0.2, 0.4, 0.6, 0.8, 0.5, 0.5]); y = np.array([0, 0, 1, 1, 0, 1])
+out["auc_hand"] = {"x": x.tolist(), "y": y.tolist(), "auc": _association(x, y, True)[0]}
+path = sys.argv[1]
+ref = json.load(open(path)); ref["compare_to_null"] = out
+json.dump(ref, open(path, "w"), indent=1)
+for k in ("acute_driven", "ratio_driven"):
+    d = out[k]; print(k, "real", round(d["real"],4), d["real_ci95"], "null", round(d["null"],4), d["null_ci95"], "beats", d["real_beats_null"], "events", d["n_events"])
+print("auc_hand", out["auc_hand"]["auc"])

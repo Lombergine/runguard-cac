@@ -600,3 +600,184 @@ export function athleteAudit(series: AuditDay[], { draws = 500, seed = 0 }: { dr
     personalZonesMinimumDays: PERSONAL_ZONES_MINIMUM_DAYS,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * The Impellizzeri test proper: does the real ratio predict the outcome
+ * better than a ratio whose chronic denominator is noise?
+ * Port of `acwr.compare_to_null` / `null_chronic_acwr`.
+ * ------------------------------------------------------------------ */
+
+export type NullKind = "shuffle" | "normal" | "constant";
+
+/**
+ * Area under the ROC curve for a binary outcome, from the Mann-Whitney U
+ * statistic with ties counted as half (scipy.stats.mannwhitneyu). NaN when
+ * either class is empty.
+ */
+export function aucBinary(x: number[], y: number[]): number {
+  const pos: number[] = [];
+  const neg: number[] = [];
+  for (let i = 0; i < x.length; i++) (y[i] === 1 ? pos : neg).push(x[i]);
+  if (!pos.length || !neg.length) return NaN;
+  // Rank-sum form: U = R_pos - n_pos(n_pos+1)/2, with average ranks for ties.
+  const all = pos.concat(neg);
+  const r = ranks(all);
+  let rPos = 0;
+  for (let i = 0; i < pos.length; i++) rPos += r[i];
+  const u = rPos - (pos.length * (pos.length + 1)) / 2;
+  return u / (pos.length * neg.length);
+}
+
+/**
+ * A ratio whose denominator carries no real information: the genuine
+ * acute leg over a chronic leg that has been shuffled, redrawn from a
+ * matched normal, or replaced by its mean. NaN where the real chronic
+ * leg was undefined.
+ */
+export function nullChronicRatio(acute: number[], chronic: number[], kind: NullKind, seed: number): number[] {
+  const validIdx = chronic.map((c, i) => (Number.isFinite(c) ? i : -1)).filter((i) => i >= 0);
+  const real = validIdx.map((i) => chronic[i]);
+  if (real.length < 2) throw new Error("not enough chronic load values to build a null model");
+  const rnd = seededRandom(seed);
+  let fake: number[];
+  if (kind === "shuffle") {
+    fake = [...real];
+    for (let i = fake.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [fake[i], fake[j]] = [fake[j], fake[i]];
+    }
+  } else if (kind === "normal") {
+    const m = mean(real);
+    const sd = standardDeviation(real) || 1;
+    const floor = Math.max(m * 1e-3, 1e-9);
+    fake = real.map(() => {
+      // Box-Muller
+      const u1 = Math.max(rnd(), 1e-12);
+      const u2 = rnd();
+      return Math.max(floor, m + sd * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2));
+    });
+  } else {
+    const m = mean(real);
+    fake = real.map(() => m);
+  }
+  const out = new Array<number>(acute.length).fill(NaN);
+  validIdx.forEach((i, k) => {
+    out[i] = acute[i] / fake[k];
+  });
+  return out;
+}
+
+export type NullComparison = {
+  n: number;
+  nEvents: number;
+  measure: "AUC";
+  real: number;
+  realCiLow: number;
+  realCiHigh: number;
+  null: number;
+  nullCiLow: number;
+  nullCiHigh: number;
+  nullKind: NullKind;
+  nNullDraws: number;
+  /** One-sided: the real statistic exceeds the null interval. */
+  realBeatsNull: boolean;
+  /** Either side: the real denominator helped, or actively cost signal. */
+  realOutsideNull: boolean;
+};
+
+/**
+ * Compare the real ratio's association with a binary outcome against
+ * ratios built on contrived denominators. Takes the three legs of whatever
+ * series produced the score on screen, aligned day by day with the outcome
+ * (1 = event that day). Days where the ratio or outcome is undefined are
+ * dropped. Descriptive, not a hypothesis test.
+ */
+export function compareToNull(
+  acute: Array<number | null>,
+  chronic: Array<number | null>,
+  outcome: Array<number | null>,
+  { kind = "shuffle", nNullDraws = 200, bootDraws = 2000, seed = 0 }: { kind?: NullKind; nNullDraws?: number; bootDraws?: number; seed?: number } = {},
+): NullComparison {
+  const a: number[] = [];
+  const c: number[] = [];
+  const y: number[] = [];
+  for (let i = 0; i < acute.length; i++) {
+    const ai = acute[i];
+    const ci = chronic[i];
+    const yi = outcome[i];
+    if (ai == null || ci == null || yi == null) continue;
+    const r = ai / ci;
+    if (!Number.isFinite(r) || Number.isNaN(yi)) continue;
+    a.push(ai);
+    c.push(ci);
+    y.push(yi);
+  }
+  if (a.length < 10) throw new Error(`only ${a.length} aligned, complete observations; need at least 10`);
+  const ratio = a.map((v, i) => v / c[i]);
+  const real = aucBinary(ratio, y);
+
+  const nulls: number[] = [];
+  for (let d = 0; d < nNullDraws; d++) {
+    const nr = nullChronicRatio(a, c, kind, seed + d);
+    const xs: number[] = [];
+    const ys: number[] = [];
+    nr.forEach((v, i) => {
+      if (Number.isFinite(v)) {
+        xs.push(v);
+        ys.push(y[i]);
+      }
+    });
+    if (xs.length < 10) continue;
+    const s = aucBinary(xs, ys);
+    if (!Number.isNaN(s)) nulls.push(s);
+  }
+  if (nulls.length < 10) throw new Error("could not build enough null draws to describe a distribution");
+
+  const rnd = seededRandom(seed);
+  const n = ratio.length;
+  const boots: number[] = [];
+  const bx = new Array<number>(n);
+  const by = new Array<number>(n);
+  for (let b = 0; b < bootDraws; b++) {
+    let anyPos = false;
+    let anyNeg = false;
+    for (let k = 0; k < n; k++) {
+      const i = Math.floor(rnd() * n);
+      bx[k] = ratio[i];
+      by[k] = y[i];
+      if (by[k] === 1) anyPos = true;
+      else anyNeg = true;
+    }
+    if (!anyPos || !anyNeg) continue;
+    const s = aucBinary(bx, by);
+    if (!Number.isNaN(s)) boots.push(s);
+  }
+  const realCi: [number, number] = boots.length >= 10 ? [percentile(boots, 2.5), percentile(boots, 97.5)] : [NaN, NaN];
+  const nullLo = percentile(nulls, 2.5);
+  const nullHi = percentile(nulls, 97.5);
+  return {
+    n,
+    nEvents: y.reduce((s, v) => s + v, 0),
+    measure: "AUC",
+    real,
+    realCiLow: realCi[0],
+    realCiHigh: realCi[1],
+    null: mean(nulls),
+    nullCiLow: nullLo,
+    nullCiHigh: nullHi,
+    nullKind: kind,
+    nNullDraws: nulls.length,
+    realBeatsNull: real > nullHi,
+    realOutsideNull: real < nullLo || real > nullHi,
+  };
+}
+
+/** The reference form: from a daily load series, with the chosen method. */
+export function compareToNullFromLoad(
+  load: number[],
+  outcome: number[],
+  { acute = 7, chronic = 28, method = "rac", ...rest }: AcwrOptions & { kind?: NullKind; nNullDraws?: number; bootDraws?: number; seed?: number } = {},
+): NullComparison {
+  const s = acwrSeriesOf(load, acute, chronic, method);
+  return compareToNull(s.acute, s.chronic, outcome, rest);
+}
