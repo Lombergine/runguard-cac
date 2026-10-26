@@ -59,16 +59,19 @@ export default function CoachDashboardScreen() {
   const [range, setRange] = useState<RangeKey>(DEFAULT_RANGE);
 
   // RunGuard 2.0: `runguard://coach/dashboard?scroll=audit` lands on the
-  // team audit. A deep-link anchor for a future "the test has a result"
-  // notification.
+  // team audit and `?scroll=model` on the learned model below it. Deep-link
+  // anchors for a future "the test has a result" notification.
   const { scroll } = useLocalSearchParams<{ scroll?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const [auditY, setAuditY] = useState<number | null>(null);
+  const [modelY, setModelY] = useState<number | null>(null);
   useEffect(() => {
     if (scroll === "audit" && auditY !== null) {
       scrollRef.current?.scrollTo({ y: auditY, animated: false });
+    } else if (scroll === "model" && auditY !== null && modelY !== null) {
+      scrollRef.current?.scrollTo({ y: auditY + modelY, animated: false });
     }
-  }, [scroll, auditY]);
+  }, [scroll, auditY, modelY]);
 
   const load = useCallback(async () => {
     try {
@@ -216,7 +219,7 @@ export default function CoachDashboardScreen() {
             {/* RunGuard 2.0 (CAC 2026): can the score be trusted on this team?
                 AI-assisted, see DISCLOSURE.md. */}
             <View onLayout={(e) => setAuditY(e.nativeEvent.layout.y)}>
-              <TeamAuditSection />
+              <TeamAuditSection onModelLayout={setModelY} />
             </View>
 
             {/* Team distance, complete weeks only — the server drops the week

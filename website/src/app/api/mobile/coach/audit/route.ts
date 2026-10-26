@@ -5,12 +5,14 @@
  */
 import { coachTeamId, unauthorized } from "@/lib/coachAuth";
 import { buildTeamAudit } from "@/lib/teamAudit";
+import { buildTeamModel } from "@/lib/teamModel";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const teamId = await coachTeamId(request);
   if (teamId === null) return unauthorized();
-  const audit = await buildTeamAudit(teamId, Date.now());
-  return Response.json({ ok: true, audit });
+  const now = Date.now();
+  const [audit, model] = await Promise.all([buildTeamAudit(teamId, now), buildTeamModel(teamId, now)]);
+  return Response.json({ ok: true, audit, model, sampleTeam: String(teamId) === (process.env.DEMO_TEAM_ID ?? "") });
 }

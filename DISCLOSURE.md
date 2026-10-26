@@ -52,16 +52,18 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 | File | What it is |
 |---|---|
 | `website/src/lib/acwrDiagnostics.ts` | The three ratio methods, the rescaling self-audit, the personal-threshold report, the data check, the `athleteAudit` bundle, and `compareToNull` (port of `acwr`) |
-| `website/src/lib/acwrDiagnostics.test.ts` | 25 vitest cases checking every value against the Python reference (37 in all with gait and compareToNull) |
+| `website/src/lib/acwrDiagnostics.test.ts` | 25 vitest cases checking every value against the Python reference (51 in all with gait, compareToNull, explain and the team model) |
 | `website/src/lib/gait.test.ts` | 4 cases for the gait model |
 | `website/src/lib/compareToNull.test.ts` | 8 cases for the Impellizzeri test against the Python reference |
 | `website/src/lib/teamAudit.ts` | Pools the roster's series with the injury log; per-athlete score trust |
 | `website/src/components/TeamAuditPanel.tsx` | The coach dashboard's "Can the score be trusted on this team?" panel |
+| `website/src/lib/teamModel.ts`, `teamModel.test.ts` | "Learned from this team": logistic regression trained on the roster's own athlete-days, scored leave-one-athlete-out, paired bootstrap against the universal ratio and a noise ratio (8 tests) |
+| `website/src/components/TeamModelPanel.tsx` | The coach dashboard's "Learned from this team" panel; the `TeamModelCard` in `app/src/components/TeamAuditSection.tsx` is the phone version |
 | `website/src/components/athlete/AuditPanels.tsx` | The web versions of the threshold, self-audit and data-check panels |
 | `website/src/lib/explain.ts`, `explain.test.ts` | The grounded explanation layer: numbers in, validated JSON out, template fallback |
 | `website/src/app/api/mobile/explain/route.ts`, `website/src/app/api/explain/route.ts` | The explain endpoints (phone and web) |
 | `website/src/components/athlete/ExplainButton.tsx`, `app/src/components/ExplainCard.tsx` | "Explain my numbers" on the web and on the phone |
-| `app/src/components/TeamAuditSection.tsx`, `website/src/app/api/mobile/coach/audit/route.ts` | The team audit in the native coach tabs |
+| `app/src/components/TeamAuditSection.tsx`, `website/src/app/api/mobile/coach/audit/route.ts` | The team audit and the learned model in the native coach tabs; `?scroll=model` deep-link anchor on the coach dashboard |
 | `docs/explanation-validation.md` | Real input/output pairs from the explanation layer |
 | `app/modules/gait-vision/` (Swift, podspec, config, TS binding) | Camera gait check: Apple Vision body pose over a clip, on-device, summary numbers only |
 | `app/src/lib/cameraGait.ts`, `app/src/app/gait-check.tsx` | Clip capture, local history, comparison and the screen |
@@ -78,11 +80,11 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 |---|---|
 | `website/src/lib/profile.ts` | Computes `audit` over a year of the athlete's own EWMA series |
 | `website/src/app/api/mobile/me/route.ts` | Allow-lists `audit` onto the phone payload |
-| `website/src/app/dashboard/page.tsx` | Mounts the team audit panel |
+| `website/src/app/dashboard/page.tsx` | Mounts the team audit and learned-model panels |
 | `website/src/app/dashboard/athlete/[id]/page.tsx`, `website/src/components/athlete/tabs.tsx`, `website/src/components/charts.tsx` | Audit panels and the personal line on the web |
 | `website/package.json` | Adds vitest, `@anthropic-ai/sdk`, and the `test` / `typecheck` scripts |
 | `app/package.json`, `app/.npmrc` | Adds `expo-image-picker`; aligns every Expo package to the SDK 57 versions Expo expects (the old router pulled a worklets version the module core could not build against); legacy peer resolution for npm |
-| `website/scripts/seed.ts` | The sample team gets a generated year of load-driven injuries so the team test has events; the demo banner already says the team is made up |
+| `website/scripts/seed.ts` | The sample team gets a generated season (a few big weeks per athlete), a year of check-ins where soreness comes in multi-day episodes, and a year of injuries drawn from load spikes, soreness and low HRV together, so the team test and the learned model have events; the model panel says the injuries are generated and the demo banner already says the team is made up |
 | `app/src/lib/health.ts` | Two running-dynamics read scopes and `readRunningDynamics` (still read-only) |
 | `app/src/lib/types.ts` | `Profile.audit` and the `AthleteAudit` type |
 | `app/src/components/charts/AcwrChart.tsx` | Draws the athlete's own 95th-percentile line in violet |

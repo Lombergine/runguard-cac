@@ -82,8 +82,14 @@ phone on recording night.
 > injuries logged it answers; until then it says it can't. One engine, both
 > screens.
 
+**(2:20–2:35 alternative) Learned from this team**
+> And it learns. Fourteen athletes, a year of their own days, a model trained
+> in a second on the phone's server, scored on each athlete it never saw.
+> On our sample team it beats the universal formula, and it shows its weights:
+> this week against the last four, then soreness. Readable, not a black box.
+
 **2:35–2:52, terminal, green tests**
-> Every statistic is checked against the Python reference. Twenty-nine tests:
+> Every statistic is checked against the Python reference. Fifty-one tests:
 > every ratio value, percentile and correlation to nine decimal places. The one
 > that didn't match, rank correlation on days with ties, turned out to be
 > floating-point tie-breaking in pandas, and the test now documents it.

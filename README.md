@@ -75,7 +75,12 @@ body pose for cadence, vertical bounce and left/right contact asymmetry, never
 uploaded. On the coach dashboard, a team
 audit: per-athlete score trust, and the experiment from Impellizzeri et al.
 (2021) run on the team's own injury log, the shown ratio against a ratio whose
-denominator is shuffled noise. And "Explain my numbers": a language model that
+denominator is shuffled noise; and "Learned from this team", a small logistic
+model trained live on the roster's own year (twelve features the app already
+computes, injury within the next seven days as the label), scored
+leave-one-athlete-out so every athlete is judged by a model that never saw
+them, with its gap over the universal ratio given as a paired bootstrap
+interval and its weights shown. And "Explain my numbers": a language model that
 may only repeat the figures the server computed, validated against them, with
 RunGuard's own wording as the fallback. The statistics are ported from
 Aditya's Python package [`acwr`](https://github.com/Lombergine/acwr) into

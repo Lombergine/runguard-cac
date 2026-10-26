@@ -167,8 +167,47 @@ An AUC from two events is a coin flip dressed as a number. It says what it
 needs and runs itself once the coach has logged enough.
 
 **Q. What did it show on the sample team?**
-0.56 against 0.56: the paper's result, on data generated so that injury
-follows load spikes. That is honest about the ratio, not flattering to it.
+Ratio 0.61 (0.53 to 0.69) against noise 0.57 (0.50 to 0.63): the real ratio
+sits inside the noise interval, the paper's result, on data generated so that
+injury follows load spikes, soreness and poor recovery. Honest about the
+ratio, not flattering to it.
+
+**Q. What is "Learned from this team"?**
+A model trained on the roster's own year. Every athlete-day is one row:
+twelve features the app already computes (the ratio and its distance
+version, weekly distance and its ramp, monotony, strain, days since rest,
+days since a run, resting HR, HRV and sleep against the athlete's own 28-day
+median, worst soreness reported in the last three days), labelled 1 when the
+coach logged an injury in the next seven days. The fortnight after an injury
+is dropped so it predicts the week before, not the week after. Features are
+standardised within each athlete, so it learns when someone is unusual for
+themselves, not who runs the most.
+
+**Q. What kind of model, and why not something bigger?**
+L2-regularised logistic regression, written in TypeScript, 400 gradient
+steps, about a second for a roster. Two hundred rows and thirty injuries is
+not deep-learning territory; a bigger model would memorise. Logistic
+regression gives weights a coach can read, which is the point: the panel
+shows what it learned.
+
+**Q. How is it scored so the number is honest?**
+Leave-one-athlete-out: fourteen athletes, fourteen models, each scored on the
+athlete it never saw. The out-of-fold scores are pooled into one AUC with a
+bootstrap interval, next to the universal ratio's AUC on the same labels and a
+noise ratio's. The gap over the ratio is a paired bootstrap, the two scores
+resampled together, so it is an interval for the gap itself.
+
+**Q. What did it find on the sample team?**
+Model 0.72 (0.68 to 0.76), ratio 0.68, noise 0.56; gap +0.04 (+0.01 to +0.08).
+Its biggest weight is this week's distance against the last four, then
+soreness: it rediscovered the generator. The panel says so. On a real team it
+finds the team, or says that nothing beats noise.
+
+**Q. Before the fix it scored 0.40, below a coin flip. Why?**
+Without within-athlete standardisation the model learned athlete identity
+(who runs 65 km a week) and leave-one-athlete-out punished it, because the
+held-out athlete is by construction someone it never saw. That is the
+evaluation doing its job.
 
 ## I. "Explain my numbers"
 

@@ -13,7 +13,7 @@ import { useRouter } from "expo-router";
 import { ListRow, ListSection } from "./List";
 import { StatGroup } from "./StatGroup";
 import { TeamAvatar } from "./TeamAvatar";
-import { getTeamAudit, type TeamAudit } from "../lib/coachApi";
+import { getTeamAudit, type TeamAudit, type TeamModel } from "../lib/coachApi";
 import { color, shadow } from "../theme/tokens";
 import { text } from "../theme/type";
 import { layout, radius, ruleWidth, space } from "../theme/space";
@@ -21,9 +21,11 @@ import { layout, radius, ruleWidth, space } from "../theme/space";
 const f2 = (x: number) => x.toFixed(2);
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`;
 
-export function TeamAuditSection() {
+export function TeamAuditSection({ onModelLayout }: { onModelLayout?: (y: number) => void } = {}) {
   const router = useRouter();
   const [audit, setAudit] = useState<TeamAudit | null>(null);
+  const [model, setModel] = useState<TeamModel | null>(null);
+  const [sampleTeam, setSampleTeam] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -31,7 +33,11 @@ export function TeamAuditSection() {
     void (async () => {
       try {
         const r = await getTeamAudit();
-        if (!cancelled) setAudit(r.audit);
+        if (!cancelled) {
+          setAudit(r.audit);
+          setModel(r.model ?? null);
+          setSampleTeam(Boolean(r.sampleTeam));
+        }
       } catch {
         if (!cancelled) setFailed(true);
       }
@@ -102,6 +108,12 @@ export function TeamAuditSection() {
         </View>
       </View>
 
+      {model ? (
+        <View onLayout={(e) => onModelLayout?.(e.nativeEvent.layout.y)}>
+          <TeamModelCard model={model} sampleTeam={sampleTeam} />
+        </View>
+      ) : null}
+
       <ListSection
         title="Score trust, by athlete"
         footer="ρ is how closely each athlete\u2019s score tracks their last 7 days alone (Impellizzeri et al. 2021); a dash means fewer than 60 days with a ratio. The second figure is their own 95th percentile, then the share of their days the universal 1.5 would flag."
@@ -124,6 +136,65 @@ export function TeamAuditSection() {
     </>
   );
 }
+
+/** The learned model: honest AUC beside the ratio and noise, and what it learned. */
+function TeamModelCard({ model, sampleTeam }: { model: TeamModel; sampleTeam: boolean }) {
+  const r = model.result;
+  const fm = (x: number | null | undefined) => (x == null || !Number.isFinite(x) ? "—" : x.toFixed(2));
+  const maxW = r ? Math.max(...r.coefficients.map((c) => Math.abs(c.weight)), 1e-9) : 1;
+  const sign = (x: number | null | undefined) => (x == null || !Number.isFinite(x) ? "\u2014" : `${x >= 0 ? "+" : "\u2212"}${Math.abs(x).toFixed(2)}`);
+  const verdict = r
+    ? r.noiseCiHigh != null && r.auc > r.noiseCiHigh && r.deltaCiLow != null && r.deltaCiLow > 0
+      ? `A model that learns this team\u2019s own patterns separates injury weeks better than the universal formula, by ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), and better than noise.`
+      : r.noiseCiHigh != null && r.auc > r.noiseCiHigh
+        ? `The learned model beats noise, but its gap over the ratio, ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), includes zero.`
+        : "Nothing here separates injury weeks from the rest beyond noise."
+    : null;
+  return (
+    <View style={styles.panel}>
+      <View style={styles.panelHead}>
+        <Text style={styles.panelTitle}>Learned from this team</Text>
+        <Text style={styles.panelNote}>{r ? `trained in ${r.elapsedMs} ms` : `${model.events} injury-week days`}</Text>
+      </View>
+      {!r ? (
+        <Text style={styles.body}>{model.reason}</Text>
+      ) : (
+        <>
+          <StatGroup
+            figures={[
+              { label: "Learned model", value: fm(r.auc), caption: `AUC · ${fm(r.aucCiLow)} to ${fm(r.aucCiHigh)}`, tone: color.brandText },
+              { label: "Universal ratio", value: fm(r.ratioAuc), caption: "same labels" },
+              { label: "Noise ratio", value: fm(r.noiseAuc), caption: `${fm(r.noiseCiLow)} to ${fm(r.noiseCiHigh)}` },
+            ]}
+          />
+          <Text style={styles.body}>{verdict}</Text>
+          <Text style={styles.eyebrow}>What it learned</Text>
+          {r.coefficients.slice(0, 6).map((c) => (
+            <View key={c.key} style={modelStyles.row}>
+              <Text style={modelStyles.label} numberOfLines={1}>{c.label}</Text>
+              <View style={modelStyles.track}>
+                <View style={[modelStyles.bar, { width: `${(Math.abs(c.weight) / maxW) * 100}%`, backgroundColor: c.weight >= 0 ? color.watch : color.series1 }]} />
+              </View>
+              <Text style={modelStyles.weight}>{c.weight >= 0 ? "+" : ""}{c.weight.toFixed(2)}</Text>
+            </View>
+          ))}
+          <Text style={styles.footnote}>
+            Logistic regression on twelve features the app already computes, scored leave-one-athlete-out across {r.folds} athletes; the three AUCs share the same labels, an injury logged within the next seven days.
+            {sampleTeam ? " On this sample team the injuries were generated to follow load spikes, soreness and poor recovery, so the model is finding the generator." : " Descriptive, not a diagnosis."}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+const modelStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  label: { ...text.meta, color: color.ink2, width: 150 },
+  track: { flex: 1, height: 8, borderRadius: 4, backgroundColor: color.well, overflow: "hidden" },
+  bar: { height: 8, borderRadius: 4 },
+  weight: { ...text.meta, color: color.muted, width: 48, textAlign: "right", fontVariant: ["tabular-nums"] },
+});
 
 const styles = StyleSheet.create({
   panel: {

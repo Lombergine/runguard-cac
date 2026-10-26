@@ -376,8 +376,35 @@ export type TeamAudit = {
   };
 };
 
-export function getTeamAudit(): Promise<{ ok: true; audit: TeamAudit }> {
-  return coachRequest<{ ok: true; audit: TeamAudit }>(`/api/mobile/coach/audit`);
+/** Mirrors `TeamModel` in website/src/lib/teamModel.ts. */
+export type TeamModel = {
+  days: number;
+  athletes: number;
+  rows: number;
+  events: number;
+  result: {
+    auc: number;
+    aucCiLow: number | null;
+    aucCiHigh: number | null;
+    ratioAuc: number;
+    deltaRatio: number;
+    deltaCiLow: number | null;
+    deltaCiHigh: number | null;
+    noiseAuc: number;
+    noiseCiLow: number | null;
+    noiseCiHigh: number | null;
+    coefficients: { key: string; label: string; weight: number }[];
+    folds: number;
+    iterations: number;
+    elapsedMs: number;
+  } | null;
+  reason: string | null;
+};
+
+export type TeamAuditResponse = { ok: true; audit: TeamAudit; model?: TeamModel; sampleTeam?: boolean };
+
+export function getTeamAudit(): Promise<TeamAuditResponse> {
+  return coachRequest<TeamAuditResponse>(`/api/mobile/coach/audit`);
 }
 
 /* ------------------------------------------------------------------ *

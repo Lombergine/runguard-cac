@@ -4,6 +4,8 @@ import { localDayOffset } from "@/lib/day";
 import { miNum } from "@/lib/units";
 import { getTeam, teamPlanDays } from "@/lib/db";
 import TeamAuditPanel from "@/components/TeamAuditPanel";
+import TeamModelPanel from "@/components/TeamModelPanel";
+import { buildTeamModel } from "@/lib/teamModel";
 import { buildTeamAudit } from "@/lib/teamAudit";
 import {
   buildRoster,
@@ -70,6 +72,7 @@ export default async function Dashboard({
   const stats = teamStats(athletes, todayIso);
   // RunGuard 2.0 (CAC 2026): the team audit. AI-assisted, see DISCLOSURE.md.
   const teamAudit = teamId !== null && athletes.length > 0 ? await buildTeamAudit(teamId, nowMs) : null;
+  const teamModel = teamId !== null && athletes.length > 0 ? await buildTeamModel(teamId, nowMs) : null;
   const bands = stats.acwr;
 
   /* Who needs opening today, in the roster's own order (missing data first). */
@@ -330,6 +333,7 @@ export default async function Dashboard({
       )}
 
       {teamAudit && <TeamAuditPanel audit={teamAudit} />}
+      {teamModel && <TeamModelPanel model={teamModel} sampleTeam={String(teamId) === (process.env.DEMO_TEAM_ID ?? "")} />}
     </div>
   );
 }

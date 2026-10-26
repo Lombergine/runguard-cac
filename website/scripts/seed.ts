@@ -70,6 +70,28 @@ function jitter(mult = 0.15): number {
   return 1 + (rand() * 2 - 1) * mult;
 }
 
+/**
+ * RunGuard 2.0 sample season (CAC 2026, AI-assisted, see DISCLOSURE.md): a few
+ * big weeks a year per athlete (a camp, a race build, coming back too fast
+ * after a break) at 1.35-1.65x, placed between 3 and 50 weeks ago so the last
+ * fortnight's patterns stay as they are. They are what the coach-side audit
+ * and the learned model have to find.
+ */
+function bigWeeksFor(): Map<number, number> {
+  const m = new Map<number, number>();
+  const count = 3 + Math.floor(rand() * 3); // 3-5 a year
+  let guard = 0;
+  while (m.size < count && guard++ < 100) {
+    const w = 3 + Math.floor(rand() * 48);
+    if ([...m.keys()].some((k) => Math.abs(k - w) < 4)) continue;
+    m.set(w, 1.35 + rand() * 0.3);
+  }
+  return m;
+}
+function seasonMultiplier(p: Pattern, weeksAgo: number, big: Map<number, number>): number {
+  return weekMultiplier(p, weeksAgo) * (big.get(weeksAgo) ?? 1);
+}
+
 /** weekly km multiplier for a given "weeks before today" per pattern */
 function weekMultiplier(p: Pattern, weeksAgo: number): number {
   switch (p) {
@@ -191,11 +213,12 @@ async function seed() {
 
     // fitness → pace: faster kids run ~3:45/km easy... scale by base volume
     const easyPace = 385 - spec.baseKmWeek * 1.1 + rand() * 20; // s/km
+    const bigWeeks = bigWeeksFor();
     for (let d = 364; d >= 0; d--) {
       const date = new Date(now.getTime() - d * DAY);
       const dow = date.getDay(); // 0 Sun
       const weeksAgo = Math.floor(d / 7);
-      const mult = weekMultiplier(spec.pattern, weeksAgo);
+      const mult = seasonMultiplier(spec.pattern, weeksAgo, bigWeeks);
 
       // weekly structure
       let restDay = dow === 0; // Sundays off
@@ -277,7 +300,7 @@ async function seed() {
 
     for (let d = 364; d >= 0; d--) {
       const weeksAgo = Math.floor(d / 7);
-      const mult = weekMultiplier(spec.pattern, weeksAgo);
+      const mult = seasonMultiplier(spec.pattern, weeksAgo, bigWeeks);
       const fitnessGain = 1 - d / 365; // 0 a year ago → 1 today
 
       const spikeStress = spec.pattern === "spiking" && weeksAgo <= 1;
@@ -329,13 +352,27 @@ async function seed() {
     }
 
     // ----- daily check-ins (soreness, energy, motivation, stress) -----
-    for (let d = 45; d >= 0; d--) {
-      if (rand() < 0.25) continue; // kids don't log every day
-      const date = localDayOffset(d, now);
+    // A full year of them (RunGuard 2.0): soreness comes in episodes, a niggle
+    // that builds over five to nine days, mostly started by heavy weeks. That
+    // is the chain the learned model is meant to find and the ratio cannot
+    // see: the week before an overuse injury usually announces itself.
+    const soreOptions = ["shins", "calves", "left knee", "achilles"];
+    let episode: { daysLeft: number; part: string; severity: number } | null = null;
+    for (let d = 364; d >= 0; d--) {
       const weeksAgo = Math.floor(d / 7);
       const stressedNow =
         (spec.pattern === "spiking" && weeksAgo <= 1) ||
         (spec.pattern === "returning" && weeksAgo === 0);
+      const heavyNow = seasonMultiplier(spec.pattern, weeksAgo, bigWeeks) > 1.2;
+      if (episode) {
+        episode.daysLeft -= 1;
+        episode.severity = Math.min(8, episode.severity + 0.6);
+        if (episode.daysLeft <= 0) episode = null;
+      } else if (rand() < (stressedNow || heavyNow ? 0.12 : 0.006)) {
+        episode = { daysLeft: 5 + Math.floor(rand() * 5), part: soreOptions[Math.floor(rand() * soreOptions.length)], severity: 3 };
+      }
+      if (rand() < 0.25) continue; // kids don't log every day
+      const date = localDayOffset(d, now);
       await upsertCheckin({
         athlete_id: athleteId,
         date,
@@ -344,25 +381,14 @@ async function seed() {
         motivation: Math.round(6 + rand() * 3.5),
         academic_stress: rand() < 0.25 ? 1 : 0,
       });
-      // multi-part soreness demo: stressed days can log more than one sore area independently
-      const soreOptions = ["shins", "calves", "left knee", "achilles"];
-      if (stressedNow && rand() < 0.6) {
-        const parts = rand() < 0.4 ? 2 : 1;
-        for (let i = 0; i < parts; i++) {
-          await upsertCheckinSoreness({
-            athlete_id: athleteId,
-            date,
-            body_part: soreOptions[Math.floor(rand() * soreOptions.length)],
-            severity: Math.round(4 + rand() * 4),
-          });
+      if (episode) {
+        await upsertCheckinSoreness({ athlete_id: athleteId, date, body_part: episode.part, severity: Math.round(episode.severity) });
+        // multi-part soreness demo: a bad day can add a second sore area
+        if (episode.severity >= 6 && rand() < 0.3) {
+          await upsertCheckinSoreness({ athlete_id: athleteId, date, body_part: soreOptions[(soreOptions.indexOf(episode.part) + 1) % soreOptions.length], severity: Math.round(2 + rand() * 3) });
         }
-      } else if (rand() < 0.3) {
-        await upsertCheckinSoreness({
-          athlete_id: athleteId,
-          date,
-          body_part: soreOptions[Math.floor(rand() * soreOptions.length)],
-          severity: Math.round(1 + rand() * 3),
-        });
+      } else if (rand() < 0.05) {
+        await upsertCheckinSoreness({ athlete_id: athleteId, date, body_part: soreOptions[Math.floor(rand() * soreOptions.length)], severity: Math.round(1 + rand() * 2) });
       }
     }
   }
@@ -447,14 +473,23 @@ async function seed() {
   /*
    * RunGuard 2.0 (CAC 2026, AI-assisted, see DISCLOSURE.md): a year of
    * injuries for the sample team, so the coach dashboard's Impellizzeri test
-   * has events to run on. Generated, not invented one by one: each athlete's
-   * daily distance is compared against their trailing four weeks and an
-   * injury is drawn with a probability that rises with that ratio, capped at
-   * two per athlete and 45 days apart. This gives a team where injury follows
-   * load spikes, which is the world the ratio assumes, so the test has
-   * something to find. The demo banner already says the team is made up.
+   * and the learned model have events to run on. Generated, not invented one
+   * by one: each day an injury is drawn with a probability that rises with
+   * three things the app can see, the athlete's weekly distance against their
+   * trailing four weeks, how sore they said they were in the last three days,
+ * and HRV
+   * below their own four-week median, capped at three per athlete and 45 days
+   * apart. This is a world where injury follows load spikes, soreness and
+   * poor recovery together, so the universal ratio sees part of it and a
+   * model trained on the team can see the rest. The demo banner already says
+   * the team is made up, and the model panel says the injuries are generated.
    */
   const bodyParts = ["shin (left)", "shin (right)", "knee (left)", "knee (right)", "achilles (left)", "hip (right)", "foot (left)", "calf (right)", "IT band (left)"];
+  const medianOf = (xs: number[]): number | null => {
+    if (!xs.length) return null;
+    const v = [...xs].sort((a, b) => a - b);
+    return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+  };
   for (const a of seeded) {
     const rows = db
       .prepare("SELECT start_time, distance_m FROM activities WHERE athlete_id=? ORDER BY start_time")
@@ -464,19 +499,35 @@ async function seed() {
       const d = r.start_time.slice(0, 10);
       kmByDay.set(d, (kmByDay.get(d) ?? 0) + r.distance_m / 1000);
     }
+    const soreByDay = new Map<string, number>();
+    for (const r of db.prepare("SELECT date, severity FROM checkin_soreness WHERE athlete_id=?").all(a.id) as { date: string; severity: number }[]) {
+      soreByDay.set(r.date, Math.max(soreByDay.get(r.date) ?? 0, r.severity));
+    }
+    const hrvByDay = new Map(
+      (db.prepare("SELECT date, hrv FROM health_metrics WHERE athlete_id=? AND hrv IS NOT NULL").all(a.id) as { date: string; hrv: number }[]).map(
+        (r) => [r.date, r.hrv] as [string, number]
+      )
+    );
     let logged = 0;
     let lastAt = -999;
     for (let d = 320; d >= 8; d--) {
-      if (logged >= 2 || d > lastAt - 45 && lastAt !== -999 && lastAt - d < 45) continue;
+      if (logged >= 3 || (lastAt !== -999 && lastAt - d < 45)) continue;
       const day = (k: number) => iso(-k);
       let week = 0;
       for (let k = 0; k < 7; k++) week += kmByDay.get(day(d + k)) ?? 0;
       let month = 0;
       for (let k = 7; k < 35; k++) month += kmByDay.get(day(d + k)) ?? 0;
       const ratio = month > 0 ? week / (month / 4) : 0;
-      const pLoad = 0.0015 + Math.max(0, ratio - 1.15) * 0.05;
-      if (rand() < pLoad) {
-        insertInjury.run(a.id, day(d), bodyParts[Math.floor(rand() * bodyParts.length)], "Reported after a heavy week (sample data)");
+      const sore = Math.max(...[0, 1, 2].map((k) => soreByDay.get(day(d + k)) ?? 0));
+      const hrvNow = hrvByDay.get(day(d));
+      const hrvBase = medianOf(
+        Array.from({ length: 28 }, (_, k) => hrvByDay.get(day(d + 7 + k))).filter((v): v is number => v != null)
+      );
+      const lowHrv = hrvNow != null && hrvBase != null && hrvNow < 0.92 * hrvBase;
+      const pInjury = 0.0005 + Math.max(0, ratio - 1.1) * 0.06 + sore * 0.004 + (lowHrv ? 0.006 : 0);
+      if (rand() < pInjury) {
+        const why = ratio > 1.2 ? "Reported after a heavy week" : sore >= 4 ? "Reported after days of soreness" : "Reported after a run";
+        insertInjury.run(a.id, day(d), bodyParts[Math.floor(rand() * bodyParts.length)], `${why} (sample data)`);
         logged++;
         lastAt = d;
       }
