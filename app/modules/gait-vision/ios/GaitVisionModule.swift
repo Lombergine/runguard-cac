@@ -88,15 +88,26 @@ enum GaitAnalyzer {
     var frames: [Frame] = []
     var index = 0
     var processed = 0
+    var firstVisionError: String? = nil
+    var frameSize: CGSize = .zero
     while let sample = output.copyNextSampleBuffer() {
       defer { index += 1 }
       if index % stride != 0 { continue }
       guard let pixels = CMSampleBufferGetImageBuffer(sample) else { continue }
       let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
       processed += 1
+      if frameSize == .zero {
+        frameSize = CGSize(width: CVPixelBufferGetWidth(pixels), height: CVPixelBufferGetHeight(pixels))
+      }
       let request = VNDetectHumanBodyPoseRequest()
       let handler = VNImageRequestHandler(cvPixelBuffer: pixels, orientation: orientation, options: [:])
-      try? handler.perform([request])
+      do {
+        try handler.perform([request])
+      } catch {
+        // Recorded, not thrown: one bad frame should not sink the clip, but
+        // the reason must reach the screen when every frame fails.
+        if firstVisionError == nil { firstVisionError = error.localizedDescription }
+      }
       guard let obs = request.results?.first else {
         frames.append(Frame(t: t, leftAnkle: nil, rightAnkle: nil, hip: nil, torso: nil, confidence: 0))
         continue
@@ -128,14 +139,19 @@ enum GaitAnalyzer {
       "framesProcessed": processed,
       "framesWithPose": posed.count,
       "meanConfidence": posed.isEmpty ? 0 : posed.map(\.confidence).reduce(0, +) / Double(posed.count),
+      "frameWidth": Int(frameSize.width),
+      "frameHeight": Int(frameSize.height),
+      "orientation": orientation.rawValue,
       "ok": false,
     ]
+    if let firstVisionError { result["visionError"] = firstVisionError }
     guard duration >= minimumSeconds else {
       result["reason"] = "The clip is \(String(format: "%.1f", duration)) s long; it needs at least \(Int(minimumSeconds)) seconds of running."
       return result
     }
     guard !frames.isEmpty, Double(posed.count) / Double(frames.count) >= minimumPoseFraction else {
-      result["reason"] = "A runner was found in \(posed.count) of \(frames.count) frames. Film from the side, whole body in frame, phone steady."
+      result["reason"] = firstVisionError.map { "The pose detector could not run: \($0)" }
+        ?? "A runner was found in \(posed.count) of \(frames.count) frames. Film from the side, whole body in frame, phone steady."
       return result
     }
     let torsoLengths = posed.compactMap(\.torso)

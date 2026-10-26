@@ -14,6 +14,10 @@ export type GaitVisionResult = {
   ok: boolean;
   /** Why `ok` is false, in words the runner can act on. */
   reason?: string;
+  /** Vision's own error text when the detector could not run at all. */
+  visionError?: string;
+  frameWidth?: number;
+  frameHeight?: number;
   cadenceSpm?: number;
   oscillationPctTorso?: number;
   contactLeftMs?: number;
