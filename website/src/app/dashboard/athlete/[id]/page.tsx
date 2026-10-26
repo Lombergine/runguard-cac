@@ -8,6 +8,7 @@ import { currentTeamId } from "@/lib/session";
 import { coachWhy } from "@/lib/chat";
 import Avatar from "@/components/Avatar";
 import { AcwrChart, LoadChart, WeeklyKmChart } from "@/components/charts";
+import AuditPanels from "@/components/athlete/AuditPanels";
 import { RecoverySnapshot, type RiskSnapshot, type EnergyTrend } from "@/lib/risk";
 import IntensityCalendar from "@/components/IntensityCalendar";
 import InfoDot from "@/components/InfoDot";
@@ -334,13 +335,18 @@ function CoachView({
         {/* Titles no longer name a fixed window — each chart now carries its
             own range control (1 day/3 days/7 days/1 month/6 months), so a
             hardcoded "(60 days)" would go stale the moment someone changed it. */}
-        <Panel title="Workload ratio" note="context only — this ratio showed no link to injury in a 5,205-runner study">
-          <AcwrChart data={p.series} />
+        <Panel title="Workload ratio" note="context only — this ratio showed no link to injury in a 5,205-runner study · violet = their own 95th">
+          <AcwrChart data={p.series} personal={p.audit?.personalZones?.high ?? null} />
         </Panel>
         <Panel title="Training load">
           <LoadChart data={p.series} />
         </Panel>
       </div>
+
+      {/* RunGuard 2.0 (CAC 2026): the coach sees the same audit the athlete
+          does — personal threshold, self-audit, data check. AI-assisted, see
+          DISCLOSURE.md. */}
+      <AuditPanels audit={p.audit} whose="their" />
 
       <Panel title="Weekly distance (12 weeks)">
         <WeeklyKmChart data={p.weeks} />
