@@ -130,14 +130,21 @@ enum GaitAnalyzer {
     }
     reader.cancelReading()
 
-    let posed = frames.filter(\.hasPose)
-    let duration = (frames.last?.t ?? 0) - (frames.first?.t ?? 0)
-    let fps = frames.count > 1 ? Double(frames.count - 1) / max(duration, 0.001) : 0
+    // A real clip has the runner in frame for stretches, not the whole time:
+    // they walk in, run, stop, talk. Judge the longest continuous stretch
+    // with a pose (gaps under half a second allowed), not the whole clip.
+    let segment = longestPosedSegment(frames, maxGap: 1.0)
+    let posed = segment.filter(\.hasPose)
+    let duration = (segment.last?.t ?? 0) - (segment.first?.t ?? 0)
+    let clipDuration = (frames.last?.t ?? 0) - (frames.first?.t ?? 0)
+    let fps = frames.count > 1 ? Double(frames.count - 1) / max(clipDuration, 0.001) : 0
     var result: [String: Any] = [
-      "durationS": duration,
+      "durationS": clipDuration,
       "fps": fps,
       "framesProcessed": processed,
-      "framesWithPose": posed.count,
+      "framesWithPose": frames.filter(\.hasPose).count,
+      "segmentS": duration,
+      "segmentFrames": segment.count,
       "meanConfidence": posed.isEmpty ? 0 : posed.map(\.confidence).reduce(0, +) / Double(posed.count),
       "frameWidth": Int(frameSize.width),
       "frameHeight": Int(frameSize.height),
@@ -146,10 +153,11 @@ enum GaitAnalyzer {
     ]
     if let firstVisionError { result["visionError"] = firstVisionError }
     guard duration >= minimumSeconds else {
-      result["reason"] = "The clip is \(String(format: "%.1f", duration)) s long; it needs at least \(Int(minimumSeconds)) seconds of running."
+      result["reason"] = firstVisionError.map { "The pose detector could not run: \($0)" }
+        ?? "The runner was in frame for \(String(format: "%.1f", duration)) s at a stretch; it needs at least \(Int(minimumSeconds)) seconds of running. Film from the side, whole body in frame, phone steady."
       return result
     }
-    guard !frames.isEmpty, Double(posed.count) / Double(frames.count) >= minimumPoseFraction else {
+    guard !segment.isEmpty, Double(posed.count) / Double(segment.count) >= minimumPoseFraction else {
       result["reason"] = firstVisionError.map { "The pose detector could not run: \($0)" }
         ?? "A runner was found in \(posed.count) of \(frames.count) frames. Film from the side, whole body in frame, phone steady."
       return result
@@ -199,6 +207,39 @@ enum GaitAnalyzer {
     }
     result["ok"] = true
     return result
+  }
+
+  /// The longest run of frames in which a pose was found, allowing gaps
+  /// (frames without a pose) shorter than `maxGap` seconds inside it.
+  static func longestPosedSegment(_ frames: [Frame], maxGap: Double) -> [Frame] {
+    // Ranked by frames WITH a pose, with trailing pose-less frames trimmed
+    // before comparing: otherwise a lone detection followed by a minute of
+    // nothing outranks a nine-second run.
+    func trimmed(_ seg: [Frame]) -> [Frame] {
+      var s = seg
+      while let last = s.last, !last.hasPose { s.removeLast() }
+      return s
+    }
+    let posedCount = { (seg: [Frame]) in seg.filter(\.hasPose).count }
+    var best: [Frame] = []
+    var current: [Frame] = []
+    var lastPoseT: Double? = nil
+    for f in frames {
+      if f.hasPose {
+        if let last = lastPoseT, f.t - last > maxGap {
+          let done = trimmed(current)
+          if posedCount(done) > posedCount(best) { best = done }
+          current = []
+        }
+        current.append(f)
+        lastPoseT = f.t
+      } else if lastPoseT != nil {
+        current.append(f)
+      }
+    }
+    let done = trimmed(current)
+    if posedCount(done) > posedCount(best) { best = done }
+    return best
   }
 
   static func orientation(for t: CGAffineTransform) -> CGImagePropertyOrientation {

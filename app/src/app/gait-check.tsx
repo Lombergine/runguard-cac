@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { Press } from "../components/Press";
 import {
@@ -80,6 +81,19 @@ export default function GaitCheckScreen() {
 
   const cmp = latest ? compare(latest, prior) : null;
 
+  // Development seam: a clip dropped into the app's Documents folder as
+  // gait-check.mov (xcrun devicectl device copy to ...) can be analyzed
+  // without touching the phone. Folded away in a release bundle.
+  const [devClip, setDevClip] = useState<string | null>(null);
+  useEffect(() => {
+    if (!__DEV__ || !FileSystem.documentDirectory) return;
+    const uri = `${FileSystem.documentDirectory}gait-check.mov`;
+    void (async () => {
+      const info = await FileSystem.getInfoAsync(uri).catch(() => ({ exists: false }));
+      if (info.exists) setDevClip(uri);
+    })();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.page}>
@@ -103,6 +117,11 @@ export default function GaitCheckScreen() {
             <Press onPress={() => void run(() => checkGait("library"), "Analyzing…")} accessibilityRole="button" accessibilityLabel="Choose a clip from the library" style={styles.buttonQuiet} pressedStyle={styles.pressed}>
               <Text style={styles.buttonQuietLabel}>Choose from library</Text>
             </Press>
+            {devClip ? (
+              <Press onPress={() => void run(() => analyzeClip(devClip, "library"), "Analyzing test clip…")} accessibilityRole="button" accessibilityLabel="Analyze the test clip in Documents" style={styles.buttonQuiet} pressedStyle={styles.pressed}>
+                <Text style={styles.buttonQuietLabel}>Analyze test clip (dev)</Text>
+              </Press>
+            ) : null}
           </View>
         )}
 
