@@ -82,6 +82,7 @@ phone on recording night.
 
 ## Recording checklist
 - [ ] Laptop: `cd website && npm run dev` running; `cd app && npx expo start` running; phone on the same Wi-Fi
+- [ ] If the laptop changed networks since the last build: put the new address (`ipconfig getifaddr en0`) into `app/.env` as `EXPO_PUBLIC_API_URL=http://<ip>:3000`, restart Metro, and in the app's dev launcher pick the server at that address. Every screen says "couldn't be loaded" when this is stale
 - [ ] Phone: RunGuard open and signed in; Stats tab reachable
 - [ ] If demoing your own runs: Home → Connect Apple Health → sync, then pull to refresh Stats
 - [ ] Terminal: `cd website && npm test` pre-run; show the summary line
