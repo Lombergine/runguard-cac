@@ -138,7 +138,7 @@ export function ThresholdPanel({ audit }: { audit?: AthleteAudit | null }) {
             Every running app applies 1.5 to everyone — the same cutoff for a marathoner in a base block and a sprinter in season, taken from Gabbett (2016). RunGuard reports what 1.5 actually picks out of your own history and what cut would flag your hardest 5% of days instead.
           </Text>
           <Text style={styles.caveat}>
-            A threshold chosen from your own distribution flags a fixed share of your days by construction, whatever your training was like. It makes the universal number's arbitrariness visible; it is not a validated predictor of injury. Gabbett, T. J. (2016), BJSM 50(5), 273–280.
+            A threshold chosen from your own distribution flags a fixed share of your days by construction, whatever your training was like. It makes the universal number’s arbitrariness visible; it is not a validated predictor of injury. Gabbett, T. J. (2016), BJSM 50(5), 273–280.
           </Text>
         </>
       }
@@ -177,7 +177,7 @@ export function AuditPanel({ audit }: { audit?: AthleteAudit | null }) {
       detail={
         <>
           <Text style={styles.read}>
-            The ratio is acute load divided by chronic load. If the chronic denominator barely changes the ordering of days, the ratio is a rescaled copy of its own numerator and the 4-week baseline is doing no work. Impellizzeri and colleagues showed in 2021 that replacing the denominator with noise left the ratio's link to injury about the same. This runs the label-free version of that test on your own data: the Spearman rank correlation between the score and your last 7 days alone.
+            The ratio is acute load divided by chronic load. If the chronic denominator barely changes the ordering of days, the ratio is a rescaled copy of its own numerator and the 4-week baseline is doing no work. Impellizzeri and colleagues showed in 2021 that replacing the denominator with noise left the ratio’s link to injury about the same. This runs the label-free version of that test on your own data: the Spearman rank correlation between the score and your last 7 days alone.
           </Text>
           {r ? (
             <Text style={styles.caveat}>
@@ -311,14 +311,14 @@ export function GaitPanel({ acwr, caution }: { acwr: number | null; caution: num
             </View>
           ) : null}
           <Text style={styles.read}>
-            Load alone is yesterday's model. The gait channel compares this week's mean ground contact time and vertical oscillation, read per run from Apple Watch running dynamics in Health, against the median of the four weeks before it. It flags mechanical drift when contact time rises more than 5% or oscillation more than 8% without a pace increase that would explain it. The baseline window ends before this week begins, so a drifting week cannot pull its own baseline toward itself.
+            Load alone is yesterday’s model. The gait channel compares this week’s mean ground contact time and vertical oscillation, read per run from Apple Watch running dynamics in Health, against the median of the four weeks before it. It flags mechanical drift when contact time rises more than 5% or oscillation more than 8% without a pace increase that would explain it. The baseline window ends before this week begins, so a drifting week cannot pull its own baseline toward itself.
           </Text>
           <Text style={styles.caveat}>
             These thresholds are heuristics chosen for this app, not clinically validated cut points. A flag is a reason to pay attention, not a diagnosis.
           </Text>
           {sample ? (
             <Text style={[styles.caveat, { color: color.watchText }]}>
-              Sample data: six generated weeks of runs, four a week, with a contact-time rise of about 7% in the final week at unchanged pace. Shown because this device's Health store has no running-dynamics samples.
+              Sample data: six generated weeks of runs, four a week, with a contact-time rise of about 7% in the final week at unchanged pace. Shown because this device’s Health store has no running-dynamics samples.
             </Text>
           ) : null}
         </>
