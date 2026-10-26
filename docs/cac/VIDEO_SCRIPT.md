@@ -48,7 +48,14 @@ phone on recording night.
 > is, and the four-week baseline adds a little. The app tells you which case
 > you're in.
 
-**1:45–2:15, Gait, sample switch on, point at the badge**
+**1:45–2:15, Gait: tap "Check your gait with the camera", then the sample switch**
+> And for everyone who doesn't own an Apple Watch, me included: film ten
+> seconds from the side and the phone measures cadence, bounce and whether
+> one foot stays down longer than the other, with Apple's own pose detector,
+> on the device. The clip never leaves the phone. [Show a result if you
+> recorded one before filming.]
+
+**(fallback copy for the same scene, Apple Watch channel)**
 > Load alone is yesterday's model. The gait channel reads ground contact time
 > and vertical oscillation from Apple Watch running dynamics and flags
 > mechanical drift against your own four-week baseline when pace didn't

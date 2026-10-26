@@ -63,6 +63,8 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 | `website/src/components/athlete/ExplainButton.tsx`, `app/src/components/ExplainCard.tsx` | "Explain my numbers" on the web and on the phone |
 | `app/src/components/TeamAuditSection.tsx`, `website/src/app/api/mobile/coach/audit/route.ts` | The team audit in the native coach tabs |
 | `docs/explanation-validation.md` | Real input/output pairs from the explanation layer |
+| `app/modules/gait-vision/` (Swift, podspec, config, TS binding) | Camera gait check: Apple Vision body pose over a clip, on-device, summary numbers only |
+| `app/src/lib/cameraGait.ts`, `app/src/app/gait-check.tsx` | Clip capture, local history, comparison and the screen |
 | `website/src/lib/__fixtures__/generate_reference.py` | Script that produces the Python reference numbers |
 | `website/src/lib/__fixtures__/acwr_reference.json` | Those numbers (generated, not hand-written) |
 | `website/vitest.config.ts` | Test runner config |
@@ -122,7 +124,7 @@ nowhere except, as two bounded percentages, into that explanation request.
 
 ## 5. Open-source components
 
-Runtime: Next.js, React, React Native, Expo and expo-router, `@anthropic-ai/sdk`,
+Runtime: Next.js, React, React Native, Expo and expo-router, `expo-image-picker`, `@anthropic-ai/sdk`, Apple's Vision and AVFoundation frameworks,
 `@kingstinct/react-native-healthkit`, `react-native-health-connect`,
 `react-native-svg`, Recharts, better-sqlite3 / postgres, zod, date-fns.
 Development: TypeScript, vitest, ESLint, Tailwind. Reference generation only:

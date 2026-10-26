@@ -22,6 +22,7 @@
  * Added for RunGuard 2.0 (CAC 2026), AI-assisted, see DISCLOSURE.md.
  */
 import { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
 import { Platform, StyleSheet, Switch, Text, View } from "react-native";
 import Svg, { Circle, Line, Rect, Text as SvgText } from "react-native-svg";
 
@@ -232,6 +233,7 @@ export function DataCheckPanel({ audit }: { audit?: AthleteAudit | null }) {
  * ------------------------------------------------------------------ */
 
 export function GaitPanel({ acwr, caution, onAnalysis }: { acwr: number | null; caution: number; onAnalysis?: (a: GaitAnalysis | null, isSample: boolean) => void }) {
+  const router = useRouter();
   const [health, setHealth] = useState<GaitAnalysis | null>(null);
   const [sample, setSample] = useState(false);
   const hex = useColors();
@@ -332,6 +334,15 @@ export function GaitPanel({ acwr, caution, onAnalysis }: { acwr: number | null; 
       }
     >
       <Text style={styles.lede}>{body}</Text>
+      <Press
+        onPress={() => router.push("/gait-check")}
+        accessibilityRole="button"
+        accessibilityLabel="Check your gait with the camera"
+        style={styles.more}
+        pressedStyle={styles.morePressed}
+      >
+        <Text style={styles.moreLabel}>No Apple Watch? Check your gait with the camera →</Text>
+      </Press>
       {showSwitch ? (
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Show sample data</Text>
