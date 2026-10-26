@@ -80,7 +80,8 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 | `website/src/app/api/mobile/me/route.ts` | Allow-lists `audit` onto the phone payload |
 | `website/src/app/dashboard/page.tsx` | Mounts the team audit panel |
 | `website/src/app/dashboard/athlete/[id]/page.tsx`, `website/src/components/athlete/tabs.tsx`, `website/src/components/charts.tsx` | Audit panels and the personal line on the web |
-| `website/package.json` | Adds vitest and the `test` / `typecheck` scripts |
+| `website/package.json` | Adds vitest, `@anthropic-ai/sdk`, and the `test` / `typecheck` scripts |
+| `app/package.json`, `app/.npmrc` | Adds `expo-image-picker`; aligns every Expo package to the SDK 57 versions Expo expects (the old router pulled a worklets version the module core could not build against); legacy peer resolution for npm |
 | `website/scripts/seed.ts` | The sample team gets a generated year of load-driven injuries so the team test has events; the demo banner already says the team is made up |
 | `app/src/lib/health.ts` | Two running-dynamics read scopes and `readRunningDynamics` (still read-only) |
 | `app/src/lib/types.ts` | `Profile.audit` and the `AthleteAudit` type |
