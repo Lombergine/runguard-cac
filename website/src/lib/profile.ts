@@ -1,4 +1,6 @@
 import { localDay, localDayOffset } from "./day";
+import { athleteAudit, type AthleteAudit } from "./acwrDiagnostics";
+import { acwrSeries } from "./risk";
 import { all } from "./db/driver";
 import {
   getAthlete,
@@ -97,6 +99,8 @@ export type CoreProfile = {
   weeks: { week: string; km: number }[];
   stats: ReturnType<typeof personalStats>;
   insights: string[];
+  /** RunGuard 2.0: self-audit, personal threshold, data check. See acwrDiagnostics.ts. */
+  audit: AthleteAudit;
   todayCheckin: CheckinRow | null;
   todaySoreness: SorenessEntry[];
   /** recent runs, newest first, with any single-session spike attached */
@@ -427,6 +431,9 @@ export async function buildProfile(
     weeks,
     stats: personalStats(risk.series, acts),
     insights: athleteInsights(risk),
+    // RunGuard 2.0: audited over a full year of the product's own EWMA series
+    // so the percentiles and the correlation have history to stand on.
+    audit: athleteAudit(acwrSeries(dailySeries(acts, 366, now))),
     todayCheckin,
     todaySoreness,
     recentRuns,

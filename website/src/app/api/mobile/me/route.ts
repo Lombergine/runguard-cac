@@ -55,6 +55,8 @@ export async function GET(request: Request) {
     weeks: profile.weeks,
     stats: profile.stats,
     insights: profile.insights,
+    // RunGuard 2.0 (CAC 2026): the self-audit bundle. See DISCLOSURE.md.
+    audit: profile.audit,
     todayCheckin: profile.todayCheckin,
     todaySoreness: profile.todaySoreness,
     recentRuns: profile.recentRuns,

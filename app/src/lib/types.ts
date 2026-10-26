@@ -707,6 +707,12 @@ export type Profile = {
   illness?: boolean;
   /** Athlete-facing observations, second person, one sentence each. */
   insights?: string[];
+  /**
+   * RunGuard 2.0 (CAC 2026): the self-audit bundle. Mirrors `AthleteAudit`
+   * in website/src/lib/acwrDiagnostics.ts. Optional because older servers
+   * do not send it; every panel that reads it must face its absence.
+   */
+  audit?: AthleteAudit | null;
   /** Newest first is NOT guaranteed — sort before rendering. */
   injuries?: Injury[];
   /** Season bests. */
@@ -961,3 +967,34 @@ export type BodyMapProps =
       onToggle?: never;
       severity?: never;
     };
+
+/* ------------------------------------------------------------------ *
+ * RunGuard 2.0 (CAC 2026). Mirrors website/src/lib/acwrDiagnostics.ts.
+ * AI-assisted, see DISCLOSURE.md.
+ * ------------------------------------------------------------------ */
+
+export type AuditFinding = {
+  check: string;
+  severity: "error" | "warning" | "note";
+  message: string;
+  /** Local days, YYYY-MM-DD. Format through lib/dates before display. */
+  dates: string[];
+};
+
+export type AthleteAudit = {
+  method: "ewma";
+  days: number;
+  usableDays: number;
+  quality: { nDays: number; nTrainingDays: number; ok: boolean; findings: AuditFinding[] };
+  threshold: {
+    n: number;
+    percentiles: Record<string, number>;
+    reference: number;
+    referenceFlagged: number;
+    referenceFlaggedFraction: number;
+    referencePercentile: number;
+  } | null;
+  rescaling: { n: number; spearman: number; pearson: number; ciLow: number; ciHigh: number; draws: number; seed: number } | null;
+  personalZones: { caution: number; high: number } | null;
+  personalZonesMinimumDays: number;
+};

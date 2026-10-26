@@ -61,6 +61,7 @@ import { BASE_URL } from "./api";
 import * as hc from "./healthConnect";
 import { getToken } from "./auth";
 import { localDay } from "./dates";
+import type { GaitRun } from "./gait";
 
 /* ------------------------------------------------------------------ *
  * The wire shapes. Keyed to website/src/app/api/mobile/ingest/route.ts.
@@ -239,6 +240,10 @@ const READ_SCOPES = [
   "HKCategoryTypeIdentifierSleepAnalysis",
   "HKQuantityTypeIdentifierVO2Max",
   "HKQuantityTypeIdentifierRespiratoryRate",
+  // RunGuard 2.0: the gait channel reads per-run running dynamics (Apple
+  // Watch, watchOS 9+). Read by `readRunningDynamics` below and nowhere else.
+  "HKQuantityTypeIdentifierRunningGroundContactTime",
+  "HKQuantityTypeIdentifierRunningVerticalOscillation",
 ] as const satisfies readonly ObjectTypeIdentifier[];
 
 /**
@@ -758,4 +763,71 @@ export async function sync(): Promise<SyncRecord> {
   };
   await saveState({ ...before, lastSync: record });
   return record;
+}
+
+/* ------------------------------------------------------------------ *
+ * RunGuard 2.0 (CAC 2026): running dynamics for the gait channel.
+ * AI-assisted, see DISCLOSURE.md.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Per-run ground contact time and vertical oscillation for the runs the
+ * gait model can use (the recent week plus four baseline weeks), as
+ * `lib/gait.ts`'s `GaitRun`. Samples are matched to a workout by time, the
+ * same way heart rate is above. A run with no dynamics samples comes back
+ * with null metrics, which the model reports as "no dynamics" rather than
+ * guessing. Nothing here is sent to the server.
+ */
+export async function readRunningDynamics(days = 35): Promise<GaitRun[]> {
+  if (Platform.OS !== "ios") return [];
+  const hk = api();
+  if (!hk || !isAvailable()) return [];
+  const since = new Date(Date.now() - days * 86400000);
+  const date = { startDate: since };
+  const samples = await hk.queryWorkoutSamples({ filter: { date }, limit: 0 });
+  const runs = samples.filter(
+    (w) => w.workoutActivityType === WorkoutActivityType.running && w.duration.quantity > MIN_WORKOUT_S,
+  );
+  if (!runs.length) return [];
+  const [gct, vo] = await Promise.all([
+    hk.queryQuantitySamples("HKQuantityTypeIdentifierRunningGroundContactTime", {
+      filter: { date },
+      limit: 0,
+      unit: "ms",
+      ascending: true,
+    }),
+    hk.queryQuantitySamples("HKQuantityTypeIdentifierRunningVerticalOscillation", {
+      filter: { date },
+      limit: 0,
+      unit: "cm",
+      ascending: true,
+    }),
+  ]);
+  const meanIn = (xs: readonly { startDate: Date; quantity: number }[], startMs: number, endMs: number): [number | null, number] => {
+    let sum = 0;
+    let n = 0;
+    for (const x of xs) {
+      const t = x.startDate.getTime();
+      if (t < startMs || t > endMs) continue;
+      sum += x.quantity;
+      n++;
+    }
+    return [n ? sum / n : null, n];
+  };
+  return runs.map((w) => {
+    const startMs = w.startDate.getTime();
+    const durationS = w.duration.quantity;
+    const endMs = startMs + durationS * 1000;
+    const [g, gn] = meanIn(gct, startMs, endMs);
+    const [v, vn] = meanIn(vo, startMs, endMs);
+    const distanceM = w.totalDistance?.quantity ?? 0;
+    return {
+      id: w.uuid,
+      start: w.startDate.toISOString(),
+      groundContactMs: g,
+      verticalOscillationCm: v,
+      speedMps: distanceM > 0 && durationS > 0 ? distanceM / durationS : null,
+      sampleCount: gn + vn,
+    };
+  });
 }

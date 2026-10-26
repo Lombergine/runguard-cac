@@ -137,10 +137,17 @@ function Panel({
 export function AcwrChart({
   series,
   windowDays,
+  personal,
 }: {
   series?: DailyPoint[];
   /** Optional. Omitted, the chart keeps its own fixed window — see chartData. */
   windowDays?: number;
+  /**
+   * RunGuard 2.0: the athlete's own 95th-percentile line, drawn in the
+   * series colour (violet) so it is visibly a different kind of mark from
+   * the universal 1.5. Null until there is enough history.
+   */
+  personal?: number | null;
 }) {
   // The note and the screen-reader summary both quote this, so a window
   // the caller chose can never be described as the default one.
@@ -191,6 +198,9 @@ export function AcwrChart({
                   value={ACWR_DANGER}
                   stroke={REF_STROKE}
                 />
+                {personal != null && personal > 0 ? (
+                  <RefLine frame={frame} value={personal} stroke={color.series1} />
+                ) : null}
                 {/* Breaks at every null rather than interpolating: a line drawn
                     through a day the engine could not compute would be the app
                     inventing a ratio. */}
@@ -206,6 +216,9 @@ export function AcwrChart({
             the dashed line at {ACWR_DANGER}, the last week was a bigger jump on
             the month behind it. Days with no ratio yet are dashed, and the line
             breaks across them.
+            {personal != null && personal > 0
+              ? ` The violet dashed line at ${personal.toFixed(2)} is your own 95th percentile — the cut that flags your hardest 5% of days, learned from your history. See "Your threshold" below.`
+              : ""}
           </Text>
 
           <Text style={styles.caveat}>

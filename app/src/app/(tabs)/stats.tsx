@@ -28,7 +28,8 @@
  *    zone prints its own minutes in the legend, welded to its unit, whether or
  *    not anything is ever tapped.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   RefreshControl,
   ScrollView,
@@ -47,6 +48,7 @@ import { HrZones } from "../../components/HrZones";
 import { Tile } from "../../components/Tile";
 import { YEAR_GRID_HEIGHT, YearGrid } from "../../components/YearGrid";
 import { AcwrChart } from "../../components/charts/AcwrChart";
+import { InsightPanels } from "../../components/InsightPanels";
 import { FitnessChart } from "../../components/charts/FitnessChart";
 import { LoadChart } from "../../components/charts/LoadChart";
 import { PaceChart } from "../../components/charts/PaceChart";
@@ -163,6 +165,20 @@ export default function StatsScreen() {
   const failed = state === "failed";
 
   /**
+   * RunGuard 2.0: `runguard://stats?scroll=insights` opens the screen on the
+   * audit panels. A deep-link anchor, so a future notification ("your data
+   * check found something") can land the athlete on the panel it is about.
+   */
+  const { scroll } = useLocalSearchParams<{ scroll?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
+  const [insightsY, setInsightsY] = useState<number | null>(null);
+  useEffect(() => {
+    if (scroll === "insights" && insightsY !== null) {
+      scrollRef.current?.scrollTo({ y: insightsY, animated: false });
+    }
+  }, [scroll, insightsY]);
+
+  /**
    * Rest days from the current plan week — the only thing that can turn an
    * unrecorded day inside the observed period into NO RUN rather than ZERO.
    * Memoised because it is a Set: a fresh one every render would rebuild the
@@ -243,6 +259,7 @@ export default function StatsScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.page}
         /* Pull to refetch. Nothing below dims while it runs: a figure that
            fades reads as a figure losing confidence, which it is not. */
@@ -393,7 +410,12 @@ export default function StatsScreen() {
           {fitnessKnown(profile) ? (
             <FitnessChart weekly={profile.fitness?.weekly} />
           ) : null}
-          <AcwrChart series={profile.risk.series} />
+          <AcwrChart series={profile.risk.series} personal={profile.audit?.personalZones?.high ?? null} />
+          {/* RunGuard 2.0 (CAC 2026): personal threshold, self-audit, gait
+              channel, data check. AI-assisted, see DISCLOSURE.md. */}
+          <View onLayout={(e) => setInsightsY(e.nativeEvent.layout.y)} style={styles.sections}>
+            <InsightPanels audit={profile.audit} acwr={profile.risk.series?.at(-1)?.acwr ?? null} />
+          </View>
           <LoadChart series={profile.risk.series} />
 
           {/* 6. The training year. */}
