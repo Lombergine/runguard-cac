@@ -6,8 +6,9 @@ One short paragraph each. Fill the bracketed personal details; do not invent the
 RunGuard
 
 ## 2. Purpose
-RunGuard is an injury early-warning system for high-school distance runners
-and their coaches. The iOS app syncs each athlete's runs from Apple Health, a
+Between 28 and 38 percent of high-school runners are injured every season.
+RunGuard is an injury early-warning system for those runners and their
+coaches, built for and used by our own team. The iOS app syncs each athlete's runs from Apple Health, a
 server computes training load, the acute:chronic workload ratio, readiness and
 recovery, and coaches see the whole roster before practice. Version 2.0 adds
 what no running app has: it learns a personal threshold from the athlete's own

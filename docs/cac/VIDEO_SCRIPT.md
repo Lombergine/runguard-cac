@@ -16,11 +16,13 @@ phone on recording night.
 
 **0:00–0:20, on camera**
 > I'm Aditya Garg, a [grade] at [school] in San Jose, [district], and this is
-> RunGuard, built with my teammate Pranav. It watches a high-school runner's
-> training load and tells them, and their coach, when the numbers say an injury
-> is coming. Version 2.0, which is what this video is about, is the only
-> running app that tells you how much to trust that score. TypeScript end to
-> end: a Next.js server and an Expo iOS app reading Apple Health, with the
+> RunGuard, built with my teammate Pranav. Between a quarter and a third of
+> high-school runners get hurt every season. [One sentence: your own injury,
+> or a teammate's.] RunGuard reads a runner's training from Apple Health and
+> tells them, and their coach, when the load says an injury is coming. Our
+> team, Leland XC, uses it. Version 2.0, which this video is about, makes it
+> the only running app that tells you how much to trust its own score. It's
+> TypeScript end to end: a Next.js server, an Expo iOS app, and the
 > statistics from a Python package I published.
 
 **0:20–0:45, Home and Stats**
@@ -54,11 +56,16 @@ phone on recording night.
 > labelled sample set, right there: "sample data". The thresholds are
 > heuristics, and the panel says so.
 
-**2:15–2:35, Data check**
+**2:05–2:20, Data check**
 > Before any score, RunGuard checks the log it was given: too little history,
 > a watch left running, a long break, a change of units. It tells you; it never
 > silently fixes anything, because whether a gap was rest or a dead battery is
 > your call.
+
+**2:20–2:35, laptop, coach dashboard**
+> The coach sees the same thing for the whole team: this is my page on the
+> coach dashboard, the same audit, the same violet line. One engine, both
+> screens.
 
 **2:35–2:52, terminal, green tests**
 > Every statistic is checked against the Python reference. Twenty-nine tests:
