@@ -77,7 +77,7 @@ struct ContentView: View {
                     .padding()
                 }
             }
-            .navigationTitle("Runs")
+            .navigationTitle("RunGuard")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
@@ -130,26 +130,31 @@ struct ContentView: View {
 
     private func runList(_ runs: [RunningWorkout], risk: ACWRStatus) -> some View {
         List {
-            // The card is a list row (not a header above the List) so it
-            // scrolls away with the content instead of eating screen space.
-            // Clearing the row chrome lets the card draw its own background.
+            // Cards are list rows (not a header above the List) so they
+            // scroll away with the content instead of eating screen space.
+            // RunGuard 2.0: restyled to the Pulse system (Theme.swift) and
+            // joined by the charts and the insight cards. See DISCLOSURE.md.
             Section {
-                RiskCard(status: risk)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                RiskCard(status: risk, zoneSource: viewModel.zoneSource)
+                    .pulseRow()
                 // Conditioned here, not inside the card: an always-present
                 // row whose body is empty still costs a blank list row.
                 let soreness = sorenessReport
                 if soreness.hasFlags {
                     SorenessCard(report: soreness)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                        .pulseRow()
                 }
+                WorkloadChartCard(
+                    series: viewModel.series,
+                    thresholds: viewModel.effectiveThresholds,
+                    zoneSource: viewModel.zoneSource
+                )
+                .pulseRow()
                 // RunGuard 2.0 (CAC 2026): personal threshold, self-audit,
                 // gait channel, data quality. AI-assisted, see DISCLOSURE.md.
                 InsightRows(viewModel: viewModel, risk: risk)
+                WeeklyMilesCard(series: viewModel.series)
+                    .pulseRow()
             }
             Section {
                 ForEach(runs) { run in
@@ -161,9 +166,17 @@ struct ContentView: View {
                         RunRow(run: run, isLogged: checkIn(for: run) != nil)
                     }
                     .buttonStyle(.plain)
+                    .listRowBackground(Pulse.card)
+                    .listRowSeparatorTint(Pulse.rule)
                 }
+            } header: {
+                Micro("Runs · last \(HealthKitService.fetchWindowDays) days · \(runs.count) in Health")
+                    .padding(.leading, 4)
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Pulse.bg)
         .refreshable {
             await viewModel.loadRuns()
         }
@@ -207,28 +220,35 @@ struct RunRow: View {
     let isLogged: Bool
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(run.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                    .font(.headline)
-                HStack(spacing: 16) {
-                    Label(distanceText, systemImage: "ruler")
-                    Label(durationText, systemImage: "stopwatch")
-                    Label(heartRateText, systemImage: "heart")
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                // Explicit, local, never relative: "Sat 25 Oct".
+                Text(run.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
+                    .font(Pulse.display(16, .semibold))
+                    .foregroundStyle(Pulse.ink)
+                HStack(spacing: 14) {
+                    stat(distanceText, "ruler")
+                    stat(durationText, "stopwatch")
+                    stat(heartRateText, "heart")
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .labelStyle(.titleAndIcon)
             }
             Spacer()
-            // Subtle logged/unlogged cue: green check once logged, faint
-            // plus inviting a tap before.
+            // Subtle logged/unlogged cue: check once logged, faint plus
+            // inviting a tap before.
             Image(systemName: isLogged ? "checkmark.circle.fill" : "plus.circle")
                 .font(.body)
-                .foregroundStyle(isLogged ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
+                .foregroundStyle(isLogged ? Pulse.okText : Pulse.unknown)
                 .accessibilityLabel(isLogged ? "Logged" : "Not logged")
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+    }
+
+    /// Units are welded to their numbers in a single text node, in mono.
+    private func stat(_ value: String, _ icon: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 11)).foregroundStyle(Pulse.muted)
+            Text(value).font(Pulse.mono(13)).foregroundStyle(value == "—" ? Pulse.unknown : Pulse.ink2)
+        }
     }
 
     private var distanceText: String {

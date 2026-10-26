@@ -41,7 +41,9 @@ struct SorenessCard: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            // RunGuard 2.0: Pulse surface instead of a tinted fill (see Theme.swift).
+        .background(Pulse.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Pulse.cardEdge, lineWidth: 1.5))
         }
     }
 

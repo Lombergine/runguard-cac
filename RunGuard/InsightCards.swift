@@ -49,9 +49,7 @@ struct InsightRows: View {
                 DataQualityCard(insights: insights)
             }
         }
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
+        .pulseRow()
     }
 }
 
@@ -70,53 +68,57 @@ private struct InsightCard<Detail: View>: View {
     @State private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Label(title, systemImage: systemImage)
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(accent)
+                Text(title)
+                    .font(Pulse.display(19))
+                    .foregroundStyle(Pulse.ink)
                 if let badge {
                     Text(badge)
-                        .font(.caption2.weight(.heavy))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.orange, in: Capsule())
-                        .foregroundStyle(.white)
+                        .font(Pulse.micro)
+                        .tracking(0.6)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Pulse.watch, in: Capsule())
+                        .foregroundStyle(Pulse.onBrand)
                         .accessibilityLabel("Sample data")
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 if let headline {
                     Text(headline)
-                        .font(.title3.weight(.bold).monospacedDigit())
+                        .font(Pulse.mono(20, .semibold))
                         .foregroundStyle(accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
             }
             Text(summary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(Pulse.body(14))
+                .foregroundStyle(Pulse.ink2)
                 .fixedSize(horizontal: false, vertical: true)
             if expanded {
                 detail()
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                    .font(Pulse.body(13))
+                    .foregroundStyle(Pulse.muted)
+                    .padding(.top, 2)
                     .transition(.opacity)
             }
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
             } label: {
                 Label(expanded ? "Less" : "How this is computed",
                       systemImage: expanded ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(.semibold))
+                    .font(Pulse.body(13, .bold))
                     .labelStyle(.titleAndIcon)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(accent)
+            .foregroundStyle(Pulse.brandText)
             .padding(.top, 2)
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .pulseCard()
     }
 }
 
@@ -149,7 +151,7 @@ struct ThresholdCard: View {
         InsightCard(
             title: "Your Threshold",
             systemImage: "person.crop.circle.badge.checkmark",
-            accent: .indigo,
+            accent: Pulse.brandText,
             headline: headline,
             summary: summary
         ) {
@@ -209,7 +211,7 @@ struct AuditCard: View {
         InsightCard(
             title: "Self-Audit",
             systemImage: "checkmark.seal",
-            accent: .teal,
+            accent: Pulse.brandText,
             headline: headline,
             summary: summary
         ) {
@@ -280,7 +282,7 @@ struct GaitCard: View {
                 Text("These thresholds are heuristics chosen for this app, not clinically validated cut points. Treat a flag as a reason to pay attention, not a diagnosis.")
                 if display?.isSample == true {
                     Text("Sample data: six generated weeks of runs, four a week, with a contact-time rise of about 7% in the final week at unchanged pace. Shown because this device's Health store has no running-dynamics samples.")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Pulse.watchText)
                 }
             }
         }
@@ -308,8 +310,8 @@ struct GaitCard: View {
     }
 
     private var accent: Color {
-        guard case .analyzed(let d)? = display?.analysis else { return .secondary }
-        return d.flagsMechanicalDrift ? .red : .green
+        guard case .analyzed(let d)? = display?.analysis else { return Pulse.unknown }
+        return d.flagsMechanicalDrift ? Pulse.unusualText : Pulse.okText
     }
 
     private var headline: String? {
@@ -380,7 +382,7 @@ struct GaitCard: View {
                 Text("")
             }
         }
-        .font(.caption.monospacedDigit())
+        .font(Pulse.mono(11))
     }
 }
 
@@ -401,12 +403,12 @@ struct RiskQuadrant: View {
             let xCut = w * unit(thresholds.optimalBelow, in: ratioRange)
             let yCut = h * (1 - unit(Gait.groundContactDriftThreshold, in: driftRange))
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 8).fill(Color(.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: 8).fill(Pulse.well)
                 Path { p in
                     p.move(to: CGPoint(x: xCut, y: 0)); p.addLine(to: CGPoint(x: xCut, y: h))
                     p.move(to: CGPoint(x: 0, y: yCut)); p.addLine(to: CGPoint(x: w, y: yCut))
                 }
-                .stroke(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                .stroke(Pulse.ruleStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 quadrantLabel("Fresh, steady", x: 0, y: h, anchor: .bottomLeading)
                 quadrantLabel("Load up, gait steady", x: w, y: h, anchor: .bottomTrailing)
                 quadrantLabel("Gait drifting, load fine", x: 0, y: 0, anchor: .topLeading)
@@ -417,7 +419,7 @@ struct RiskQuadrant: View {
                     Circle()
                         .fill(dotColor(ratio: ratio, drift: g))
                         .frame(width: 14, height: 14)
-                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                        .overlay(Circle().stroke(Pulse.card, lineWidth: 2))
                         .position(x: x, y: y)
                         .accessibilityLabel("This week: ratio \(f2(ratio)), contact time \(pct1(g))")
                 }
@@ -443,9 +445,9 @@ struct RiskQuadrant: View {
         let loadUp = ratio >= thresholds.optimalBelow
         let gaitUp = drift > Gait.groundContactDriftThreshold
         switch (loadUp, gaitUp) {
-        case (true, true): return .red
-        case (false, false): return .green
-        default: return .orange
+        case (true, true): return Pulse.unusual
+        case (false, false): return Pulse.ok
+        default: return Pulse.watch
         }
     }
 
@@ -468,7 +470,7 @@ struct DataQualityCard: View {
         InsightCard(
             title: insights.quality.ok ? "Data Check" : "Not Enough History",
             systemImage: insights.quality.ok ? "exclamationmark.triangle" : "xmark.octagon",
-            accent: insights.quality.ok ? .orange : .red,
+            accent: insights.quality.ok ? Pulse.watchText : Pulse.unusualText,
             headline: nil,
             summary: "\(insights.quality.nDays) days, \(insights.quality.nTrainingDays) with a run. \(insights.quality.errors.count) error(s), \(insights.quality.warnings.count) warning(s). Nothing is corrected automatically; whether a gap was rest or an unsynced watch is your call."
         ) {
@@ -476,12 +478,12 @@ struct DataQualityCard: View {
                 ForEach(insights.quality.errors + insights.quality.warnings) { f in
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: f.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(f.severity == .error ? .red : .orange)
+                            .foregroundStyle(f.severity == .error ? Pulse.unusualText : Pulse.watchText)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(f.message)
                             if !f.dayIndices.isEmpty {
-                                Text(f.dayIndices.map { insights.date(ofDay: $0).formatted(.dateTime.month(.abbreviated).day().year()) }.joined(separator: ", "))
-                                    .foregroundStyle(.tertiary)
+                                Text(f.dayIndices.map { insights.date(ofDay: $0).formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).year()) }.joined(separator: ", "))
+                                    .font(Pulse.mono(12))
                             }
                         }
                     }

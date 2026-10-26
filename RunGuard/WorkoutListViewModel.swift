@@ -44,6 +44,8 @@ final class WorkoutListViewModel {
     /// Quality pre-flight, personal threshold and self-audit over the same
     /// daily series the risk card is built from. Nil until runs are loaded.
     private(set) var insights: LoadInsights?
+    /// The day-by-day series behind the risk card, for the charts.
+    private(set) var series: [ACWRPoint] = []
     /// The cut points the risk card is coloured with right now, and why.
     private(set) var effectiveThresholds: ACWRThresholds = .standard
     private(set) var zoneSource: ZoneSource = .coachSettings
@@ -128,8 +130,9 @@ final class WorkoutListViewModel {
             // the background and never block the screen.
             insights = InsightsService.compute(series: assessment.series, bootstrapDraws: 0)
             applyZones()
-            let risk = ACWRService.compute(runs: runs, thresholds: effectiveThresholds).status
-            state = .loaded(runs: runs, risk: risk)
+            let scored = ACWRService.compute(runs: runs, thresholds: effectiveThresholds)
+            series = scored.series
+            state = .loaded(runs: runs, risk: scored.status)
 
             let series = assessment.series
             Task.detached(priority: .userInitiated) { [weak self] in
@@ -181,7 +184,8 @@ final class WorkoutListViewModel {
     func rescoreForCurrentThresholds() {
         guard case .loaded(let runs, _) = state, !runs.isEmpty else { return }
         applyZones()
-        let risk = ACWRService.compute(runs: runs, thresholds: effectiveThresholds).status
-        state = .loaded(runs: runs, risk: risk)
+        let scored = ACWRService.compute(runs: runs, thresholds: effectiveThresholds)
+        series = scored.series
+        state = .loaded(runs: runs, risk: scored.status)
     }
 }

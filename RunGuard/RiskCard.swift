@@ -2,6 +2,16 @@
 //  RiskCard.swift
 //  RunGuard
 //
+//  The injury-risk headline above the run list. Rendering is a pure
+//  function of ACWRStatus: the enum's cases force the cold-start and
+//  no-baseline states to be designed, not defaulted.
+//
+//  Restyled for RunGuard 2.0 to the Pulse system (see Theme.swift): a ring
+//  carrying the ratio, zone as a coloured word, the explanation in body
+//  type, and no tinted fill. The original 1.x card logic (zone names,
+//  explanation copy, the percent-change arithmetic) is unchanged.
+//  AI-assisted restyle, see DISCLOSURE.md.
+//
 
 import SwiftUI
 
@@ -28,35 +38,58 @@ extension TrainingZone {
     }
 }
 
-/// The injury-risk headline above the run list. Rendering is a pure
-/// function of ACWRStatus: the enum's cases force the cold-start and
-/// no-baseline states to be designed, not defaulted.
 struct RiskCard: View {
     let status: ACWRStatus
+    var zoneSource: ZoneSource = .coachSettings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Label(title, systemImage: icon)
-                    .font(.headline)
-                    .foregroundStyle(accent)
-                Spacer()
-                if case .score(let ratio, _, _, _) = status {
-                    Text(ratio, format: .number.precision(.fractionLength(2)))
-                        .font(.title2.weight(.bold).monospacedDigit())
-                        .foregroundStyle(accent)
+        HStack(alignment: .center, spacing: 16) {
+            Ring(fraction: ringFraction, color: accent) {
+                VStack(spacing: 0) {
+                    Text(ratioText)
+                        .font(Pulse.mono(26, .semibold))
+                        .foregroundStyle(ringFraction == nil ? Pulse.unknown : Pulse.ink)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                    Micro("ratio")
                 }
             }
-            Text(explanation)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                Micro(eyebrow)
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                    Text(title)
+                }
+                .font(Pulse.display(21))
+                .foregroundStyle(accent)
+                Text(explanation)
+                    .font(Pulse.body(14))
+                    .foregroundStyle(Pulse.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .pulseCard()
         // Read the card as one sentence in VoiceOver instead of four fragments.
         .accessibilityElement(children: .combine)
+    }
+
+    /// The ring fills to 2.0, the top of the range anyone monitors.
+    private var ringFraction: Double? {
+        if case .score(let ratio, _, _, _) = status { return min(ratio / 2.0, 1) }
+        return nil
+    }
+
+    private var ratioText: String {
+        if case .score(let ratio, _, _, _) = status { return String(format: "%.2f", ratio) }
+        return "—"
+    }
+
+    private var eyebrow: String {
+        let day = Date.now.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+        switch zoneSource {
+        case .personalHistory: return "Today · \(day) · your zones"
+        case .coachSettings: return "Today · \(day)"
+        }
     }
 
     private var title: String {
@@ -83,8 +116,8 @@ struct RiskCard: View {
 
     private var accent: Color {
         switch status {
-        case .lowConfidence, .noRecentTraining: .secondary
-        case .score(_, let zone, _, _): zone.color
+        case .lowConfidence, .noRecentTraining: Pulse.unknown
+        case .score(_, let zone, _, _): zone.pulseText
         }
     }
 
@@ -120,7 +153,7 @@ struct RiskCard: View {
     ScrollView {
         VStack(spacing: 12) {
             RiskCard(status: .score(ratio: 1.05, zone: .optimal, acuteLoad: 3.1, chronicLoad: 2.95))
-            RiskCard(status: .score(ratio: 1.38, zone: .caution, acuteLoad: 4.1, chronicLoad: 2.97))
+            RiskCard(status: .score(ratio: 1.38, zone: .caution, acuteLoad: 4.1, chronicLoad: 2.97), zoneSource: .personalHistory)
             RiskCard(status: .score(ratio: 1.72, zone: .highRisk, acuteLoad: 5.1, chronicLoad: 2.97))
             RiskCard(status: .score(ratio: 0.55, zone: .undertraining, acuteLoad: 1.6, chronicLoad: 2.9))
             RiskCard(status: .lowConfidence(daysOfHistory: 9))
@@ -128,4 +161,5 @@ struct RiskCard: View {
         }
         .padding()
     }
+    .background(Pulse.bg)
 }
