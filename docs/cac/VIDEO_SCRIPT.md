@@ -63,8 +63,10 @@ phone on recording night.
 > your call.
 
 **2:20–2:35, laptop, coach dashboard**
-> The coach sees the same thing for the whole team: this is my page on the
-> coach dashboard, the same audit, the same violet line. One engine, both
+> The coach sees it for the whole team. Median self-audit across the squad,
+> who the universal cutoff can never warn, and the 2021 paper's own experiment
+> run on our injury log: does the score beat a ratio built on noise? With our
+> injuries logged it answers; until then it says it can't. One engine, both
 > screens.
 
 **2:35–2:52, terminal, green tests**

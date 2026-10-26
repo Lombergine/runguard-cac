@@ -51,9 +51,13 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 
 | File | What it is |
 |---|---|
-| `website/src/lib/acwrDiagnostics.ts` | The three ratio methods, the rescaling self-audit, the personal-threshold report, the data check, and the `athleteAudit` bundle (port of `acwr`) |
-| `website/src/lib/acwrDiagnostics.test.ts` | 25 vitest cases checking every value against the Python reference |
+| `website/src/lib/acwrDiagnostics.ts` | The three ratio methods, the rescaling self-audit, the personal-threshold report, the data check, the `athleteAudit` bundle, and `compareToNull` (port of `acwr`) |
+| `website/src/lib/acwrDiagnostics.test.ts` | 25 vitest cases checking every value against the Python reference (37 in all with gait and compareToNull) |
 | `website/src/lib/gait.test.ts` | 4 cases for the gait model |
+| `website/src/lib/compareToNull.test.ts` | 8 cases for the Impellizzeri test against the Python reference |
+| `website/src/lib/teamAudit.ts` | Pools the roster's series with the injury log; per-athlete score trust |
+| `website/src/components/TeamAuditPanel.tsx` | The coach dashboard's "Can the score be trusted on this team?" panel |
+| `website/src/components/athlete/AuditPanels.tsx` | The web versions of the threshold, self-audit and data-check panels |
 | `website/src/lib/__fixtures__/generate_reference.py` | Script that produces the Python reference numbers |
 | `website/src/lib/__fixtures__/acwr_reference.json` | Those numbers (generated, not hand-written) |
 | `website/vitest.config.ts` | Test runner config |
@@ -67,6 +71,8 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 |---|---|
 | `website/src/lib/profile.ts` | Computes `audit` over a year of the athlete's own EWMA series |
 | `website/src/app/api/mobile/me/route.ts` | Allow-lists `audit` onto the phone payload |
+| `website/src/app/dashboard/page.tsx` | Mounts the team audit panel |
+| `website/src/app/dashboard/athlete/[id]/page.tsx`, `website/src/components/athlete/tabs.tsx`, `website/src/components/charts.tsx` | Audit panels and the personal line on the web |
 | `website/package.json` | Adds vitest and the `test` / `typecheck` scripts |
 | `app/src/lib/health.ts` | Two running-dynamics read scopes and `readRunningDynamics` (still read-only) |
 | `app/src/lib/types.ts` | `Profile.audit` and the `AthleteAudit` type |
