@@ -20,7 +20,9 @@ The app currently does exactly four things:
 
 6. A single Settings screen (`SettingsView`, backed by `RunGuardSettings`): the ACWR zone cut points and the soreness rules, persisted in UserDefaults — deliberately NOT in the SwiftData container, so changing a threshold can never migrate or corrupt check-in data. Zone sliders bound each other so the ordering cannot be broken.
 
-Nothing else. No charts, no networking, no accounts, no coach-facing side, no sharing. The app reads HealthKit on one device and nothing leaves it. Do not add features, screens, or abstractions beyond this scope unless explicitly asked.
+7. **RunGuard 2.0 (CAC 2026, see `DISCLOSURE.md`).** The statistics live in the local Swift package `RunGuardCore/` (no dependencies; `cd RunGuardCore && swift test` runs 69 tests against `Tests/.../Fixtures/acwr_reference.json`, generated from the Python `acwr` package). The app adapts them in `InsightsService.swift` and shows four cards under the risk card (`InsightCards.swift`): personal threshold (percentiles of the athlete's own ratio; zones switch to their 90th/95th at 60+ usable days when the Settings toggle is on, and the card always says which set is in use), self-audit (Spearman of score vs. acute load with a seeded 500-draw bootstrap, computed off the main thread), gait channel (`GaitHealthKit.swift` reads running-dynamics samples per workout; `Gait.analyze` compares the recent week to an uncoupled four-week baseline; a labelled SAMPLE DATA switch appears only when Health has no dynamics), and a data check. `HealthKitService.fetchWindowDays` is 365 so the percentiles have history. Every 2.0 file carries an `Added for RunGuard 2.0` header.
+
+Nothing else. No networking, no accounts, no coach-facing side, no sharing. The app reads HealthKit on one device and nothing leaves it. Do not add features, screens, or abstractions beyond this scope unless explicitly asked.
 
 ## Tech Constraints
 
@@ -49,7 +51,7 @@ xcodebuild -project RunGuard.xcodeproj -scheme RunGuard \
   -destination 'platform=iOS Simulator,name=iPhone 16' build
 ```
 
-There are no test targets or linters configured yet.
+Tests live in the package: `cd RunGuardCore && swift test` (about a minute; the bootstrap tests dominate).
 
 ## Structure
 
