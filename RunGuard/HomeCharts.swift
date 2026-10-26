@@ -68,16 +68,16 @@ struct WorkloadChartCard: View {
                     RuleMark(y: .value("Universal 1.5", 1.5))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                         .foregroundStyle(Pulse.muted)
-                        .annotation(position: .top, alignment: .trailing) {
-                            Micro("1.5 universal").padding(.trailing, 2)
+                        .annotation(position: .top, alignment: .trailing, spacing: 1) {
+                            chip("1.5 universal", Pulse.muted)
                         }
 
                     if zoneSource == .personalHistory {
                         RuleMark(y: .value("Your 95th", thresholds.cautionThrough))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
                             .foregroundStyle(Pulse.series1)
-                            .annotation(position: .bottom, alignment: .trailing) {
-                                Micro("\(String(format: "%.2f", thresholds.cautionThrough)) yours", color: Pulse.series1Text).padding(.trailing, 2)
+                            .annotation(position: .bottom, alignment: .trailing, spacing: 1) {
+                                chip("\(String(format: "%.2f", thresholds.cautionThrough)) yours", Pulse.series1Text)
                             }
                     }
 
@@ -111,7 +111,7 @@ struct WorkloadChartCard: View {
                             .font(Pulse.mono(10)).foregroundStyle(Pulse.muted)
                     }
                 }
-                .frame(height: 170)
+                .frame(height: 180)
             }
 
             HStack(spacing: 14) {
@@ -127,6 +127,15 @@ struct WorkloadChartCard: View {
                 .foregroundStyle(Pulse.muted)
         }
         .pulseCard()
+    }
+
+    /// A line label on a card-coloured chip, so it stays legible wherever
+    /// the data line happens to cross it.
+    private func chip(_ text: String, _ color: Color) -> some View {
+        Micro(text, color: color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Pulse.card, in: RoundedRectangle(cornerRadius: 4))
     }
 
     private func legend(_ color: Color, _ label: String, solid: Bool) -> some View {
@@ -179,7 +188,7 @@ struct WeeklyMilesCard: View {
                     Text(String(format: "%.1f mi", cur.miles)).font(Pulse.mono(18, .semibold)).foregroundStyle(Pulse.brandText)
                 }
             }
-            Micro("this week so far, against the seven before it")
+            Micro("this week vs. the seven before")
             Chart(data) { w in
                 BarMark(x: .value("Week", w.label), y: .value("Miles", w.miles))
                     .foregroundStyle(w.isCurrent ? Pulse.brand : Pulse.ruleStrong)

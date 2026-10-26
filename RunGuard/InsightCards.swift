@@ -37,16 +37,20 @@ struct InsightRows: View {
                 effectiveThresholds: viewModel.effectiveThresholds,
                 zoneSource: viewModel.zoneSource
             )
+            .id("threshold")
             AuditCard(insights: viewModel.insights)
+                .id("audit")
             GaitCard(
                 display: viewModel.gaitForDisplay,
                 showSample: $viewModel.showGaitSample,
                 risk: risk,
                 thresholds: viewModel.effectiveThresholds
             )
+            .id("gait")
             if let insights = viewModel.insights,
                !insights.quality.warnings.isEmpty || !insights.quality.errors.isEmpty {
                 DataQualityCard(insights: insights)
+                    .id("data")
             }
         }
         .pulseRow()
@@ -65,10 +69,21 @@ private struct InsightCard<Detail: View>: View {
     let headline: String?
     let summary: String
     @ViewBuilder let detail: () -> Detail
-    @State private var expanded = false
+    @State private var expanded = InsightCardDefaults.expanded
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let badge {
+                // Eyebrow row, so the badge never crowds the title.
+                Text(badge)
+                    .font(Pulse.micro)
+                    .tracking(0.6)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Pulse.watch, in: Capsule())
+                    .foregroundStyle(Pulse.onBrand)
+                    .accessibilityLabel("Sample data")
+            }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: systemImage)
                     .font(.system(size: 17, weight: .semibold))
@@ -76,16 +91,8 @@ private struct InsightCard<Detail: View>: View {
                 Text(title)
                     .font(Pulse.display(19))
                     .foregroundStyle(Pulse.ink)
-                if let badge {
-                    Text(badge)
-                        .font(Pulse.micro)
-                        .tracking(0.6)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Pulse.watch, in: Capsule())
-                        .foregroundStyle(Pulse.onBrand)
-                        .accessibilityLabel("Sample data")
-                }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Spacer(minLength: 8)
                 if let headline {
                     Text(headline)
@@ -119,6 +126,18 @@ private struct InsightCard<Detail: View>: View {
             .padding(.top, 2)
         }
         .pulseCard()
+    }
+}
+
+/// Cards start collapsed. The simulator preview can open them all so a
+/// screenshot shows the detail; that flag does not exist in a device build.
+private enum InsightCardDefaults {
+    static var expanded: Bool {
+        #if targetEnvironment(simulator)
+        return ProcessInfo.processInfo.environment["RUNGUARD_PREVIEW_EXPAND"] == "1"
+        #else
+        return false
+        #endif
     }
 }
 
@@ -353,18 +372,18 @@ struct GaitCard: View {
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
             GridRow {
                 Text("").gridColumnAlignment(.leading)
-                Text("4-wk baseline").fontWeight(.semibold)
+                Text("Baseline").fontWeight(.semibold)
                 Text("This week").fontWeight(.semibold)
                 Text("Change").fontWeight(.semibold)
             }
             GridRow {
-                Text("Ground contact")
+                Text("Contact")
                 Text(d.baselineGroundContactMs.map { "\(Int($0.rounded())) ms" } ?? "—")
                 Text(d.recentGroundContactMs.map { "\(Int($0.rounded())) ms" } ?? "—")
                 Text(d.groundContactDrift.map { ($0 >= 0 ? "+" : "") + pct1($0) } ?? "—")
             }
             GridRow {
-                Text("Vertical osc.")
+                Text("Bounce")
                 Text(d.baselineVerticalOscillationCm.map { String(format: "%.1f cm", $0) } ?? "—")
                 Text(d.recentVerticalOscillationCm.map { String(format: "%.1f cm", $0) } ?? "—")
                 Text(d.verticalOscillationDrift.map { ($0 >= 0 ? "+" : "") + pct1($0) } ?? "—")
@@ -395,7 +414,7 @@ struct RiskQuadrant: View {
     let drift: GaitDrift
 
     private let ratioRange = 0.5...2.0
-    private let driftRange = -0.10...0.15
+    private let driftRange = -0.06...0.12
 
     var body: some View {
         GeometryReader { geo in
@@ -409,10 +428,10 @@ struct RiskQuadrant: View {
                     p.move(to: CGPoint(x: 0, y: yCut)); p.addLine(to: CGPoint(x: w, y: yCut))
                 }
                 .stroke(Pulse.ruleStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                quadrantLabel("Fresh, steady", x: 0, y: h, anchor: .bottomLeading)
-                quadrantLabel("Load up, gait steady", x: w, y: h, anchor: .bottomTrailing)
-                quadrantLabel("Gait drifting, load fine", x: 0, y: 0, anchor: .topLeading)
-                quadrantLabel("Both: ease off", x: w, y: 0, anchor: .topTrailing)
+                quadrantLabel("Load fine · gait steady", x: 0, y: h, anchor: .bottomLeading)
+                quadrantLabel("Load up · gait steady", x: w, y: h, anchor: .bottomTrailing)
+                quadrantLabel("Load fine · gait drifting", x: 0, y: 0, anchor: .topLeading)
+                quadrantLabel("Load up · gait drifting", x: w, y: 0, anchor: .topTrailing)
                 if let ratio = currentRatio, let g = drift.groundContactDrift {
                     let x = w * unit(ratio, in: ratioRange)
                     let y = h * (1 - unit(g, in: driftRange))
@@ -423,11 +442,6 @@ struct RiskQuadrant: View {
                         .position(x: x, y: y)
                         .accessibilityLabel("This week: ratio \(f2(ratio)), contact time \(pct1(g))")
                 }
-                Text("load →").font(.caption2).foregroundStyle(.secondary)
-                    .position(x: w / 2, y: h - 8)
-                Text("gait drift ↑").font(.caption2).foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(-90))
-                    .position(x: 10, y: h / 2)
             }
         }
     }

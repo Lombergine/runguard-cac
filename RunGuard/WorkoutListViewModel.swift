@@ -68,6 +68,16 @@ final class WorkoutListViewModel {
     /// cannot overwrite a newer one.
     private var loadGeneration = 0
 
+    /// Simulator-only preview seam (PreviewData.swift). Always false on a
+    /// device: the code behind it is not compiled there.
+    var isPreview: Bool {
+        #if targetEnvironment(simulator)
+        return PreviewData.isActive
+        #else
+        return false
+        #endif
+    }
+
     private let service: HealthKitService
     private let settings: RunGuardSettings
     init(service: HealthKitService? = nil, settings: RunGuardSettings? = nil) {
@@ -81,6 +91,7 @@ final class WorkoutListViewModel {
     /// Called when the view appears: show the "Connect Health" call-to-action
     /// if the sheet was never presented, otherwise go straight to fetching.
     func refreshStatus() async {
+        if isPreview { await loadRuns(); return }
         guard service.isAvailable else {
             state = .unavailable
             return
@@ -119,7 +130,11 @@ final class WorkoutListViewModel {
         loadGeneration += 1
         let generation = loadGeneration
         do {
+            #if targetEnvironment(simulator)
+            let runs = isPreview ? PreviewData.runs() : try await service.fetchRunningWorkouts()
+            #else
             let runs = try await service.fetchRunningWorkouts()
+            #endif
             // ACWR math is pure and cheap (one pass over ~a year), so it
             // reuses this fetch instead of hitting HealthKit again.
             let assessment = ACWRService.compute(runs: runs, thresholds: settings.thresholds)
@@ -156,6 +171,7 @@ final class WorkoutListViewModel {
     /// plus four baseline weeks). One HealthKit query pair per run.
     private func loadGait(for runs: [RunningWorkout], generation: Int) async {
         healthGait = nil
+        if isPreview { healthGait = .noDynamics; showGaitSample = true; return }
         let cutoff = Calendar.current.date(
             byAdding: .day, value: -HealthKitService.gaitWindowDays, to: .now
         ) ?? .distantPast

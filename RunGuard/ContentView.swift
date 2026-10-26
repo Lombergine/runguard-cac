@@ -129,7 +129,12 @@ struct ContentView: View {
     }
 
     private func runList(_ runs: [RunningWorkout], risk: ACWRStatus) -> some View {
+        ScrollViewReader { proxy in
         List {
+            if viewModel.isPreview {
+                Micro("Preview data · simulator only", color: Pulse.watchText)
+                    .pulseRow()
+            }
             // Cards are list rows (not a header above the List) so they
             // scroll away with the content instead of eating screen space.
             // RunGuard 2.0: restyled to the Pulse system (Theme.swift) and
@@ -137,6 +142,7 @@ struct ContentView: View {
             Section {
                 RiskCard(status: risk, zoneSource: viewModel.zoneSource)
                     .pulseRow()
+                    .id("hero")
                 // Conditioned here, not inside the card: an always-present
                 // row whose body is empty still costs a blank list row.
                 let soreness = sorenessReport
@@ -150,11 +156,13 @@ struct ContentView: View {
                     zoneSource: viewModel.zoneSource
                 )
                 .pulseRow()
+                .id("chart")
                 // RunGuard 2.0 (CAC 2026): personal threshold, self-audit,
                 // gait channel, data quality. AI-assisted, see DISCLOSURE.md.
                 InsightRows(viewModel: viewModel, risk: risk)
                 WeeklyMilesCard(series: viewModel.series)
                     .pulseRow()
+                    .id("weekly")
             }
             Section {
                 ForEach(runs) { run in
@@ -172,6 +180,7 @@ struct ContentView: View {
             } header: {
                 Micro("Runs · last \(HealthKitService.fetchWindowDays) days · \(runs.count) in Health")
                     .padding(.leading, 4)
+                    .id("runs")
             }
         }
         .listStyle(.insetGrouped)
@@ -179,6 +188,17 @@ struct ContentView: View {
         .background(Pulse.bg)
         .refreshable {
             await viewModel.loadRuns()
+        }
+        .onAppear {
+            #if targetEnvironment(simulator)
+            // Scroll a chosen card to the top so a screenshot can show it.
+            if let target = PreviewData.scrollTarget {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation(nil) { proxy.scrollTo(target, anchor: .top) }
+                }
+            }
+            #endif
+        }
         }
     }
 

@@ -66,6 +66,9 @@ AI-assisted, see DISCLOSURE.md`. Specifically:
 | `RunGuard/GaitHealthKit.swift` | HealthKit running-dynamics queries per workout |
 | `RunGuard/InsightsService.swift` | Adapts the app's series to RunGuardCore, decides which zones are in use |
 | `RunGuard/InsightCards.swift` | The four cards and the load-vs-drift quadrant view |
+| `RunGuard/Theme.swift` | The Pulse visual system (palette, type, card chrome, ring), ported from the coach platform's theme files |
+| `RunGuard/HomeCharts.swift` | Workload-ratio chart and weekly-miles chart (Swift Charts) |
+| `RunGuard/PreviewData.swift` | Simulator-only preview seam for screenshots; compiled into no device build |
 | `DISCLOSURE.md`, `README.md`, `docs/*.md` | This file and the submission documents |
 
 **Existing files Claude Code modified (small, listed changes):**
@@ -76,7 +79,9 @@ AI-assisted, see DISCLOSURE.md`. Specifically:
 | `RunGuard/HealthKitService.swift` | Five running-dynamics read types added (still read-only); lookback window 90 → 365 days; `store` made internal for the gait extension |
 | `RunGuard/WorkoutListViewModel.swift` | Loads insights and gait after the run fetch; applies personal zones |
 | `RunGuard/RunGuardSettings.swift`, `RunGuard/SettingsView.swift` | "Personal zones from my history" toggle |
-| `RunGuard/ContentView.swift` | Inserts the four cards under the risk card |
+| `RunGuard/ContentView.swift` | Pulse list styling, inserts the charts and the four cards, restyled run rows |
+| `RunGuard/RiskCard.swift` | Restyled as the hero with a ring; zone names, copy and arithmetic unchanged |
+| `RunGuard/SorenessCard.swift` | Card surface only |
 | `CLAUDE.md` | Scope section updated |
 
 **What Aditya did tonight:** chose which features to build and in what order,

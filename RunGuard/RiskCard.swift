@@ -87,8 +87,8 @@ struct RiskCard: View {
     private var eyebrow: String {
         let day = Date.now.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
         switch zoneSource {
-        case .personalHistory: return "Today · \(day) · your zones"
-        case .coachSettings: return "Today · \(day)"
+        case .personalHistory: return "\(day) · your zones"
+        case .coachSettings: return "\(day)"
         }
     }
 
