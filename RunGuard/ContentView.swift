@@ -5,10 +5,21 @@
 //  Created by jyoti agarwal on 7/12/26.
 //
 
+import SwiftData
 import SwiftUI
 
 struct ContentView: View {
     @State private var viewModel = WorkoutListViewModel()
+    /// Live view of all logged check-ins. @Query is SwiftData's idiomatic
+    /// view wiring: it re-renders this view whenever the store changes, so
+    /// saving in the sheet updates row indicators with no manual plumbing.
+    @Query private var checkIns: [RunCheckIn]
+    /// The run whose log sheet is open; nil = no sheet. Using sheet(item:)
+    /// ties the sheet's lifetime to a specific run.
+    @State private var runToLog: RunningWorkout?
+    /// Coach-adjustable rules. Shared instance so the settings screen and the
+    /// scoring here can never drift apart.
+    @State private var settings = RunGuardSettings.shared
 
     var body: some View {
         NavigationStack {
@@ -68,6 +79,13 @@ struct ContentView: View {
             }
             .navigationTitle("Runs")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        SettingsView(settings: settings)
+                    } label: {
+                        Label("Settings", systemImage: "slider.horizontal.3")
+                    }
+                }
                 // Temporary: entry to the ACWR validation screen.
                 // Remove together with ACWRDebugView.swift.
                 ToolbarItem(placement: .topBarTrailing) {
@@ -83,6 +101,27 @@ struct ContentView: View {
             // Runs when the view first appears; decides which state to show.
             await viewModel.refreshStatus()
         }
+        .sheet(item: $runToLog) { run in
+            RunCheckInView(run: run, existing: checkIn(for: run))
+        }
+        // Moving a cut point rescores the runs already in hand. No HealthKit
+        // round trip: the runs did not change, only where the lines are.
+        .onChange(of: settings.thresholds) {
+            viewModel.rescoreForCurrentThresholds()
+        }
+    }
+
+    /// The workout-UUID foreign key in action: match a HealthKit run to its
+    /// stored check-in.
+    private func checkIn(for run: RunningWorkout) -> RunCheckIn? {
+        checkIns.first { $0.workoutID == run.id }
+    }
+
+    /// Recomputed on each render from the live @Query. Cheap: one pass over
+    /// at most a few months of check-ins, and it means logging a run updates
+    /// the card immediately with no manual invalidation.
+    private var sorenessReport: SorenessReport {
+        SorenessService.report(checkIns: checkIns, settings: settings.soreness)
     }
 
     private func runList(_ runs: [RunningWorkout], risk: ACWRStatus) -> some View {
@@ -95,10 +134,26 @@ struct ContentView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+                // Conditioned here, not inside the card: an always-present
+                // row whose body is empty still costs a blank list row.
+                let soreness = sorenessReport
+                if soreness.hasFlags {
+                    SorenessCard(report: soreness)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
             Section {
                 ForEach(runs) { run in
-                    RunRow(run: run)
+                    // The whole row is the "one tap" that opens the log
+                    // sheet; .plain keeps the text from tinting blue.
+                    Button {
+                        runToLog = run
+                    } label: {
+                        RunRow(run: run, isLogged: checkIn(for: run) != nil)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -138,22 +193,33 @@ struct ContentView: View {
     }
 }
 
-/// One run in the list: date on top, metrics underneath.
+/// One run in the list: date on top, metrics underneath, log indicator at
+/// the trailing edge.
 struct RunRow: View {
     let run: RunningWorkout
+    let isLogged: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(run.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                .font(.headline)
-            HStack(spacing: 16) {
-                Label(distanceText, systemImage: "ruler")
-                Label(durationText, systemImage: "stopwatch")
-                Label(heartRateText, systemImage: "heart")
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(run.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                    .font(.headline)
+                HStack(spacing: 16) {
+                    Label(distanceText, systemImage: "ruler")
+                    Label(durationText, systemImage: "stopwatch")
+                    Label(heartRateText, systemImage: "heart")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleAndIcon)
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .labelStyle(.titleAndIcon)
+            Spacer()
+            // Subtle logged/unlogged cue: green check once logged, faint
+            // plus inviting a tap before.
+            Image(systemName: isLogged ? "checkmark.circle.fill" : "plus.circle")
+                .font(.body)
+                .foregroundStyle(isLogged ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
+                .accessibilityLabel(isLogged ? "Logged" : "Not logged")
         }
         .padding(.vertical, 2)
     }
@@ -176,4 +242,5 @@ struct RunRow: View {
 
 #Preview {
     ContentView()
+        .modelContainer(for: RunCheckIn.self, inMemory: true)
 }

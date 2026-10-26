@@ -13,21 +13,30 @@ import Foundation
 // would otherwise pin them (and everything that calls them) to the main
 // thread.
 nonisolated enum TrainingZone: Equatable {
-    /// Ratio < 0.8 — training well below your adaptation baseline.
+    /// Below `undertrainingBelow` (0.8 by default) — training well below
+    /// your adaptation baseline.
     case undertraining
-    /// 0.8 ..< 1.3 — the "sweet spot": enough stimulus, low spike risk.
+    /// The "sweet spot": enough stimulus, low spike risk.
     case optimal
-    /// 1.3 ... 1.5 — load is climbing faster than the base supports.
+    /// Load is climbing faster than the base supports.
     case caution
-    /// > 1.5 — acute spike; injury risk rises sharply in the literature.
+    /// Acute spike; injury risk rises sharply in the literature.
     case highRisk
 
-    init(ratio: Double) {
-        switch ratio {
-        case ..<0.8: self = .undertraining
-        case ..<1.3: self = .optimal
-        case ...1.5: self = .caution
-        default: self = .highRisk
+    /// The cut points are a parameter, not a constant, because coaches run
+    /// different programs and asked to move them. `.standard` reproduces the
+    /// published Gabbett values, so existing callers and tests are unchanged.
+    /// Written as if/else rather than a `switch` because range patterns need
+    /// compile-time bounds.
+    init(ratio: Double, thresholds: ACWRThresholds = .standard) {
+        if ratio < thresholds.undertrainingBelow {
+            self = .undertraining
+        } else if ratio < thresholds.optimalBelow {
+            self = .optimal
+        } else if ratio <= thresholds.cautionThrough {
+            self = .caution
+        } else {
+            self = .highRisk
         }
     }
 }
@@ -98,16 +107,17 @@ final class ACWRService {
     /// Fetches runs (window = HealthKitService.fetchWindowDays, 90 days —
     /// comfortably more than the 28-day chronic window) and computes the
     /// assessment.
-    func assessment() async throws -> ACWRAssessment {
+    func assessment(thresholds: ACWRThresholds = .standard) async throws -> ACWRAssessment {
         let runs = try await healthKit.fetchRunningWorkouts()
-        return Self.compute(runs: runs)
+        return Self.compute(runs: runs, thresholds: thresholds)
     }
 
     /// Pure ACWR math over already-fetched runs.
     nonisolated static func compute(
         runs: [RunningWorkout],
         asOf now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        thresholds: ACWRThresholds = .standard
     ) -> ACWRAssessment {
         let today = calendar.startOfDay(for: now)
 
@@ -155,7 +165,7 @@ final class ACWRService {
                 acuteLoad: acute,
                 chronicLoad: chronic,
                 ratio: ratio,
-                zone: ratio.map(TrainingZone.init(ratio:)),
+                zone: ratio.map { TrainingZone(ratio: $0, thresholds: thresholds) },
                 lowConfidence: (i + 1) < Self.minimumHistoryDays
             )
         }

@@ -39,12 +39,13 @@ final class WorkoutListViewModel {
     private(set) var state: ScreenState = .checking
 
     private let service: HealthKitService
-
-    init(service: HealthKitService? = nil) {
+    private let settings: RunGuardSettings
+    init(service: HealthKitService? = nil, settings: RunGuardSettings? = nil) {
         // Constructed inside the init (not as a default argument) because
         // default arguments evaluate outside this class's MainActor
         // isolation, which Swift 6 flags.
         self.service = service ?? HealthKitService()
+        self.settings = settings ?? RunGuardSettings.shared
     }
 
     /// Called when the view appears: show the "Connect Health" call-to-action
@@ -89,10 +90,19 @@ final class WorkoutListViewModel {
             let runs = try await service.fetchRunningWorkouts()
             // ACWR math is pure and cheap (one pass over ~90 days), so it
             // reuses this fetch instead of hitting HealthKit again.
-            let risk = ACWRService.compute(runs: runs).status
+            let risk = ACWRService.compute(runs: runs, thresholds: settings.thresholds).status
             state = .loaded(runs: runs, risk: risk)
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// Rescore the runs already in hand against the current thresholds.
+    /// Called when a coach changes a cut point; does nothing unless runs are
+    /// already loaded, so it can be attached to onChange without guarding.
+    func rescoreForCurrentThresholds() {
+        guard case .loaded(let runs, _) = state, !runs.isEmpty else { return }
+        let risk = ACWRService.compute(runs: runs, thresholds: settings.thresholds).status
+        state = .loaded(runs: runs, risk: risk)
     }
 }
