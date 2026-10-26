@@ -109,6 +109,10 @@ struct ContentView: View {
         .onChange(of: settings.thresholds) {
             viewModel.rescoreForCurrentThresholds()
         }
+        // RunGuard 2.0: switching personal zones on or off is also a rescore.
+        .onChange(of: settings.usePersonalZones) {
+            viewModel.rescoreForCurrentThresholds()
+        }
     }
 
     /// The workout-UUID foreign key in action: match a HealthKit run to its
@@ -143,6 +147,9 @@ struct ContentView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
+                // RunGuard 2.0 (CAC 2026): personal threshold, self-audit,
+                // gait channel, data quality. AI-assisted, see DISCLOSURE.md.
+                InsightRows(viewModel: viewModel, risk: risk)
             }
             Section {
                 ForEach(runs) { run in

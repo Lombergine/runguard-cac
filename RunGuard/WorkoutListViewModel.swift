@@ -9,6 +9,7 @@ import Foundation
 // by the service) are only visible with the defining module imported.
 import HealthKit
 import Observation
+import RunGuardCore
 
 @MainActor
 @Observable
@@ -37,6 +38,33 @@ final class WorkoutListViewModel {
     }
 
     private(set) var state: ScreenState = .checking
+
+    // MARK: - RunGuard 2.0 (CAC 2026), AI-assisted, see DISCLOSURE.md
+
+    /// Quality pre-flight, personal threshold and self-audit over the same
+    /// daily series the risk card is built from. Nil until runs are loaded.
+    private(set) var insights: LoadInsights?
+    /// The cut points the risk card is coloured with right now, and why.
+    private(set) var effectiveThresholds: ACWRThresholds = .standard
+    private(set) var zoneSource: ZoneSource = .coachSettings
+    /// Running dynamics read from Health for the last five weeks. Nil while
+    /// the query is in flight.
+    private(set) var healthGait: GaitAnalysis?
+    /// Show the clearly labelled sample gait dataset instead of Health data,
+    /// for devices whose watch does not write running dynamics.
+    var showGaitSample = false
+    /// What the gait card renders: Health data, or the sample when asked
+    /// for. `isSample` drives the on-screen label, so the two can never be
+    /// confused.
+    var gaitForDisplay: (analysis: GaitAnalysis, isSample: Bool)? {
+        if showGaitSample {
+            return (Gait.analyze(runs: SampleGaitData.sixWeeksWithDrift()), true)
+        }
+        return healthGait.map { ($0, false) }
+    }
+    /// Bumped on every load so a background result from an earlier fetch
+    /// cannot overwrite a newer one.
+    private var loadGeneration = 0
 
     private let service: HealthKitService
     private let settings: RunGuardSettings
@@ -86,14 +114,64 @@ final class WorkoutListViewModel {
 
     func loadRuns() async {
         state = .loading
+        loadGeneration += 1
+        let generation = loadGeneration
         do {
             let runs = try await service.fetchRunningWorkouts()
-            // ACWR math is pure and cheap (one pass over ~90 days), so it
+            // ACWR math is pure and cheap (one pass over ~a year), so it
             // reuses this fetch instead of hitting HealthKit again.
-            let risk = ACWRService.compute(runs: runs, thresholds: settings.thresholds).status
+            let assessment = ACWRService.compute(runs: runs, thresholds: settings.thresholds)
+
+            // RunGuard 2.0: the quality pre-flight, the personal threshold
+            // and the audit's point estimate are instant, so they land with
+            // the list. The bootstrap interval and the gait query follow in
+            // the background and never block the screen.
+            insights = InsightsService.compute(series: assessment.series, bootstrapDraws: 0)
+            applyZones()
+            let risk = ACWRService.compute(runs: runs, thresholds: effectiveThresholds).status
             state = .loaded(runs: runs, risk: risk)
+
+            let series = assessment.series
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let full = InsightsService.compute(
+                    series: series, bootstrapDraws: InsightsService.onDeviceBootstrapDraws
+                )
+                await self?.receiveInsights(full, generation: generation)
+            }
+            await loadGait(for: runs, generation: generation)
         } catch {
             state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func receiveInsights(_ full: LoadInsights?, generation: Int) {
+        guard generation == loadGeneration else { return }
+        insights = full
+    }
+
+    /// Running dynamics for the runs the gait model can use (recent week
+    /// plus four baseline weeks). One HealthKit query pair per run.
+    private func loadGait(for runs: [RunningWorkout], generation: Int) async {
+        healthGait = nil
+        let cutoff = Calendar.current.date(
+            byAdding: .day, value: -HealthKitService.gaitWindowDays, to: .now
+        ) ?? .distantPast
+        let gaitRuns = await service.fetchGaitRuns(for: runs.filter { $0.date >= cutoff })
+        guard generation == loadGeneration else { return }
+        healthGait = Gait.analyze(runs: gaitRuns)
+    }
+
+    /// Which cut points colour the risk card: the athlete's own percentiles
+    /// once there is enough history and the setting is on, otherwise
+    /// whatever the coach set.
+    private func applyZones() {
+        if settings.usePersonalZones,
+           let personal = insights?.personalZones(basedOn: settings.thresholds) {
+            effectiveThresholds = personal
+            zoneSource = .personalHistory
+        } else {
+            effectiveThresholds = settings.thresholds
+            zoneSource = .coachSettings
         }
     }
 
@@ -102,7 +180,8 @@ final class WorkoutListViewModel {
     /// already loaded, so it can be attached to onChange without guarding.
     func rescoreForCurrentThresholds() {
         guard case .loaded(let runs, _) = state, !runs.isEmpty else { return }
-        let risk = ACWRService.compute(runs: runs, thresholds: settings.thresholds).status
+        applyZones()
+        let risk = ACWRService.compute(runs: runs, thresholds: effectiveThresholds).status
         state = .loaded(runs: runs, risk: risk)
     }
 }

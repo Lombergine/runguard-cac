@@ -10,7 +10,7 @@ import HealthKit
 final class HealthKitService {
     /// One store per app is Apple's recommended pattern; it is cheap to hold
     /// and all queries/authorization go through it.
-    private let store = HKHealthStore()
+    let store = HKHealthStore()
 
     /// Everything RunGuard reads. Read-only by design — we never pass any
     /// types to `toShare`, so the app cannot write to Health.
@@ -21,6 +21,16 @@ final class HealthKitService {
         HKQuantityType(.distanceWalkingRunning),
         // Heart-rate samples, needed later for per-run average HR.
         HKQuantityType(.heartRate),
+        // Running dynamics, recorded per outdoor run by Apple Watch (watchOS
+        // 9+). Added for RunGuard 2.0: the gait channel reads ground contact
+        // time and vertical oscillation per workout (GaitHealthKit.swift).
+        // Devices that never wrote these (Garmin and most third-party
+        // watches) simply return no samples. Still read-only.
+        HKQuantityType(.runningGroundContactTime),
+        HKQuantityType(.runningVerticalOscillation),
+        HKQuantityType(.runningStrideLength),
+        HKQuantityType(.runningPower),
+        HKQuantityType(.runningSpeed),
     ]
 
     /// False on devices without Health data (e.g. some iPads); calling any
@@ -47,8 +57,11 @@ final class HealthKitService {
 
     // MARK: - Workout query
 
-    /// The single knob for how far back RunGuard looks for runs.
-    static let fetchWindowDays = 90
+    /// The single knob for how far back RunGuard looks for runs. Raised from
+    /// 90 to 365 for RunGuard 2.0: the personal threshold and the self-audit
+    /// need 60+ days that carry a ratio, which means 88+ days of history, and
+    /// a year gives the percentiles something to stand on.
+    static let fetchWindowDays = 365
 
     /// Beats-per-minute: HealthKit stores heart rate as count/time, so the
     /// unit is built by dividing.

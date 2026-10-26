@@ -110,6 +110,7 @@ final class RunGuardSettings {
 
     private static let thresholdsKey = "runguard.acwrThresholds.v1"
     private static let sorenessKey = "runguard.sorenessSettings.v1"
+    private static let personalZonesKey = "runguard.usePersonalZones.v1"
 
     private let defaults: UserDefaults
 
@@ -133,6 +134,14 @@ final class RunGuardSettings {
         }
     }
 
+    /// RunGuard 2.0 (CAC 2026, see DISCLOSURE.md): colour the risk card with
+    /// cut points learned from the athlete's own ratio history once 60+ days
+    /// carry a ratio. On by default; the threshold card always says which
+    /// set is in use, so the switch can never be invisible.
+    var usePersonalZones: Bool {
+        didSet { defaults.set(usePersonalZones, forKey: Self.personalZonesKey) }
+    }
+
     /// `UserDefaults?` rather than a default argument of `.standard`, because
     /// default arguments are evaluated outside this type's MainActor
     /// isolation (same reason HealthKitService is built inside its inits).
@@ -141,6 +150,7 @@ final class RunGuardSettings {
         self.defaults = store
         self.thresholds = Self.load(ACWRThresholds.self, key: Self.thresholdsKey, from: store)?.normalized() ?? .standard
         self.soreness = Self.load(SorenessSettings.self, key: Self.sorenessKey, from: store)?.normalized() ?? .standard
+        self.usePersonalZones = store.object(forKey: Self.personalZonesKey) as? Bool ?? true
     }
 
     var usesCustomThresholds: Bool { thresholds != .standard }

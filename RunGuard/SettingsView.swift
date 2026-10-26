@@ -89,6 +89,15 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            // RunGuard 2.0 (CAC 2026), AI-assisted, see DISCLOSURE.md
+            Section {
+                Toggle("Personal zones from my history", isOn: $settings.usePersonalZones)
+            } header: {
+                Text("RunGuard 2.0")
+            } footer: {
+                Text("Once 60 days carry a ratio, caution starts at your own 90th percentile and high risk above your 95th, instead of the published 1.3 and 1.5. The risk card says which set is in use. A cut point chosen from your own history flags a fixed share of your days by construction, so this shows how arbitrary the universal number is rather than replacing it with a validated one.")
+            }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
