@@ -1,4 +1,10 @@
-# RunGuard
+# RunGuard (Swift cross-check)
+
+> **Not the competition entry.** The Congressional App Challenge 2026 entry is the
+> RunGuard product (Expo app + Next.js server) at
+> github.com/runguard663-ui/frREALRUNGUARDfr, branch `cac-2.0`. This repository is a
+> native Swift implementation of the same 2.0 statistics, built the same night and
+> tested against the same Python fixture, kept as an independent cross-check.
 
 **The injury score that tests itself.**
 

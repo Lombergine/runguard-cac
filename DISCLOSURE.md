@@ -1,4 +1,8 @@
-# Disclosure of AI use — RunGuard, Congressional App Challenge 2026
+# Disclosure of AI use — RunGuard Swift cross-check
+
+> This repository is **not** the CAC 2026 entry; see the README. The entry's own
+> DISCLOSURE.md lives in the product repository. The statements below are kept
+> because they are true of this code.
 
 This file states exactly what was written by whom. The CAC rules permit AI
 tools "to support specific aspects of the project" provided all use is fully
