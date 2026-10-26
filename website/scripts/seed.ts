@@ -445,6 +445,45 @@ async function seed() {
   insertInjury.run(grace.id, iso(-200), "achilles (right)", "Tendinopathy last season — manages with eccentric calf work");
 
   /*
+   * RunGuard 2.0 (CAC 2026, AI-assisted, see DISCLOSURE.md): a year of
+   * injuries for the sample team, so the coach dashboard's Impellizzeri test
+   * has events to run on. Generated, not invented one by one: each athlete's
+   * daily distance is compared against their trailing four weeks and an
+   * injury is drawn with a probability that rises with that ratio, capped at
+   * two per athlete and 45 days apart. This gives a team where injury follows
+   * load spikes, which is the world the ratio assumes, so the test has
+   * something to find. The demo banner already says the team is made up.
+   */
+  const bodyParts = ["shin (left)", "shin (right)", "knee (left)", "knee (right)", "achilles (left)", "hip (right)", "foot (left)", "calf (right)", "IT band (left)"];
+  for (const a of seeded) {
+    const rows = db
+      .prepare("SELECT start_time, distance_m FROM activities WHERE athlete_id=? ORDER BY start_time")
+      .all(a.id) as { start_time: string; distance_m: number }[];
+    const kmByDay = new Map<string, number>();
+    for (const r of rows) {
+      const d = r.start_time.slice(0, 10);
+      kmByDay.set(d, (kmByDay.get(d) ?? 0) + r.distance_m / 1000);
+    }
+    let logged = 0;
+    let lastAt = -999;
+    for (let d = 320; d >= 8; d--) {
+      if (logged >= 2 || d > lastAt - 45 && lastAt !== -999 && lastAt - d < 45) continue;
+      const day = (k: number) => iso(-k);
+      let week = 0;
+      for (let k = 0; k < 7; k++) week += kmByDay.get(day(d + k)) ?? 0;
+      let month = 0;
+      for (let k = 7; k < 35; k++) month += kmByDay.get(day(d + k)) ?? 0;
+      const ratio = month > 0 ? week / (month / 4) : 0;
+      const pLoad = 0.0015 + Math.max(0, ratio - 1.15) * 0.05;
+      if (rand() < pLoad) {
+        insertInjury.run(a.id, day(d), bodyParts[Math.floor(rand() * bodyParts.length)], "Reported after a heavy week (sample data)");
+        logged++;
+        lastAt = d;
+      }
+    }
+  }
+
+  /*
    * A written training calendar for the demo team.
    *
    * Without this the coach's Training calendar page opens empty, and "the days

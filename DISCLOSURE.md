@@ -74,6 +74,7 @@ Aditya. Every new or modified file carries the header `Added for RunGuard 2.0
 | `website/src/app/dashboard/page.tsx` | Mounts the team audit panel |
 | `website/src/app/dashboard/athlete/[id]/page.tsx`, `website/src/components/athlete/tabs.tsx`, `website/src/components/charts.tsx` | Audit panels and the personal line on the web |
 | `website/package.json` | Adds vitest and the `test` / `typecheck` scripts |
+| `website/scripts/seed.ts` | The sample team gets a generated year of load-driven injuries so the team test has events; the demo banner already says the team is made up |
 | `app/src/lib/health.ts` | Two running-dynamics read scopes and `readRunningDynamics` (still read-only) |
 | `app/src/lib/types.ts` | `Profile.audit` and the `AthleteAudit` type |
 | `app/src/components/charts/AcwrChart.tsx` | Draws the athlete's own 95th-percentile line in violet |
