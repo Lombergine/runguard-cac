@@ -40,12 +40,11 @@ export function ExplainCard({ gait }: { gait: { gctDriftPct: number | null; voDr
     <View style={styles.panel}>
       <View style={styles.panelHead}>
         <Text style={styles.panelTitle}>Explain my numbers</Text>
-        <Text style={styles.panelNote}>the model explains, it never computes</Text>
       </View>
       {state !== "done" ? (
         <>
           <Text style={styles.lede}>
-            Ask for the readings above in plain words. The explanation may only use numbers RunGuard computed; every figure in the reply is checked against them before it is shown.
+            The panels above in plain words. Every number in the reply is checked against what RunGuard computed before it is shown.
           </Text>
           <Press
             onPress={() => void go()}
@@ -54,7 +53,7 @@ export function ExplainCard({ gait }: { gait: { gctDriftPct: number | null; voDr
             style={[styles.button, state === "loading" && styles.buttonBusy]}
             pressedStyle={styles.buttonPressed}
           >
-            <Text style={styles.buttonLabel}>{state === "loading" ? "Explaining\u2026" : state === "error" ? "Try again" : "Explain in plain words"}</Text>
+            <Text style={styles.buttonLabel}>{state === "loading" ? "Explaining\u2026" : state === "error" ? "Try again" : "Explain"}</Text>
           </Press>
         </>
       ) : r ? (
@@ -70,8 +69,8 @@ export function ExplainCard({ gait }: { gait: { gctDriftPct: number | null; voDr
           </View>
           <Text style={styles.source}>
             {r.source === "template"
-              ? `RunGuard\u2019s own wording \u2014 ${r.fallbackReason}.`
-              : `Written by ${r.model} from the numbers above, and checked: every figure in the reply had to be one it was given.`}
+              ? `RunGuard\u2019s own wording: ${r.fallbackReason}.`
+              : `Written by ${r.model} and checked against the numbers above.`}
           </Text>
         </>
       ) : null}

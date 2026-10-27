@@ -36,7 +36,7 @@ export default function ExplainButton({ athleteId }: { athleteId?: number }) {
     <div className="rounded-2xl border p-5" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
         <h2 className="text-sm font-semibold">Explain these numbers</h2>
-        <span className="text-xs" style={muted}>the model explains; it never computes</span>
+        <span className="text-xs" style={muted}>every number in the reply is checked against the panels above</span>
       </div>
       {state !== "done" ? (
         <button
@@ -46,7 +46,7 @@ export default function ExplainButton({ athleteId }: { athleteId?: number }) {
           className="rounded-xl px-4 py-2 text-sm font-semibold"
           style={{ background: "var(--brand)", color: "var(--on-brand, #25100A)" }}
         >
-          {state === "loading" ? "Explaining…" : state === "error" ? "Try again" : "Explain in plain words"}
+          {state === "loading" ? "Explaining…" : state === "error" ? "Try again" : "Explain"}
         </button>
       ) : r ? (
         <div className="grid lg:grid-cols-2 gap-4">
@@ -56,8 +56,8 @@ export default function ExplainButton({ athleteId }: { athleteId?: number }) {
             <p className="text-xs mt-2 italic" style={muted}>{r.explanation.citation}</p>
             <p className="text-xs mt-3" style={muted}>
               {r.source === "template"
-                ? `RunGuard’s own wording — ${r.fallbackReason}.`
-                : `Written by ${r.model} from the numbers on the right, validated against them: every figure in the reply had to appear in the input.`}
+                ? `RunGuard’s own wording: ${r.fallbackReason}.`
+                : `Written by ${r.model} and checked against the numbers on the right.`}
             </p>
           </div>
           <pre className="text-[11px] leading-relaxed rounded-xl p-3 overflow-x-auto" style={{ background: "var(--surface-2)", color: "var(--ink-2, var(--ink))" }}>

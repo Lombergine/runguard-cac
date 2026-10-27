@@ -1,7 +1,8 @@
 /**
  * The team audit on the coach's overview: per-athlete score trust, and the
- * Impellizzeri experiment run on this team's own injury log. Describes, never
- * instructs; a missing result says why.
+ * Impellizzeri experiment run on this team's own injury log. Figures first,
+ * one sentence, method behind a disclosure. Describes, never instructs; a
+ * missing result says why.
  *
  * Added for RunGuard 2.0 (CAC 2026), AI-assisted, see DISCLOSURE.md.
  */
@@ -16,35 +17,53 @@ const muted = { color: "var(--ink-muted)" } as const;
 export default function TeamAuditPanel({ audit }: { audit: TeamAudit }) {
   const c = audit.pooled.comparison;
   const s = audit.summary;
+  const n = audit.athletes.length;
+  const verdict = c
+    ? c.realBeatsNull
+      ? "The 4-week baseline is carrying information on this team."
+      : c.realOutsideNull
+        ? "The real baseline scores below a random one: the paper’s result, reproduced here."
+        : "The real ratio sits inside the noise interval. The baseline added nothing on this team, which is the paper’s result."
+    : null;
+
   return (
     <div className="rounded-2xl border p-5" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
         <h2 className="text-sm font-semibold">Can the score be trusted on this team?</h2>
-        <span className="text-xs" style={muted}>last {audit.days} days · {audit.athletes.length} athletes · {audit.pooled.events} logged injur{audit.pooled.events === 1 ? "y" : "ies"}</span>
+        <span className="text-xs" style={muted}>
+          {audit.days} days · {n} athletes · {audit.pooled.events} logged injur{audit.pooled.events === 1 ? "y" : "ies"}
+        </span>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-3 mb-4">
-        <Tile label="Median self-audit ρ" value={s.medianRho !== null ? f2(s.medianRho) : "—"} sub={s.medianRho !== null ? (s.medianRho >= 0.9 ? "the score is mostly weekly mileage" : s.medianRho >= 0.7 ? "mostly last week, baseline adds some" : "the 4-week baseline is doing real work") : `needs 60 days with a ratio · ${s.withPersonalZones} of ${audit.athletes.length} have it`} />
-        <Tile label="1.5 is out of reach for" value={`${s.universalAboveOwn99th} of ${audit.athletes.length}`} sub="athletes whose own 99th percentile sits below the universal cutoff" />
-        <Tile label="Own 95th below 1.3 for" value={`${s.own95thBelowCaution} of ${audit.athletes.length}`} sub="athletes the published caution line would never warn" />
+        <Tile
+          label="Median self-audit"
+          value={s.medianRho !== null ? `ρ ${f2(s.medianRho)}` : "—"}
+          sub={s.medianRho !== null ? (s.medianRho >= 0.9 ? "just mileage" : s.medianRho >= 0.7 ? "mostly last week" : "baseline matters") : `${s.withPersonalZones} of ${n} have 60 days with a ratio`}
+        />
+        <Tile label="1.5 out of reach for" value={`${s.universalAboveOwn99th} of ${n}`} sub="own 99th below 1.5" />
+        <Tile label="Own 95th below 1.3" value={`${s.own95thBelowCaution} of ${n}`} sub="1.3 would never warn" />
       </div>
 
       <div className="rounded-xl border p-4 mb-4" style={{ borderColor: "var(--hairline)", background: "var(--surface-2)" }}>
-        <div className="text-xs uppercase tracking-wide mb-1" style={muted}>The Impellizzeri test, on this roster</div>
+        <div className="text-xs uppercase tracking-wide mb-3" style={muted}>The Impellizzeri test, on this roster</div>
         {c ? (
           <>
-            <p className="text-sm">
-              Across {c.n.toLocaleString()} athlete-days and {c.nEvents} injuries, the ratio the app shows separates injury days from the rest with an AUC of <b>{f2(c.real)}</b> ({f2(c.realCiLow)} to {f2(c.realCiHigh)}). A ratio whose 4-week denominator was shuffled into noise scores <b>{f2(c.null)}</b> ({f2(c.nullCiLow)} to {f2(c.nullCiHigh)}, {c.nNullDraws} draws).{" "}
-              {c.realBeatsNull
-                ? "The real denominator is carrying information on this team."
-                : c.realOutsideNull
-                  ? "The real denominator is costing signal that a random one did not: the paper\u2019s result, reproduced here."
-                  : "The real ratio sits inside the noise interval: the chronic denominator added nothing on this team, which is the paper\u2019s result, reproduced here."}
-            </p>
-            <p className="text-xs mt-2" style={muted}>Descriptive, not a hypothesis test, and nothing about causation. An AUC of 0.5 is a coin flip; both ratios share the real numerator, so both can sit above it.</p>
+            <div className="grid sm:grid-cols-3 gap-4 mb-3">
+              <Figure label="Real ratio" value={f2(c.real)} caption={`AUC · ${f2(c.realCiLow)} to ${f2(c.realCiHigh)}`} strong />
+              <Figure label="Noise ratio" value={f2(c.null)} caption={`AUC · ${f2(c.nullCiLow)} to ${f2(c.nullCiHigh)}`} />
+              <Figure label="Evidence" value={String(c.nEvents)} caption={`injuries · ${c.n.toLocaleString()} athlete-days`} />
+            </div>
+            <p className="text-sm">{verdict}</p>
+            <details className="mt-2 text-xs" style={muted}>
+              <summary className="cursor-pointer select-none" style={{ color: "var(--brand-text, var(--ink))" }}>Details</summary>
+              <p className="mt-2">
+                Every athlete-day with a ratio, labelled 1 on days an injury was logged. AUC of the shown ratio against those labels, with a bootstrap interval, then the same for a ratio whose 4-week denominator was shuffled into noise ({c.nNullDraws} draws). Descriptive, not a hypothesis test, and nothing about causation. An AUC of 0.5 is a coin flip; both ratios share the real numerator, so both can sit above it. Impellizzeri et al. (2021), Sports Medicine 51(3).
+              </p>
+            </details>
           </>
         ) : (
-          <p className="text-sm" style={muted}>{audit.pooled.reason} Log injuries as they happen (the athlete page has the form) and this panel will run the test on its own.</p>
+          <p className="text-sm" style={muted}>{audit.pooled.reason} Injuries logged on the athlete page feed this test.</p>
         )}
       </div>
 
@@ -77,9 +96,7 @@ export default function TeamAuditPanel({ audit }: { audit: TeamAudit }) {
           ))}
         </tbody>
       </table>
-      <p className="text-xs mt-3" style={muted}>
-        ρ is how closely each athlete&rsquo;s score tracks their last 7 days alone (Impellizzeri et al. 2021); a dash means fewer than 60 days with a ratio. &ldquo;1.5 flags&rdquo; is the share of their days the universal cutoff would flag.
-      </p>
+      <p className="text-xs mt-3" style={muted}>A dash means fewer than 60 days with a ratio. &ldquo;1.5 flags&rdquo; is the share of days the universal cutoff would flag.</p>
     </div>
   );
 }
@@ -90,6 +107,16 @@ function Tile({ label, value, sub }: { label: string; value: string; sub: string
       <div className="text-xs uppercase tracking-wide" style={muted}>{label}</div>
       <div className="text-2xl font-bold tabular-nums leading-none mt-1">{value}</div>
       <div className="text-xs mt-1" style={muted}>{sub}</div>
+    </div>
+  );
+}
+
+function Figure({ label, value, caption, strong }: { label: string; value: string; caption?: string; strong?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] uppercase tracking-wide" style={muted}>{label}</div>
+      <div className="text-2xl font-bold tabular-nums leading-none mt-1" style={strong ? { color: "var(--brand-text, var(--ink))" } : undefined}>{value}</div>
+      {caption ? <div className="text-xs mt-1 truncate" style={muted}>{caption}</div> : null}
     </div>
   );
 }

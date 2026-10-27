@@ -217,7 +217,7 @@ export function AcwrChart({
             the month behind it. Days with no ratio yet are dashed, and the line
             breaks across them.
             {personal != null && personal > 0
-              ? ` The violet dashed line at ${personal.toFixed(2)} is your own 95th percentile — the cut that flags your hardest 5% of days, learned from your history. See "Your threshold" below.`
+              ? ` The violet dashed line at ${personal.toFixed(2)} is your own 95th percentile, from your own history.`
               : ""}
           </Text>
 

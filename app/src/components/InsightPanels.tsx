@@ -2,16 +2,20 @@
  * RunGuard 2.0 on the Stats screen: four panels under the workload chart.
  *
  *  - ThresholdPanel: what the universal 1.5 cutoff picks out of this
- *    athlete's own history, their own percentiles, and which cut points are
- *    in use.
+ *    athlete's own history, and their own cut points.
  *  - AuditPanel: the self-audit. How closely the score tracks the last
  *    seven days alone (Impellizzeri et al. 2021), with a bootstrap interval.
- *  - DataCheckPanel: the pre-flight on the training log, with dates.
  *  - GaitPanel: ground contact time and vertical oscillation this week
- *    against the athlete's own four-week baseline, read from Apple Watch
- *    running dynamics in Health, with a two-axis load-vs-drift view. On a
- *    device whose watch writes no dynamics the panel says so and offers a
- *    switch to a SAMPLE DATA set, badged as such.
+ *    against the athlete's own four-week baseline, from Apple Watch running
+ *    dynamics in Health. On a device whose watch writes no dynamics the panel
+ *    says so, points at the camera check, and offers a SAMPLE DATA set,
+ *    badged as such.
+ *  - DataCheckPanel: the pre-flight on the training log, with dates.
+ *
+ * Shape of every panel, in the Run card's own grammar: a title, a row of
+ * figures (label over a mono value), at most one sentence, and a "Details"
+ * disclosure holding the method. The figures carry the reading; the prose
+ * does not repeat them.
  *
  * Every number comes from the server's `audit` (website/src/lib/
  * acwrDiagnostics.ts) or from `lib/gait.ts`; nothing here computes a
@@ -23,7 +27,7 @@
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Platform, StyleSheet, Switch, Text, View } from "react-native";
+import { Platform, StyleSheet, Switch, Text, View, type ColorValue } from "react-native";
 import Svg, { Circle, Line, Rect, Text as SvgText } from "react-native-svg";
 
 import { Press } from "./Press";
@@ -45,45 +49,65 @@ import { color, shadow, useColors } from "../theme/tokens";
 import { text } from "../theme/type";
 
 const f2 = (x: number) => x.toFixed(2);
-function ordinal(p: number): string {
-  const r = Math.round(p * 10) / 10;
-  const n = Math.floor(r) % 100;
-  const suffix = n >= 11 && n <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
-  return `${Number.isInteger(r) ? r : r.toFixed(1)}${suffix}`;
-}
+const signed = (v: number) => `${v >= 0 ? "+" : "−"}${pct(Math.abs(v))}`;
 
 /* ------------------------------------------------------------------ *
- * Panel chrome: the Stats screen's information unit, plus a headline
- * figure and an expandable "how this is computed".
+ * Panel chrome
  * ------------------------------------------------------------------ */
+
+type Figure = { label: string; value: string | null; caption?: string; tone?: ColorValue };
+
+function Figures({ figures }: { figures: Figure[] }) {
+  return (
+    <View style={styles.figures}>
+      {figures.map((f, i) => (
+        <View key={f.label} style={[styles.figure, i > 0 && styles.figureRule]}>
+          <Text style={styles.figureLabel} numberOfLines={1}>
+            {f.label}
+          </Text>
+          <Text style={[styles.figureValue, f.value === null && styles.figureAbsent, f.tone ? { color: f.tone } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {f.value ?? "—"}
+          </Text>
+          {f.caption ? (
+            <Text style={styles.figureCaption} numberOfLines={1}>
+              {f.caption}
+            </Text>
+          ) : null}
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function Panel({
   title,
   note,
-  headline,
   badge,
+  figures,
   children,
   detail,
 }: {
   title: string;
   note?: string;
-  headline?: string | null;
   badge?: string;
-  children: React.ReactNode;
+  figures?: Figure[];
+  children?: React.ReactNode;
   detail?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <View style={styles.panel}>
-      {badge ? (
-        <View style={styles.badge} accessibilityLabel="Sample data">
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      ) : null}
       <View style={styles.panelHead}>
         <Text style={styles.panelTitle}>{title}</Text>
-        {headline ? <Text style={styles.headline}>{headline}</Text> : note ? <Text style={styles.panelNote}>{note}</Text> : null}
+        {badge ? (
+          <View style={styles.badge} accessibilityLabel="Sample data">
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        ) : note ? (
+          <Text style={styles.panelNote}>{note}</Text>
+        ) : null}
       </View>
+      {figures ? <Figures figures={figures} /> : null}
       {children}
       {detail ? (
         <>
@@ -91,11 +115,12 @@ function Panel({
           <Press
             onPress={() => setOpen((o) => !o)}
             accessibilityRole="button"
-            accessibilityLabel={open ? "Hide how this is computed" : "Show how this is computed"}
+            accessibilityState={{ expanded: open }}
+            accessibilityLabel={open ? "Hide details" : "Show details"}
             style={styles.more}
             pressedStyle={styles.morePressed}
           >
-            <Text style={styles.moreLabel}>{open ? "Less" : "How this is computed"}</Text>
+            <Text style={styles.moreLabel}>{open ? "Hide details" : "Details"}</Text>
           </Press>
         </>
       ) : null}
@@ -110,42 +135,40 @@ function Panel({
 export function ThresholdPanel({ audit }: { audit?: AthleteAudit | null }) {
   const t = audit?.threshold;
   const zones = audit?.personalZones ?? null;
-  let body: string;
-  if (!audit) body = "No training history yet, so there is no distribution to learn a threshold from.";
-  else if (!t) body = `A personal threshold needs days that carry a ratio. ${audit.days} days of history so far, none with a ratio yet.`;
-  else {
-    body = `The universal 1.5 cutoff flags ${pct(t.referenceFlaggedFraction)} of your days — your ${ordinal(t.referencePercentile)} percentile. Your own 95th percentile is ${f2(t.percentiles["95"])}.`;
-    body += zones
-      ? ` Your own cut points — your 90th at ${f2(zones.caution)} and your 95th at ${f2(zones.high)} — are drawn on the chart above as the violet line, next to the universal 1.5.`
-      : ` Your own cut points appear once ${audit.personalZonesMinimumDays} days carry a ratio (${t.n} so far).`;
+  if (!audit || !t) {
+    return (
+      <Panel title="Your threshold" note="where 1.5 sits in your history">
+        <Text style={styles.lede}>{!audit ? "No training history yet." : `Needs days with a ratio. ${audit.days} days of history so far, none with a ratio yet.`}</Text>
+      </Panel>
+    );
   }
+  const figures: Figure[] = [
+    { label: "Universal", value: "1.50", caption: `flags ${pct(t.referenceFlaggedFraction)}` },
+    { label: "Your 95th", value: f2(t.percentiles["95"]), caption: zones ? "on the chart" : "hardest 5%" },
+  ];
+  if (zones) figures.push({ label: "Your 90th", value: f2(zones.caution), caption: "caution" });
   return (
     <Panel
       title="Your threshold"
-      note="where 1.5 sits in your own history"
-      headline={t ? f2(t.percentiles["95"]) : null}
+      note="where 1.5 sits in your history"
+      figures={figures}
       detail={
         <>
-          {t ? (
-            <View style={styles.pctRow}>
-              {["50", "75", "90", "95", "99"].map((p) => (
-                <View key={p} style={styles.pctCell}>
-                  <Text style={styles.pctLabel}>{p}th</Text>
-                  <Text style={styles.pctValue}>{f2(t.percentiles[p])}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
+          <View style={styles.pctRow}>
+            {["50", "75", "90", "95", "99"].map((p) => (
+              <View key={p} style={styles.pctCell}>
+                <Text style={styles.pctLabel}>{p}th</Text>
+                <Text style={styles.pctValue}>{f2(t.percentiles[p])}</Text>
+              </View>
+            ))}
+          </View>
           <Text style={styles.read}>
-            Every running app applies 1.5 to everyone — the same cutoff for a marathoner in a base block and a sprinter in season, taken from Gabbett (2016). RunGuard reports what 1.5 actually picks out of your own history and what cut would flag your hardest 5% of days instead.
-          </Text>
-          <Text style={styles.caveat}>
-            A threshold chosen from your own distribution flags a fixed share of your days by construction, whatever your training was like. It makes the universal number’s arbitrariness visible; it is not a validated predictor of injury. Gabbett, T. J. (2016), BJSM 50(5), 273–280.
+            Every running app applies the same 1.5 cutoff to everyone (Gabbett, 2016). This panel reports what 1.5 picks out of your own year, and the cut that would flag your hardest 5% of days instead. A cut from your own history flags a fixed share of days by construction; it shows how arbitrary the universal number is, and is not a validated predictor of injury.
           </Text>
         </>
       }
     >
-      <Text style={styles.lede}>{body}</Text>
+      {!zones ? <Text style={styles.lede}>Your own lines on the chart appear after {audit.personalZonesMinimumDays} days with a ratio ({t.n} so far).</Text> : null}
     </Panel>
   );
 }
@@ -157,39 +180,40 @@ export function ThresholdPanel({ audit }: { audit?: AthleteAudit | null }) {
 export function AuditPanel({ audit }: { audit?: AthleteAudit | null }) {
   const r = audit?.rescaling;
   const enough = (audit?.usableDays ?? 0) >= (audit?.personalZonesMinimumDays ?? 60);
-  let body: string;
-  if (!audit) body = "No training history yet, so there is nothing to audit.";
-  else if (!r) body = `The audit needs days that carry a ratio. ${audit.usableDays} so far; it unlocks at ${audit.personalZonesMinimumDays}.`;
-  else if (!enough) body = `The audit unlocks at ${audit.personalZonesMinimumDays} days with a ratio; you have ${r.n}. Below that the number moves too much to mean anything.`;
-  else {
-    const ci = r.ciLow == null || Number.isNaN(r.ciLow) ? "" : ` (CI ${f2(r.ciLow)} to ${f2(r.ciHigh)})`;
-    const verdict =
-      r.spearman >= 0.9
-        ? "Above 0.9 the score is mostly repeating your weekly mileage."
-        : r.spearman >= 0.7
-          ? "Most of this score's movement is your last 7 days; the 4-week baseline adds some."
-          : "Below 0.7 the 4-week baseline is doing real work in this score.";
-    body = `This score tracks your last 7 days at ρ = ${f2(r.spearman)}${ci}. ${verdict}`;
+  if (!audit || !r || !enough) {
+    const line = !audit
+      ? "No training history yet."
+      : !r
+        ? `Needs ${audit.personalZonesMinimumDays} days with a ratio. ${audit.usableDays} so far.`
+        : `Unlocks at ${audit.personalZonesMinimumDays} days with a ratio. ${r.n} so far.`;
+    return (
+      <Panel title="Self-audit" note="how much of the score is just mileage">
+        <Text style={styles.lede}>{line}</Text>
+      </Panel>
+    );
   }
+  const ci = r.ciLow == null || Number.isNaN(r.ciLow) ? undefined : `${f2(r.ciLow)} to ${f2(r.ciHigh)}`;
+  const verdict =
+    r.spearman >= 0.9
+      ? "Above 0.9, the score is your weekly mileage on a different scale."
+      : r.spearman >= 0.7
+        ? "Between 0.7 and 0.9, most of the score is your last 7 days."
+        : "Below 0.7, the 4-week baseline is doing real work in your score.";
   return (
     <Panel
       title="Self-audit"
       note="how much of the score is just mileage"
-      headline={r && enough ? `ρ ${f2(r.spearman)}` : null}
+      figures={[
+        { label: "Tracks last 7 days", value: `ρ ${f2(r.spearman)}`, caption: ci },
+        { label: "Days rated", value: String(r.n) },
+      ]}
       detail={
-        <>
-          <Text style={styles.read}>
-            The ratio is acute load divided by chronic load. If the chronic denominator barely changes the ordering of days, the ratio is a rescaled copy of its own numerator and the 4-week baseline is doing no work. Impellizzeri and colleagues showed in 2021 that replacing the denominator with noise left the ratio’s link to injury about the same. This runs the label-free version of that test on your own data: the Spearman rank correlation between the score and your last 7 days alone.
-          </Text>
-          {r ? (
-            <Text style={styles.caveat}>
-              n = {r.n} days with a ratio, {r.draws} bootstrap resamples with a fixed seed, so it is the same every time. Impellizzeri et al. (2021). Sports Medicine, 51(3), 581–592.
-            </Text>
-          ) : null}
-        </>
+        <Text style={styles.read}>
+          The ratio is acute load over chronic load. If the 4-week denominator barely changes the order of days, the ratio is a rescaled copy of its own numerator. Impellizzeri and colleagues showed in 2021 that replacing the denominator with noise left the ratio&rsquo;s link to injury about the same. This is the label-free version of that test on your own data: the Spearman rank correlation between the score and your last 7 days alone, with a seeded {r.draws}-resample bootstrap interval. Sports Medicine, 51(3), 581 to 592.
+        </Text>
       }
     >
-      <Text style={styles.lede}>{body}</Text>
+      <Text style={styles.lede}>{verdict}</Text>
     </Panel>
   );
 }
@@ -208,16 +232,14 @@ export function DataCheckPanel({ audit }: { audit?: AthleteAudit | null }) {
       title={q.ok ? "Data check" : "Not enough history"}
       note={`${q.nDays} days · ${q.nTrainingDays} with a run`}
       detail={
-        <Text style={styles.caveat}>
-          Checks: history shorter than the 28-day window, no training, outlier days (over 3× your 95th-percentile day — the watch left running), breaks of 10+ zero days (the ratio after a break is dominated by the break), and suspected unit changes. Nothing is corrected automatically; whether a gap was rest or an unsynced watch is your call.
+        <Text style={styles.read}>
+          Checks for history shorter than the 28-day window, no training, outlier days over 3 times your 95th-percentile day, breaks of 10 or more zero days, and suspected unit changes. Nothing is corrected automatically. Whether a gap was rest or an unsynced watch is your call.
         </Text>
       }
     >
       {shown.map((f, i) => (
         <View key={i} style={styles.finding}>
-          <Text style={[styles.findingMark, { color: f.severity === "error" ? color.unusualText : color.watchText }]}>
-            {f.severity === "error" ? "✕" : "!"}
-          </Text>
+          <Text style={[styles.findingMark, { color: f.severity === "error" ? color.unusualText : color.watchText }]}>{f.severity === "error" ? "✕" : "!"}</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.lede}>{f.message}</Text>
             {f.dates.length ? <Text style={styles.dates}>{f.dates.join(" · ")}</Text> : null}
@@ -267,91 +289,65 @@ export function GaitPanel({ acwr, caution, onAnalysis }: { acwr: number | null; 
   const showSwitch = sample || health?.kind === "noDynamics";
   const d = analysis?.kind === "analyzed" ? analysis.drift : null;
 
-  const describe = (v: number, threshold: number) =>
-    v > threshold ? `up ${pct(v)}` : v < -threshold ? `down ${pct(-v)}` : `steady (${v >= 0 ? "+" : ""}${pct(v)})`;
+  let line: string | null = null;
+  if (!analysis) line = "Reading running dynamics from Health…";
+  else if (analysis.kind === "noDynamics") line = "No running dynamics in Health. Apple Watch records them on outdoor runs; Garmin and most other watches do not sync them.";
+  else if (analysis.kind === "insufficientBaseline") line = `A baseline needs ${analysis.needed} runs with dynamics in the four weeks before this one. Found ${analysis.runs}.`;
+  else if (analysis.kind === "noRecentRuns") line = "No run with dynamics in the last 7 days to compare against your baseline.";
+  else if (d!.flagsMechanicalDrift) line = "Contact time is up this week without a pace change that explains it. Worth a look, not a diagnosis.";
 
-  let body: string;
-  if (!analysis) body = "Reading running dynamics from Health…";
-  else if (analysis.kind === "noDynamics")
-    body = "No running-dynamics samples in Apple Health. Garmin and most third-party watches sync distance and heart rate but not gait metrics; Apple Watch Series 7 or later on watchOS 9+ records them on every outdoor run. Switch on sample data to see what the channel shows.";
-  else if (analysis.kind === "insufficientBaseline")
-    body = `A baseline needs ${analysis.needed} runs with dynamics in the four weeks before this one; found ${analysis.runs}.`;
-  else if (analysis.kind === "noRecentRuns") body = "A baseline exists, but no run with dynamics in the last 7 days to compare against it.";
-  else {
-    const parts: string[] = [];
-    if (d!.recentGroundContactMs !== null && d!.baselineGroundContactMs !== null && d!.groundContactDrift !== null)
-      parts.push(`Ground contact ${Math.round(d!.recentGroundContactMs)} ms, ${describe(d!.groundContactDrift, GROUND_CONTACT_DRIFT_THRESHOLD)} vs. your 4-week baseline of ${Math.round(d!.baselineGroundContactMs)} ms.`);
-    if (d!.recentVerticalOscillationCm !== null && d!.baselineVerticalOscillationCm !== null && d!.verticalOscillationDrift !== null)
-      parts.push(`Vertical oscillation ${d!.recentVerticalOscillationCm.toFixed(1)} cm, ${describe(d!.verticalOscillationDrift, VERTICAL_OSCILLATION_DRIFT_THRESHOLD)} vs. ${d!.baselineVerticalOscillationCm.toFixed(1)} cm.`);
-    if (d!.speedChange !== null)
-      parts.push(`Pace ${Math.abs(d!.speedChange) <= PACE_TOLERANCE ? "unchanged" : d!.speedChange > 0 ? `${pct(d!.speedChange)} faster` : `${pct(-d!.speedChange)} slower`}.`);
-    body = parts.join(" ");
-  }
-
-  const title = d ? (d.flagsMechanicalDrift ? "Mechanical drift" : "Gait steady") : "Gait";
-  const headline = d?.groundContactDrift != null ? `${d.groundContactDrift >= 0 ? "+" : ""}${pct(d.groundContactDrift)}` : null;
+  const figures: Figure[] | undefined = d
+    ? [
+        {
+          label: "Contact",
+          value: d.recentGroundContactMs !== null ? `${Math.round(d.recentGroundContactMs)} ms` : null,
+          caption: d.groundContactDrift !== null ? `${signed(d.groundContactDrift)} vs. baseline` : undefined,
+          tone: d.groundContactDrift !== null && d.groundContactDrift > GROUND_CONTACT_DRIFT_THRESHOLD ? color.watchText : undefined,
+        },
+        {
+          label: "Bounce",
+          value: d.recentVerticalOscillationCm !== null ? `${d.recentVerticalOscillationCm.toFixed(1)} cm` : null,
+          caption: d.verticalOscillationDrift !== null ? `${signed(d.verticalOscillationDrift)} vs. baseline` : undefined,
+          tone: d.verticalOscillationDrift !== null && d.verticalOscillationDrift > VERTICAL_OSCILLATION_DRIFT_THRESHOLD ? color.watchText : undefined,
+        },
+        {
+          label: "Pace",
+          value: d.speedChange !== null ? (Math.abs(d.speedChange) <= PACE_TOLERANCE ? "same" : signed(d.speedChange)) : null,
+          caption: d.speedChange !== null ? "vs. baseline" : undefined,
+        },
+      ]
+    : undefined;
 
   return (
     <Panel
-      title={title}
-      note="contact time and bounce vs. your baseline"
-      headline={headline}
+      title={d ? (d.flagsMechanicalDrift ? "Gait drifting" : "Gait steady") : "Gait"}
+      note="this week vs. your 4-week baseline"
       badge={sample ? "SAMPLE DATA" : undefined}
+      figures={figures}
       detail={
         <>
           {d ? <Quadrant acwr={acwr} caution={caution} drift={d} hex={hex} /> : null}
           {d ? (
-            <View style={styles.table}>
-              {[
-                ["", "Baseline", "This week", "Change"],
-                ["Contact", d.baselineGroundContactMs !== null ? `${Math.round(d.baselineGroundContactMs)} ms` : "—", d.recentGroundContactMs !== null ? `${Math.round(d.recentGroundContactMs)} ms` : "—", d.groundContactDrift !== null ? `${d.groundContactDrift >= 0 ? "+" : ""}${pct(d.groundContactDrift)}` : "—"],
-                ["Bounce", d.baselineVerticalOscillationCm !== null ? `${d.baselineVerticalOscillationCm.toFixed(1)} cm` : "—", d.recentVerticalOscillationCm !== null ? `${d.recentVerticalOscillationCm.toFixed(1)} cm` : "—", d.verticalOscillationDrift !== null ? `${d.verticalOscillationDrift >= 0 ? "+" : ""}${pct(d.verticalOscillationDrift)}` : "—"],
-                ["Speed", d.baselineSpeed !== null ? `${d.baselineSpeed.toFixed(2)} m/s` : "—", d.recentSpeed !== null ? `${d.recentSpeed.toFixed(2)} m/s` : "—", d.speedChange !== null ? `${d.speedChange >= 0 ? "+" : ""}${pct(d.speedChange)}` : "—"],
-                ["Runs", String(d.baselineRuns), String(d.recentRuns), ""],
-              ].map((row, i) => (
-                <View key={i} style={styles.tableRow}>
-                  {row.map((cell, j) => (
-                    <Text key={j} style={[styles.tableCell, i === 0 && styles.tableHead, j === 0 && styles.tableLabel]}>
-                      {cell}
-                    </Text>
-                  ))}
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <Text style={styles.read}>
-            Load alone is yesterday’s model. The gait channel compares this week’s mean ground contact time and vertical oscillation, read per run from Apple Watch running dynamics in Health, against the median of the four weeks before it. It flags mechanical drift when contact time rises more than 5% or oscillation more than 8% without a pace increase that would explain it. The baseline window ends before this week begins, so a drifting week cannot pull its own baseline toward itself.
-          </Text>
-          <Text style={styles.caveat}>
-            These thresholds are heuristics chosen for this app, not clinically validated cut points. A flag is a reason to pay attention, not a diagnosis.
-          </Text>
-          {sample ? (
-            <Text style={[styles.caveat, { color: color.watchText }]}>
-              Sample data: six generated weeks of runs, four a week, with a contact-time rise of about 7% in the final week at unchanged pace. Shown because this device’s Health store has no running-dynamics samples.
+            <Text style={styles.read}>
+              Baseline: {d.baselineRuns} runs, {d.baselineGroundContactMs !== null ? `${Math.round(d.baselineGroundContactMs)} ms` : "—"} contact, {d.baselineVerticalOscillationCm !== null ? `${d.baselineVerticalOscillationCm.toFixed(1)} cm` : "—"} bounce. This week: {d.recentRuns} run{d.recentRuns === 1 ? "" : "s"}.
             </Text>
           ) : null}
+          <Text style={styles.read}>
+            Compares this week&rsquo;s mean ground contact time and vertical oscillation, read per run from Apple Watch running dynamics, against the median of the four weeks before it. Flags drift when contact time rises more than 5% or oscillation more than 8% without a pace increase that would explain it. The baseline ends before this week begins, so a drifting week cannot pull its own baseline toward itself. The thresholds are heuristics chosen for this app, not clinical cut points.
+          </Text>
+          {sample ? <Text style={[styles.read, { color: color.watchText }]}>Sample data: six generated weeks of runs with a contact-time rise of about 7% in the final week at unchanged pace.</Text> : null}
         </>
       }
     >
-      <Text style={styles.lede}>{body}</Text>
-      <Press
-        onPress={() => router.push("/gait-check")}
-        accessibilityRole="button"
-        accessibilityLabel="Check your gait with the camera"
-        style={styles.more}
-        pressedStyle={styles.morePressed}
-      >
-        <Text style={styles.moreLabel}>No Apple Watch? Check your gait with the camera →</Text>
+      {line ? <Text style={styles.lede}>{line}</Text> : null}
+      <Press onPress={() => router.push("/gait-check")} accessibilityRole="button" accessibilityLabel="Check your gait with the camera" style={styles.linkRow} pressedStyle={styles.morePressed}>
+        <Text style={styles.linkLabel}>Check your gait with the camera</Text>
+        <Text style={styles.linkChevron}>{"›"}</Text>
       </Press>
       {showSwitch ? (
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Show sample data</Text>
-          <Switch
-            value={sample}
-            onValueChange={setSample}
-            accessibilityLabel="Show sample gait data"
-            trackColor={{ true: hex.watch, false: hex.ruleStrong }}
-          />
+          <Switch value={sample} onValueChange={setSample} accessibilityLabel="Show sample gait data" trackColor={{ true: hex.watch, false: hex.ruleStrong }} />
         </View>
       ) : null}
     </Panel>
@@ -388,9 +384,7 @@ function Quadrant({ acwr, caution, drift, hex }: { acwr: number | null; caution:
         {label("Load up · gait drifting", W - 10, 16, "end")}
         {label("Load fine · gait steady", 10, H - 8, "start")}
         {label("Load up · gait steady", W - 10, H - 8, "end")}
-        {acwr !== null && g !== null ? (
-          <Circle cx={W * unit(acwr, 0.5, 2.0)} cy={H * (1 - unit(g, -0.06, 0.12))} r={7} fill={dot} stroke={hex.card} strokeWidth={2} />
-        ) : null}
+        {acwr !== null && g !== null ? <Circle cx={W * unit(acwr, 0.5, 2.0)} cy={H * (1 - unit(g, -0.06, 0.12))} r={7} fill={dot} stroke={hex.card} strokeWidth={2} /> : null}
       </Svg>
     </View>
   );
@@ -449,23 +443,24 @@ const styles = StyleSheet.create({
   },
   panelTitle: { ...text.baseSemi, color: color.ink },
   panelNote: { ...text.meta, color: color.muted },
-  headline: { ...text.stat, color: color.brandText },
-  badge: {
-    alignSelf: "flex-start",
-    backgroundColor: color.watch,
-    borderRadius: 999,
-    paddingHorizontal: space.sm,
-    paddingVertical: 3,
-    marginBottom: space.sm,
-  },
+  badge: { backgroundColor: color.watch, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 3 },
   badgeText: { ...text.micro, color: color.onBrand },
+  figures: { flexDirection: "row", marginBottom: space.md },
+  figure: { flex: 1, paddingRight: space.sm },
+  figureRule: { borderLeftWidth: ruleWidth, borderLeftColor: color.rule, paddingLeft: space.md },
+  figureLabel: { ...text.micro, color: color.muted },
+  figureValue: { ...text.statInline, color: color.ink, marginTop: 2 },
+  figureAbsent: { color: color.muted },
+  figureCaption: { ...text.meta, color: color.muted, marginTop: 2 },
   lede: { ...text.meta, color: color.ink2 },
-  read: { ...text.meta, color: color.ink2, marginTop: space.md },
-  caveat: { ...text.meta, color: color.muted, marginTop: space.sm },
+  read: { ...text.meta, color: color.muted, marginTop: space.md },
   detail: { marginTop: space.xs },
   more: { alignSelf: "flex-start", paddingVertical: space.sm, marginTop: space.xs },
   morePressed: { opacity: 0.6 },
-  moreLabel: { ...text.baseSemi, color: color.brandText },
+  moreLabel: { ...text.meta, color: color.brandText },
+  linkRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.md, marginTop: space.sm, borderTopWidth: ruleWidth, borderTopColor: color.rule },
+  linkLabel: { ...text.base, color: color.ink },
+  linkChevron: { ...text.base, color: color.muted },
   pctRow: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
   pctCell: { alignItems: "center" },
   pctLabel: { ...text.micro, color: color.muted },
@@ -473,12 +468,7 @@ const styles = StyleSheet.create({
   finding: { flexDirection: "row", gap: space.sm, marginBottom: space.sm },
   findingMark: { ...text.baseSemi, width: 16, textAlign: "center" },
   dates: { ...text.micro, color: color.muted, marginTop: 2, textTransform: "none" },
-  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.md },
+  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: space.md, borderTopWidth: ruleWidth, borderTopColor: color.rule },
   switchLabel: { ...text.base, color: color.ink2 },
   quadrant: { marginTop: space.md },
-  table: { marginTop: space.md },
-  tableRow: { flexDirection: "row", paddingVertical: 2 },
-  tableCell: { ...text.meta, color: color.ink2, flex: 1, fontVariant: ["tabular-nums"] },
-  tableHead: { color: color.muted },
-  tableLabel: { color: color.muted },
 });

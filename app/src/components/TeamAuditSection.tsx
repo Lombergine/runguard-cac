@@ -55,10 +55,10 @@ export function TeamAuditSection({ onModelLayout }: { onModelLayout?: (y: number
   const n = audit.athletes.length;
   const verdict = c
     ? c.realBeatsNull
-      ? "The real 4-week denominator is carrying information on this team."
+      ? "The 4-week baseline is carrying information on this team."
       : c.realOutsideNull
-        ? "The real denominator is costing signal that a random one did not: the paper\u2019s result, reproduced here."
-        : "The real ratio sits inside the noise interval: the chronic denominator added nothing on this team, which is the paper\u2019s result, reproduced here."
+        ? "The real baseline scores below a random one: the paper\u2019s result, reproduced here."
+        : "The real ratio sits inside the noise interval. The baseline added nothing on this team, which is the paper\u2019s result."
     : null;
 
   return (
@@ -97,14 +97,19 @@ export function TeamAuditSection({ onModelLayout }: { onModelLayout?: (y: number
         <View style={styles.test}>
           <Text style={styles.eyebrow}>The Impellizzeri test, on this roster</Text>
           {c ? (
-            <Text style={styles.body}>
-              Across {c.n.toLocaleString()} athlete-days and {c.nEvents} injuries, the ratio the app shows separates injury days from the rest with an AUC of {f2(c.real)}
-              {c.realCiLow != null ? ` (${f2(c.realCiLow)} to ${f2(c.realCiHigh!)})` : ""}. A ratio whose 4-week denominator was shuffled into noise scores {f2(c.null)} ({f2(c.nullCiLow)} to {f2(c.nullCiHigh)}). {verdict}
-            </Text>
+            <>
+              <StatGroup
+                figures={[
+                  { label: "Real ratio", value: f2(c.real), caption: c.realCiLow != null ? `AUC \u00B7 ${f2(c.realCiLow)} to ${f2(c.realCiHigh!)}` : "AUC" },
+                  { label: "Noise ratio", value: f2(c.null), caption: `AUC \u00B7 ${f2(c.nullCiLow)} to ${f2(c.nullCiHigh)}` },
+                ]}
+              />
+              <Text style={styles.body}>{verdict}</Text>
+              <Text style={styles.footnote}>{c.n.toLocaleString()} athlete-days, {c.nEvents} injuries. Descriptive, not a hypothesis test; 0.5 is a coin flip.</Text>
+            </>
           ) : (
             <Text style={styles.body}>{audit.pooled.reason} Injuries logged on the athlete page feed this test.</Text>
           )}
-          <Text style={styles.footnote}>Descriptive, not a hypothesis test. 0.5 is a coin flip; both ratios share the real numerator, so both can sit above it.</Text>
         </View>
       </View>
 
@@ -116,7 +121,7 @@ export function TeamAuditSection({ onModelLayout }: { onModelLayout?: (y: number
 
       <ListSection
         title="Score trust, by athlete"
-        footer="ρ is how closely each athlete\u2019s score tracks their last 7 days alone (Impellizzeri et al. 2021); a dash means fewer than 60 days with a ratio. The second figure is their own 95th percentile, then the share of their days the universal 1.5 would flag."
+        footer="Self-audit \u03C1, own 95th percentile, and the share of days the universal 1.5 would flag. A dash means fewer than 60 days with a ratio."
       >
         {audit.athletes.map((a) => (
           <ListRow
@@ -145,9 +150,9 @@ function TeamModelCard({ model, sampleTeam }: { model: TeamModel; sampleTeam: bo
   const sign = (x: number | null | undefined) => (x == null || !Number.isFinite(x) ? "\u2014" : `${x >= 0 ? "+" : "\u2212"}${Math.abs(x).toFixed(2)}`);
   const verdict = r
     ? r.noiseCiHigh != null && r.auc > r.noiseCiHigh && r.deltaCiLow != null && r.deltaCiLow > 0
-      ? `A model that learns this team\u2019s own patterns separates injury weeks better than the universal formula, by ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), and better than noise.`
+      ? `Beats the universal formula by ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), and beats noise.`
       : r.noiseCiHigh != null && r.auc > r.noiseCiHigh
-        ? `The learned model beats noise, but its gap over the ratio, ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), includes zero.`
+        ? `Beats noise. Its gap over the formula, ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), includes zero.`
         : "Nothing here separates injury weeks from the rest beyond noise."
     : null;
   return (
@@ -179,8 +184,8 @@ function TeamModelCard({ model, sampleTeam }: { model: TeamModel; sampleTeam: bo
             </View>
           ))}
           <Text style={styles.footnote}>
-            Logistic regression on twelve features the app already computes, scored leave-one-athlete-out across {r.folds} athletes; the three AUCs share the same labels, an injury logged within the next seven days.
-            {sampleTeam ? " On this sample team the injuries were generated to follow load spikes, soreness and poor recovery, so the model is finding the generator." : " Descriptive, not a diagnosis."}
+            Logistic regression on twelve readings the app already has, scored on each athlete by a model that never saw them ({r.folds} folds). Label: an injury logged within 7 days.
+            {sampleTeam ? " Sample team: the injuries were generated from load, soreness and recovery, so the model is finding the generator." : " Descriptive, not a diagnosis."}
           </Text>
         </>
       )}
