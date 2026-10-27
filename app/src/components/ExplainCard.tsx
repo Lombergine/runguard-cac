@@ -7,7 +7,7 @@
  *
  * Added for RunGuard 2.0 (CAC 2026), AI-assisted, see DISCLOSURE.md.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Press } from "./Press";
@@ -16,7 +16,7 @@ import { color, shadow } from "../theme/tokens";
 import { text } from "../theme/type";
 import { layout, radius, ruleWidth, space } from "../theme/space";
 
-export function ExplainCard({ gait }: { gait: { gctDriftPct: number | null; voDriftPct: number | null } | null }) {
+export function ExplainCard({ gait, autoRun = false }: { gait: { gctDriftPct: number | null; voDriftPct: number | null } | null; autoRun?: boolean }) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [r, setR] = useState<ExplainResult | null>(null);
 
@@ -30,10 +30,22 @@ export function ExplainCard({ gait }: { gait: { gctDriftPct: number | null; voDr
     }
   };
 
+  // `runguard://stats?explain=1` asks once on arrival, the same request the
+  // button makes.
+  useEffect(() => {
+    if (!autoRun) return;
+    const t = setTimeout(() => void go(), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun]);
+
   const inputLines = r
     ? Object.entries(r.input)
         .filter(([, v]) => v !== null && !(Array.isArray(v) && v.length === 0))
-        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(3)) : String(v)}`)
+        .map(([k, v]) => {
+          const num = (x: unknown) => (typeof x === "number" ? (Number.isInteger(x) ? String(x) : x.toFixed(3)) : String(x));
+          return `${k}: ${Array.isArray(v) ? v.map(num).join(", ") : num(v)}`;
+        })
     : [];
 
   return (

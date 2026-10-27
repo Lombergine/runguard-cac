@@ -169,14 +169,22 @@ export default function StatsScreen() {
    * audit panels. A deep-link anchor, so a future notification ("your data
    * check found something") can land the athlete on the panel it is about.
    */
-  const { scroll } = useLocalSearchParams<{ scroll?: string }>();
+  const { scroll, expand, explain } = useLocalSearchParams<{ scroll?: string; expand?: string; explain?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const [insightsY, setInsightsY] = useState<number | null>(null);
+  const [chartY, setChartY] = useState<number | null>(null);
+  // `scroll=chart` lands on the workload chart; `expand=threshold,audit`
+  // opens those panels' details; `explain=1` runs the explanation. The
+  // scroll animates so a screen recording reads as a scroll, not a cut.
+  const [panelY, setPanelY] = useState<Record<string, number>>({});
   useEffect(() => {
-    if (scroll === "insights" && insightsY !== null) {
-      scrollRef.current?.scrollTo({ y: insightsY, animated: false });
-    }
-  }, [scroll, insightsY]);
+    let y: number | null = null;
+    if (scroll === "insights") y = insightsY;
+    else if (scroll === "chart") y = chartY;
+    else if (scroll && insightsY !== null && panelY[scroll] !== undefined) y = insightsY + panelY[scroll];
+    if (y !== null) scrollRef.current?.scrollTo({ y, animated: true });
+  }, [scroll, insightsY, chartY, panelY]);
+  const expanded = typeof expand === "string" ? expand.split(",") : [];
 
   /**
    * Rest days from the current plan week — the only thing that can turn an
@@ -410,11 +418,19 @@ export default function StatsScreen() {
           {fitnessKnown(profile) ? (
             <FitnessChart weekly={profile.fitness?.weekly} />
           ) : null}
-          <AcwrChart series={profile.risk.series} personal={profile.audit?.personalZones?.high ?? null} />
+          <View onLayout={(e) => setChartY(e.nativeEvent.layout.y)}>
+            <AcwrChart series={profile.risk.series} personal={profile.audit?.personalZones?.high ?? null} />
+          </View>
           {/* RunGuard 2.0 (CAC 2026): personal threshold, self-audit, gait
               channel, data check. AI-assisted, see DISCLOSURE.md. */}
           <View onLayout={(e) => setInsightsY(e.nativeEvent.layout.y)} style={styles.sections}>
-            <InsightPanels audit={profile.audit} acwr={profile.risk.series?.at(-1)?.acwr ?? null} />
+            <InsightPanels
+              audit={profile.audit}
+              acwr={profile.risk.series?.at(-1)?.acwr ?? null}
+              expand={expanded}
+              autoExplain={explain === "1"}
+              onPanelLayout={(key, y) => setPanelY((m) => (m[key] === y ? m : { ...m, [key]: y }))}
+            />
           </View>
           <LoadChart series={profile.risk.series} />
 

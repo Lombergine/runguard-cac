@@ -86,6 +86,7 @@ function Panel({
   figures,
   children,
   detail,
+  initiallyOpen = false,
 }: {
   title: string;
   note?: string;
@@ -93,8 +94,15 @@ function Panel({
   figures?: Figure[];
   children?: React.ReactNode;
   detail?: React.ReactNode;
+  /** Deep links (`?expand=`) can open the details on arrival. */
+  initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
+  useEffect(() => {
+    if (!initiallyOpen) return;
+    const t = setTimeout(() => setOpen(true), 0);
+    return () => clearTimeout(t);
+  }, [initiallyOpen]);
   return (
     <View style={styles.panel}>
       <View style={styles.panelHead}>
@@ -132,7 +140,7 @@ function Panel({
  * Personal threshold
  * ------------------------------------------------------------------ */
 
-export function ThresholdPanel({ audit }: { audit?: AthleteAudit | null }) {
+export function ThresholdPanel({ audit, open = false }: { audit?: AthleteAudit | null; open?: boolean }) {
   const t = audit?.threshold;
   const zones = audit?.personalZones ?? null;
   if (!audit || !t) {
@@ -152,6 +160,7 @@ export function ThresholdPanel({ audit }: { audit?: AthleteAudit | null }) {
       title="Your threshold"
       note="where 1.5 sits in your history"
       figures={figures}
+      initiallyOpen={open}
       detail={
         <>
           <View style={styles.pctRow}>
@@ -177,7 +186,7 @@ export function ThresholdPanel({ audit }: { audit?: AthleteAudit | null }) {
  * Self-audit
  * ------------------------------------------------------------------ */
 
-export function AuditPanel({ audit }: { audit?: AthleteAudit | null }) {
+export function AuditPanel({ audit, open = false }: { audit?: AthleteAudit | null; open?: boolean }) {
   const r = audit?.rescaling;
   const enough = (audit?.usableDays ?? 0) >= (audit?.personalZonesMinimumDays ?? 60);
   if (!audit || !r || !enough) {
@@ -203,6 +212,7 @@ export function AuditPanel({ audit }: { audit?: AthleteAudit | null }) {
     <Panel
       title="Self-audit"
       note="how much of the score is just mileage"
+      initiallyOpen={open}
       figures={[
         { label: "Tracks last 7 days", value: `ρ ${f2(r.spearman)}`, caption: ci },
         { label: "Days rated", value: String(r.n) },
@@ -394,7 +404,21 @@ function Quadrant({ acwr, caution, drift, hex }: { acwr: number | null; caution:
  * All four, in order.
  * ------------------------------------------------------------------ */
 
-export function InsightPanels({ audit, acwr }: { audit?: AthleteAudit | null; acwr: number | null }) {
+export function InsightPanels({
+  audit,
+  acwr,
+  expand = [],
+  autoExplain = false,
+  onPanelLayout,
+}: {
+  audit?: AthleteAudit | null;
+  acwr: number | null;
+  expand?: string[];
+  autoExplain?: boolean;
+  /** Each panel's y within this block, for deep-link anchors. */
+  onPanelLayout?: (key: "threshold" | "audit" | "gait" | "datacheck" | "explain", y: number) => void;
+}) {
+  const anchor = (key: "threshold" | "audit" | "gait" | "datacheck" | "explain") => ({ onLayout: (e: { nativeEvent: { layout: { y: number } } }) => onPanelLayout?.(key, e.nativeEvent.layout.y) });
   const caution = audit?.personalZones?.caution ?? 1.3;
   // Gait drift from the phone, handed to the explanation as two bounded
   // percentages. Only real Health data goes to the server; the sample set
@@ -402,8 +426,13 @@ export function InsightPanels({ audit, acwr }: { audit?: AthleteAudit | null; ac
   const [gait, setGait] = useState<{ gctDriftPct: number | null; voDriftPct: number | null } | null>(null);
   return (
     <>
-      <ThresholdPanel audit={audit} />
-      <AuditPanel audit={audit} />
+      <View {...anchor("threshold")}>
+        <ThresholdPanel audit={audit} open={expand.includes("threshold")} />
+      </View>
+      <View {...anchor("audit")}>
+        <AuditPanel audit={audit} open={expand.includes("audit")} />
+      </View>
+      <View {...anchor("gait")}>
       <GaitPanel
         acwr={acwr}
         caution={caution}
@@ -418,8 +447,11 @@ export function InsightPanels({ audit, acwr }: { audit?: AthleteAudit | null; ac
           )
         }
       />
-      <DataCheckPanel audit={audit} />
-      {audit ? <ExplainCard gait={gait} /> : null}
+      </View>
+      <View {...anchor("datacheck")}>
+        <DataCheckPanel audit={audit} />
+      </View>
+      <View {...anchor("explain")}>{audit ? <ExplainCard gait={gait} autoRun={autoExplain} /> : null}</View>
     </>
   );
 }
