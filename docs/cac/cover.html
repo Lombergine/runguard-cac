@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RunGuard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0}
+  html,body{width:1920px;height:1080px;background:#FBF8F2;color:#1B1F26;font-family:Inter,-apple-system,"Helvetica Neue",sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+  .wrap{position:relative;width:1920px;height:1080px;padding:88px 0 0 104px;display:flex}
+  .left{width:640px;padding-right:40px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:14px;margin-bottom:64px}
+  .brand svg{width:40px;height:40px;border-radius:10px}
+  .brand span{font-size:22px;font-weight:700;letter-spacing:-.2px}
+  h1{font-size:54px;line-height:1.12;font-weight:700;letter-spacing:-1.4px;margin-bottom:22px}
+  p.lead{font-size:21px;line-height:1.5;color:#4B5563;font-weight:400;margin-bottom:48px;max-width:560px}
+  .rows{border-top:1px solid #E6E0D6}
+  .row{display:grid;grid-template-columns:150px 1fr;gap:18px;padding:16px 0;border-bottom:1px solid #E6E0D6;font-size:16.5px;line-height:1.45}
+  .row .k{font-weight:600;color:#1B1F26}
+  .row .v{color:#4B5563}
+  .foot{margin-top:auto;padding-bottom:88px;font-size:15px;color:#6B7280;line-height:1.6}
+  .foot b{color:#1B1F26;font-weight:600}
+  .right{position:relative;flex:1}
+  .window{position:absolute;left:60px;top:0;width:1120px;height:744px;background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.06),0 24px 60px rgba(40,30,10,.14);overflow:hidden;border:1px solid #E6E0D6}
+  .bar{height:44px;background:#F3EFE7;border-bottom:1px solid #E6E0D6;display:flex;align-items:center;padding:0 16px;gap:8px}
+  .dot{width:12px;height:12px;border-radius:50%;background:#D9D2C5}
+  .url{margin-left:14px;flex:1;max-width:520px;height:26px;border-radius:7px;background:#fff;border:1px solid #E6E0D6;font-size:12.5px;color:#6B7280;display:flex;align-items:center;padding:0 12px}
+  .window img{width:1120px;display:block}
+  .phone{position:absolute;left:880px;top:300px;width:272px;height:580px;border-radius:44px;background:#0b0d12;padding:10px;box-shadow:0 30px 60px rgba(40,30,10,.28),0 0 0 1px rgba(0,0,0,.4)}
+  .phone img{width:100%;height:100%;object-fit:cover;object-position:top;border-radius:36px;display:block}
+</style></head><body><div class="wrap">
+<div class="left">
+  <div class="brand"><svg viewBox="0 0 64 64"><rect width="64" height="64" fill="#0d0d0d"/><path d="M14 50V26a5 5 0 015-5h26a5 5 0 015 5v24" stroke="#f59e0b" stroke-width="5" stroke-linecap="round" fill="none"/><path d="M24 34l7 7 11-13" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>RunGuard</span></div>
+  <h1>Injury-load tracking that tests its own score.</h1>
+  <p class="lead">An app for high-school cross-country runners and their coaches. It shows the same workload ratio every running app shows, then checks on your own data whether that number deserves to be trusted.</p>
+  <div class="rows">
+    <div class="row"><div class="k">For runners</div><div class="v">Your own threshold instead of a universal cutoff, a self-audit with a confidence interval, a camera gait check that runs on the phone.</div></div>
+    <div class="row"><div class="k">For coaches</div><div class="v">The 2021 Impellizzeri experiment rerun on the team's injury log, and a model learned from the team, scored on athletes it never saw.</div></div>
+    <div class="row"><div class="k">Checked</div><div class="v">Every statistic verified against a Python reference in 51 tests. The AI explanation layer may only repeat numbers the server computed.</div></div>
+  </div>
+  <div class="foot"><b>Aditya Garg and Pranav</b> · San Jose, California<br>Congressional App Challenge 2026 · iOS and web</div>
+</div>
+<div class="right">
+  <div class="window"><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><div class="url">runguard.app/dashboard</div></div><img src="cover-dashboard.png"></div>
+  <div class="phone"><img src="cover-phone-athlete.png"></div>
+</div>
+</div></body></html>
