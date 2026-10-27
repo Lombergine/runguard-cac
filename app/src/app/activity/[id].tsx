@@ -33,7 +33,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Image as SvgImage, Path, Rect } from "react-native-svg";
 
 import { Card } from "../../components/Card";
 import { Absent, Zero } from "../../components/Nothing";
@@ -90,54 +90,76 @@ const VIEW = { w: 600, h: 320, pad: 20 } as const;
 const STROKE = 3;
 
 /**
- * `{lat, lng}` points → an SVG path, normalised into `VIEW`.
- *
- * Scaled UNIFORMLY on both axes, unlike the website, which stretches each axis
- * to fill its box. A route stretched to fit is a wrong picture of where someone
- * ran — an out-and-back drawn as a loop — and the phone frames it at a different
- * aspect ratio from the web anyway, so it has to normalise for itself regardless
- * (the route handler's docblock says as much). Longitude is multiplied by
- * cos(latitude) first, because a degree of longitude is shorter than a degree of
- * latitude everywhere but the equator.
- *
- * Null when there is no line to draw: fewer than two usable points, or every
- * point at the same place. A dot is not a route, and an empty box would read as
- * a route with no distance — the caller says "not recorded" instead.
+ * Web Mercator, so the route and a basemap share one projection. World pixel
+ * coordinates at an integer zoom; the drawing scales them by `s` (1 to 2) so
+ * the route fills the box at any size while the tiles stay at a zoom where
+ * their @2x pixels are never stretched past 1:1.
  */
-function routePath(points: RoutePoint[]): string | null {
+const TILE = 256;
+const MAX_ZOOM = 17;
+function mercator(p: RoutePoint, zoom: number): { x: number; y: number } {
+  const n = TILE * 2 ** zoom;
+  const lat = Math.max(-85, Math.min(85, p.lat)) * (Math.PI / 180);
+  return {
+    x: ((p.lng + 180) / 360) * n,
+    y: ((1 - Math.log(Math.tan(lat) + 1 / Math.cos(lat)) / Math.PI) / 2) * n,
+  };
+}
+
+type Framed = { zoom: number; path: string; tiles: { x: number; y: number; px: number; py: number; size: number }[] };
+
+/**
+ * `{lat, lng}` points → the route path plus the map tiles beneath it, in
+ * `VIEW` units. Null when there is no line to draw: fewer than two usable
+ * points, or every point at the same place. A dot is not a route, and an
+ * empty box would read as a route with no distance; the caller says "not
+ * recorded" instead.
+ *
+ * Basemap: OpenStreetMap's standard tiles, dimmed toward the card surface
+ * (light use only; attribution drawn under the map). The tiles are decoration under the
+ * athlete's own trace; if they fail to load, the trace still draws on the
+ * card's well colour.
+ */
+function frameRoute(points: RoutePoint[]): Framed | null {
   const pts = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
   if (pts.length < 2) return null;
-
-  const lats = pts.map((p) => p.lat);
-  const lngs = pts.map((p) => p.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-
-  const shrink = Math.cos(((minLat + maxLat) / 2) * (Math.PI / 180));
-  const spanY = maxLat - minLat;
-  const spanX = (maxLng - minLng) * shrink;
-  if (spanX <= 0 && spanY <= 0) return null;
-
   const innerW = VIEW.w - 2 * VIEW.pad;
   const innerH = VIEW.h - 2 * VIEW.pad;
-  const scale = Math.min(
-    spanX > 0 ? innerW / spanX : Number.POSITIVE_INFINITY,
-    spanY > 0 ? innerH / spanY : Number.POSITIVE_INFINITY
-  );
-  // Centre the drawn extent, since uniform scaling leaves slack on one axis.
-  const offX = VIEW.pad + (innerW - spanX * scale) / 2;
-  const offY = VIEW.pad + (innerH - spanY * scale) / 2;
-
-  return pts
+  let zoom = MAX_ZOOM;
+  let box = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  for (; zoom >= 1; zoom--) {
+    const px = pts.map((p) => mercator(p, zoom));
+    box = {
+      minX: Math.min(...px.map((q) => q.x)),
+      maxX: Math.max(...px.map((q) => q.x)),
+      minY: Math.min(...px.map((q) => q.y)),
+      maxY: Math.max(...px.map((q) => q.y)),
+    };
+    if (box.maxX - box.minX <= innerW && box.maxY - box.minY <= innerH) break;
+  }
+  const spanX = box.maxX - box.minX;
+  const spanY = box.maxY - box.minY;
+  if (spanX <= 0 && spanY <= 0) return null;
+  const s = Math.min(spanX > 0 ? innerW / spanX : 2, spanY > 0 ? innerH / spanY : 2, 2);
+  // Viewport origin in scaled world pixels: the route's centre sits at the box centre.
+  const ox = ((box.minX + box.maxX) / 2) * s - VIEW.w / 2;
+  const oy = ((box.minY + box.maxY) / 2) * s - VIEW.h / 2;
+  const path = pts
     .map((p, i) => {
-      const x = offX + (p.lng - minLng) * shrink * scale;
-      // maxLat first, so north is up rather than mirrored.
-      const y = offY + (maxLat - p.lat) * scale;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+      const q = mercator(p, zoom);
+      return `${i === 0 ? "M" : "L"}${(q.x * s - ox).toFixed(1)} ${(q.y * s - oy).toFixed(1)}`;
     })
     .join(" ");
+  const size = TILE * s;
+  const tiles: Framed["tiles"] = [];
+  const n = 2 ** zoom;
+  for (let tx = Math.floor(ox / size); tx * size < ox + VIEW.w; tx++) {
+    for (let ty = Math.floor(oy / size); ty * size < oy + VIEW.h; ty++) {
+      if (ty < 0 || ty >= n) continue;
+      tiles.push({ x: ((tx % n) + n) % n, y: ty, px: tx * size - ox, py: ty * size - oy, size });
+    }
+  }
+  return { zoom, path, tiles };
 }
 
 /**
@@ -153,40 +175,49 @@ function routePath(points: RoutePoint[]): string | null {
  * do not know about the run, and in this app not-knowing is dashed.
  */
 function RouteMap({ route }: { route: RoutePoint[] | null }) {
-  const path = route === null ? null : routePath(route);
+  const framed = route === null ? null : frameRoute(route);
 
-  if (path === null) return <Absent label="GPS route not recorded for this run." />;
+  if (framed === null) return <Absent label="GPS route not recorded for this run." />;
 
   return (
-    <View style={styles.map}>
-      <Svg
-        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
-        width="100%"
-        height="100%"
-        accessibilityRole="image"
-        accessibilityLabel="The GPS route of this run."
-      >
-        {/* A soft halo under the line, so the route reads as lit rather than
-            drawn. Same colour, wider, mostly transparent. */}
-        <Path
-          d={path}
-          fill="none"
-          stroke={color.brand}
-          strokeOpacity={0.35}
-          strokeWidth={STROKE * 2.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <Path
-          d={path}
-          fill="none"
-          // A FILL token on a shape, never a glyph — see theme/tokens.ts.
-          stroke={color.brand}
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </Svg>
+    <View>
+      <View style={styles.map}>
+        <Svg
+          viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+          width="100%"
+          height="100%"
+          accessibilityRole="image"
+          accessibilityLabel="The GPS route of this run, on a map."
+        >
+          {framed.tiles.map((t) => (
+            <SvgImage
+              key={`${framed.zoom}/${t.x}/${t.y}`}
+              x={t.px}
+              y={t.py}
+              width={t.size + 0.6}
+              height={t.size + 0.6}
+              preserveAspectRatio="none"
+              href={{ uri: `https://tile.openstreetmap.org/${framed.zoom}/${t.x}/${t.y}.png` }}
+            />
+          ))}
+          {/* Dim the basemap toward the card's own surface so the trace, not
+              the streets, is the brightest thing in the box. */}
+          <Rect x={0} y={0} width={VIEW.w} height={VIEW.h} fill={color.bg} fillOpacity={0.55} />
+          {/* A soft halo under the line, so the route reads as lit rather than
+              drawn. Same colour, wider, mostly transparent. */}
+          <Path d={framed.path} fill="none" stroke={color.brand} strokeOpacity={0.35} strokeWidth={STROKE * 2.5} strokeLinecap="round" strokeLinejoin="round" />
+          <Path
+            d={framed.path}
+            fill="none"
+            // A FILL token on a shape, never a glyph — see theme/tokens.ts.
+            stroke={color.brand}
+            strokeWidth={STROKE}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </View>
+      <Text style={styles.mapCredit}>Map © OpenStreetMap contributors</Text>
     </View>
   );
 }
@@ -560,4 +591,5 @@ const styles = StyleSheet.create({
     backgroundColor: color.well,
     overflow: "hidden",
   },
+  mapCredit: { ...text.micro, color: color.muted, textTransform: "none", marginTop: space.xs },
 });
