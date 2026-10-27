@@ -38,7 +38,7 @@ function Details({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function AuditPanels({ audit, whose = "your", athleteId }: { audit?: AthleteAudit | null; whose?: "your" | "their"; athleteId?: number }) {
+export default function AuditPanels({ audit, whose = "your", athleteId, stack = false }: { audit?: AthleteAudit | null; whose?: "your" | "their"; athleteId?: number; /** One column, for a side-by-side layout. */ stack?: boolean }) {
   if (!audit) return null;
   const t = audit.threshold;
   const r = audit.rescaling;
@@ -50,7 +50,7 @@ export default function AuditPanels({ audit, whose = "your", athleteId }: { audi
 
   return (
     <div className="space-y-4">
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className={stack ? "space-y-4" : "grid lg:grid-cols-2 gap-4"}>
         <Panel title={`${Your} threshold`} note="where 1.5 sits in this history">
           {t ? (
             <>

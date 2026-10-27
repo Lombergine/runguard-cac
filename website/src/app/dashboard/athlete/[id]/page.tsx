@@ -275,7 +275,8 @@ function CoachView({
         </p>
       </div>
 
-      <div className="grid lg:grid-cols-[1fr_1.1fr] gap-4 items-stretch">
+      <div className="grid lg:grid-cols-[1fr_1.1fr] gap-4 items-start">
+        <div className="space-y-4">
         {/*
           `readiness` above is already the gated state — passing `p.readiness`
           here instead was the bug this page's own comment warns about, four
@@ -295,6 +296,10 @@ function CoachView({
             <p key={i} className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>{line}</p>
           ))}
         </div>
+        </div>
+        {/* RunGuard 2.0: the athlete's own threshold, self-audit, data check and
+            explanation, stacked beside the body scan so the column is used. */}
+        <AuditPanels audit={p.audit} whose="their" athleteId={p.athlete.id} stack />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -346,7 +351,6 @@ function CoachView({
       {/* RunGuard 2.0 (CAC 2026): the coach sees the same audit the athlete
           does — personal threshold, self-audit, data check. AI-assisted, see
           DISCLOSURE.md. */}
-      <AuditPanels audit={p.audit} whose="their" athleteId={p.athlete.id} />
 
       <Panel title="Weekly distance (12 weeks)">
         <WeeklyKmChart data={p.weeks} />

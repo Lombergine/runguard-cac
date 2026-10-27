@@ -211,21 +211,13 @@ export function AcwrChart({
           </Plot>
 
           <Text style={styles.read}>
-            Inside the shaded band — {ACWR_BAND[0]} to {ACWR_BAND[1]} — the
-            training is ramping at its ordinary rate. Above the band, and above
-            the dashed line at {ACWR_DANGER}, the last week was a bigger jump on
-            the month behind it. Days with no ratio yet are dashed, and the line
-            breaks across them.
-            {personal != null && personal > 0
-              ? ` The violet dashed line at ${personal.toFixed(2)} is your own 95th percentile, from your own history.`
-              : ""}
+            Band {ACWR_BAND[0]} to {ACWR_BAND[1]}: an ordinary ramp. Dashed line at {ACWR_DANGER}: the universal cutoff.
+            {personal != null && personal > 0 ? ` Violet line at ${personal.toFixed(2)}: your own 95th percentile.` : ""}
+            {" "}Days with no ratio yet are dashed.
           </Text>
 
           <Text style={styles.caveat}>
-            The band and the {ACWR_DANGER} line come from one training-load
-            model. A study of 5,205 runners found no link between this ratio and
-            injury, and nothing like it has been tested on teenagers. RunGuard
-            is describing your training here, not your health.
+            A study of 5,205 runners found no link between this ratio and injury. This describes your training, not your health.
           </Text>
         </>
       ) : (
