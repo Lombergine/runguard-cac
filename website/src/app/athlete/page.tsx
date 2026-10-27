@@ -120,7 +120,7 @@ export default async function AthletePortal({
         {activeTab === "Profile" && <ProfileTab p={p} />}
 
         <p className="text-xs text-center pb-4" style={{ color: "var(--ink-muted)" }}>
-          Data syncs from Apple Health through the RunGuard iPhone app — Apple Watch,
+          Data syncs from Apple Health through the RunGuard iPhone app, Apple Watch,
           Garmin, anything that writes to Health. Add RunGuard to your home screen for
           the full app feel.
         </p>

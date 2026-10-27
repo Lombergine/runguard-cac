@@ -260,7 +260,7 @@ export default function CoachDashboardScreen() {
                     {stats.acwr.unrated > 0
                       ? `; ${stats.acwr.unrated} have not synced enough yet`
                       : ""}
-                    . This ratio showed no link to injury in a 5,205-runner study — it is
+                    . This ratio showed no link to injury in a 5,205-runner study, it is
                     context, not a verdict.
                   </Text>
                 </>
@@ -292,7 +292,7 @@ export default function CoachDashboardScreen() {
                 ]}
               />
               <Text style={styles.footnote}>
-                Today only — the tile above counts anyone quiet for {stale}+ days, which is the
+                Today only: the tile above counts anyone quiet for {stale}+ days, which is the
                 one worth chasing. A quiet athlete is not a healthy one, they are an unknown one.
               </Text>
             </View>

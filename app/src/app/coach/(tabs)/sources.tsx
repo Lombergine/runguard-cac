@@ -112,7 +112,7 @@ export default function CoachSourcesScreen() {
             <Card>
               <Text style={styles.blockTitle}>Apple Health</Text>
               <Text style={styles.body}>
-                Runs arrive from Apple Health — Apple Watch, Garmin, anything that
+                Runs arrive from Apple Health. Apple Watch, Garmin, anything that
                 writes to it. Athletes sign in to the RunGuard app on their own
                 phone and it syncs after every workout.
               </Text>

@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     return Response.json({ error: `Please fill in: ${missing.join(", ")}.` }, { status: 400 });
   }
   if (date < localDay()) {
-    return Response.json({ error: "That race date is in the past — pick an upcoming date." }, { status: 400 });
+    return Response.json({ error: "That race date is in the past. Pick an upcoming date." }, { status: 400 });
   }
 
   const race = await createRace({

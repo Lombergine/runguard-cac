@@ -359,7 +359,7 @@ export default function CheckInScreen() {
       failed();
       setSorenessError(
         severity === null
-          ? `That didn't clear — ${key} is still recorded. Tap the score again.${why}`
+          ? `That didn't clear: ${key} is still recorded. Tap the score again.${why}`
           : `That didn't save. Nothing was recorded for ${key}. Tap the number again.${why}`
       );
       setSubmitting(false);

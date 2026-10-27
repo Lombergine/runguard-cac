@@ -58,7 +58,7 @@ export function workoutBlocks(d: PlanDay): WorkoutBlock[] {
     if (t.includes("stride")) {
       blocks.push({
         label: "Finish",
-        text: "Relaxed strides on grass, walk-back recovery — turnover, not effort.",
+        text: "Relaxed strides on grass, walk-back recovery, turnover, not effort.",
       });
     }
     return blocks;

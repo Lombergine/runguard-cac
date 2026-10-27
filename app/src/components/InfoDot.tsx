@@ -284,7 +284,7 @@ export const EXPLAINERS = {
    * BentoTile label="Readiness").
    */
   readiness:
-    "0–100, built from your sleep, HRV and resting heart rate against your own baselines, then adjusted down for soreness you reported. It answers one question: how ready are you to absorb hard work today. Under 40 means back off; 65 and up means you're clear to run it as written. It is not a fitness score — you can be very fit and very flat.",
+    "0–100, built from your sleep, HRV and resting heart rate against your own baselines, then adjusted down for soreness you reported. It answers one question: how ready are you to absorb hard work today. Under 40 means back off; 65 and up means you're clear to run it as written. It is not a fitness score. You can be very fit and very flat.",
 
   /* ── Stats ──────────────────────────────────────────────────────────── */
 
@@ -294,19 +294,19 @@ export const EXPLAINERS = {
 
   /** tabs.tsx:454 — verbatim. */
   vo2max:
-    "Apple's Cardio Fitness estimate, read straight from Health — RunGuard doesn't calculate this one. It feeds into your fitness score.",
+    "Apple's Cardio Fitness estimate, read straight from Health, RunGuard doesn't calculate this one. It feeds into your fitness score.",
 
   /** tabs.tsx:460 — verbatim. */
   weekTrimp:
-    "Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard your heart was working. Two runs the same distance can score very differently. Runs synced without heart-rate data count as zero.",
+    "Training impulse over the last 7 days. How long each run was, weighted sharply upward by how hard your heart was working. Two runs the same distance can score very differently. Runs synced without heart-rate data count as zero.",
 
   /** tabs.tsx:466 — verbatim. */
   sevenDayMi:
-    "Distance over the last 7 days — a rolling window, not since Monday. The target is your weekly-distance goal if you've set one; otherwise it's a placeholder just above your current week.",
+    "Distance over the last 7 days. A rolling window, not since Monday. The target is your weekly-distance goal if you've set one; otherwise it's a placeholder just above your current week.",
 
   /** tabs.tsx:471 — verbatim. */
   longestStreak:
-    "The most days in a row you trained without a rest day, over the last 120 days. Earns the 7-Day Streak badge at 7 — it's a record of consistency, not a target to chase.",
+    "The most days in a row you trained without a rest day, over the last 120 days. Earns the 7-Day Streak badge at 7, it's a record of consistency, not a target to chase.",
 
   /* ── Recovery ───────────────────────────────────────────────────────── */
 
@@ -326,19 +326,19 @@ export const EXPLAINERS = {
    * the whole of the claim after the dash untouched. Nothing else is altered.
    */
   sleep7d:
-    "Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h is low — short sleep is one of the strongest injury and illness signals there is.",
+    "Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h is low. Short sleep is one of the strongest injury and illness signals there is.",
 
   /** tabs.tsx:588 — verbatim. */
   hrv:
-    "Heart rate variability — the tiny timing differences between heartbeats. Higher usually means recovered; a drop means your body is still under stress. Compared against your own baseline, not anyone else's, so only the % change matters.",
+    "Heart rate variability: the tiny timing differences between heartbeats. Higher usually means recovered; a drop means your body is still under stress. Compared against your own baseline, not anyone else's, so only the % change matters.",
 
   /** tabs.tsx:595 — verbatim. */
   restingHr:
-    "Your heart rate at rest, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery — it's an early warning, often before you feel it.",
+    "Your heart rate at rest, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery, it's an early warning, often before you feel it.",
 
   /** tabs.tsx:601 — verbatim. */
   bodyBattery:
-    "How fresh your legs are: how far this week's training sits below what your body is used to. High after an easy week or a taper, low mid-block. Not the same as fitness — you can be very fit and very tired.",
+    "How fresh your legs are: how far this week's training sits below what your body is used to. High after an easy week or a taper, low mid-block. Not the same as fitness. You can be very fit and very tired.",
 
   /** tabs.tsx:607 — verbatim. */
   sleepConsistency:

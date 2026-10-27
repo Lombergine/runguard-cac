@@ -82,7 +82,7 @@ export type SleepChartProps = {
 function Head({ note }: { note?: string }) {
   return (
     <View style={styles.head}>
-      <Text style={styles.title}>Sleep — last 30 nights</Text>
+      <Text style={styles.title}>Sleep: last 30 nights</Text>
       {note ? <Text style={styles.note}>{note}</Text> : null}
     </View>
   );
@@ -173,7 +173,7 @@ export function SleepChart({ sleep30 }: SleepChartProps) {
           there is none. */}
       {missing > 0 ? (
         <Text style={styles.legend}>
-          The dashed boxes are nights nothing was recorded — not nights of no
+          The dashed boxes are nights nothing was recorded. Not nights of no
           sleep.
         </Text>
       ) : null}

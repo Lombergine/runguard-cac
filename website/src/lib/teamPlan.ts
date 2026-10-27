@@ -55,7 +55,7 @@ export function parsePlanDay(body: Record<string, unknown>): PlanDayParse {
 
   const type = typeof body.type === "string" ? body.type.trim().slice(0, 80) : "";
   if (!type) {
-    return { ok: false, error: "Give the session a name — “Easy run”, “6×800m”, “Rest”." };
+    return { ok: false, error: "Give the session a name, “Easy run”, “6×800m”, “Rest”." };
   }
 
   /*

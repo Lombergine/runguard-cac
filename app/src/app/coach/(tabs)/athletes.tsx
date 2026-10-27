@@ -129,7 +129,7 @@ export default function CoachAthletesScreen() {
                 <Text style={styles.code}>{joinCode}</Text>
                 <Text style={styles.body}>
                   An athlete signs up with this code and appears here the moment their watch
-                  syncs. It is not a password and not anyone&apos;s health data — it only says
+                  syncs. It is not a password and not anyone&apos;s health data, it only says
                   which team they are joining.
                 </Text>
                 <Pressable
@@ -170,7 +170,7 @@ export default function CoachAthletesScreen() {
             <Text style={styles.footnote}>
               RunGuard never shows you an athlete&apos;s sign-in credentials, and never sends
               them to this phone. If someone cannot get in, they reset it from their own
-              device — not from here.
+              device: not from here.
             </Text>
           </>
         )}

@@ -311,19 +311,19 @@ function CoachView({
         <CStat
           label="This week"
           value={`${miNum(p.risk.weekKm)} mi`}
-          info="Distance run in the last 7 days — a rolling window, not since Monday."
+          info="Distance run in the last 7 days. A rolling window, not since Monday."
         />
         <CStat
           label="Ramp"
           value={p.risk.rampPct !== null ? `${p.risk.rampPct > 0 ? "+" : ""}${p.risk.rampPct}%` : "—"}
-          info="Week-over-week change in distance: the last 7 days against the 7 before. Shown for context only — in a cohort of 5,205 runners, week-to-week ratios like this had no association with injury. Blank if the previous week was under 2 mi."
+          info="Week-over-week change in distance: the last 7 days against the 7 before. Shown for context only. In a cohort of 5,205 runners, week-to-week ratios like this had no association with injury. Blank if the previous week was under 2 mi."
         />
         <CStat
           label="Week TRIMP"
           // Sat reading "0" between two tiles reading "—". A zero TRIMP means
           // "ran, but no heart-rate data" — a different fact from "never ran".
           value={p.risk.hasActivityHistory ? String(p.load.weekTrimp) : "—"}
-          info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard their heart was working. Catches the intensity that distance alone misses. Runs synced without heart-rate data count as zero."
+          info="Training impulse over the last 7 days. How long each run was, weighted sharply upward by how hard their heart was working. Catches the intensity that distance alone misses. Runs synced without heart-rate data count as zero."
         />
         <CStat
           label="Days since rest"
@@ -340,7 +340,7 @@ function CoachView({
         {/* Titles no longer name a fixed window — each chart now carries its
             own range control (1 day/3 days/7 days/1 month/6 months), so a
             hardcoded "(60 days)" would go stale the moment someone changed it. */}
-        <Panel title="Workload ratio" note="context only — this ratio showed no link to injury in a 5,205-runner study · violet = their own 95th">
+        <Panel title="Workload ratio" note="context only: this ratio showed no link to injury in a 5,205-runner study · violet = their own 95th">
           <AcwrChart data={p.series} personal={p.audit?.personalZones?.high ?? null} />
         </Panel>
         <Panel title="Training load">
@@ -382,12 +382,12 @@ function CoachView({
           label="Freshness"
           // Sits between two tiles that already gate ("—", "Not enough data").
           value={p.risk.hasActivityHistory ? `${p.fitness.freshness}` : "—"}
-          info="How far the last 7 days sit below their 28-day base — high after a taper or an easy week, low mid-block. Not the same as fitness: an athlete can be very fit and very flat."
+          info="How far the last 7 days sit below their 28-day base. High after a taper or an easy week, low mid-block. Not the same as fitness: an athlete can be very fit and very flat."
         />
         <CStat
           label="VO₂max"
           value={p.fitness.vo2max !== null ? `${p.fitness.vo2max}` : "—"}
-          info="Apple's Cardio Fitness estimate, read straight from Health — RunGuard doesn't calculate it. It's one of the two inputs to the fitness score."
+          info="Apple's Cardio Fitness estimate, read straight from Health, RunGuard doesn't calculate it. It's one of the two inputs to the fitness score."
         />
       </div>
 
@@ -479,7 +479,7 @@ function CoachView({
               ) : (
                 <p style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a readiness/prediction estimate.</p>
               )}
-              {p.plan.taperMode && p.risk.hasActivityHistory && <p style={{ color: "var(--brand-strong)" }}>Taper mode active — their plan is already adjusted.</p>}
+              {p.plan.taperMode && p.risk.hasActivityHistory && <p style={{ color: "var(--brand-strong)" }}>Taper mode active: their plan is already adjusted.</p>}
             </div>
           ) : (
             <p className="text-sm" style={{ color: "var(--ink-muted)" }}>No races scheduled.</p>
@@ -622,7 +622,7 @@ function SelfReportPanel({
           <span className="font-semibold" style={{ color: "var(--ink)" }}>
             Reported energy has fallen {energyTrend.days} check-ins running
           </span>
-          , {energyTrend.from}/10 down to {energyTrend.to}/10. Not a number to act on by itself — a
+          , {energyTrend.from}/10 down to {energyTrend.to}/10. Not a number to act on by itself, a
           pattern worth asking about.
         </div>
       )}
@@ -636,7 +636,7 @@ function SelfReportPanel({
           }}
         >
           <span className="font-semibold" style={{ color: "var(--ink)" }}>
-            {self.persistentPart} — sore {self.persistentDays} of the last 7 days
+            {self.persistentPart}, sore {self.persistentDays} of the last 7 days
           </span>
           , peaking at {self.persistentPeak}/10
           {self.escalating ? ", and getting worse rather than settling" : ""}. Soreness that keeps
@@ -646,7 +646,7 @@ function SelfReportPanel({
 
       {!self.hasData && (
         <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
-          No check-ins on record — nothing is known about how this athlete actually feels. The score
+          No check-ins on record. Nothing is known about how this athlete actually feels. The score
           above is built from training and recovery data alone.
         </p>
       )}
@@ -670,7 +670,7 @@ function SelfReportPanel({
         self.hasData && (
           <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
             {self.daysSinceReport === 1
-              ? "No check-in today — yesterday was their last."
+              ? "No check-in today: yesterday was their last."
               : `No check-in today; their last was ${self.daysSinceReport} days ago.`}{" "}
             Nothing logged is not the same as nothing wrong.
           </p>
@@ -710,28 +710,28 @@ function RecoveryPanel({ recovery: r }: { recovery: RecoverySnapshot }) {
             r.restingHr !== null ? `${r.restingHr} bpm` : "—",
             r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : null,
             rhrColor,
-            "Their resting heart rate from Apple Health, and how far it sits from their own recent baseline. Sitting 5 bpm or more above baseline is one of the earliest signs of under-recovery or illness — often days before the athlete notices anything.",
+            "Their resting heart rate from Apple Health, and how far it sits from their own recent baseline. Sitting 5 bpm or more above baseline is one of the earliest signs of under-recovery or illness. Often days before the athlete notices anything.",
           ],
           [
             "HRV",
             r.hrv !== null ? `${r.hrv} ms` : "—",
             r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : null,
             hrvColor,
-            "Heart rate variability — the small timing differences between heartbeats, from Apple Health. Compared only against this athlete's own baseline, never anyone else's, which is why the percentage is the number that matters. The raw ms figure is not comparable between two athletes.",
+            "Heart rate variability: the small timing differences between heartbeats, from Apple Health. Compared only against this athlete's own baseline, never anyone else's, which is why the percentage is the number that matters. The raw ms figure is not comparable between two athletes.",
           ],
           [
             "Sleep (7d avg)",
             r.sleepAvg !== null ? `${r.sleepAvg} h` : "—",
             null,
             sleepColor,
-            "Average hours slept across the last 7 nights recorded in Apple Health. Under 7 h turns amber — short sleep is one of the strongest injury and illness signals there is. Shows a dash rather than a stale number when nothing was recorded in the window.",
+            "Average hours slept across the last 7 nights recorded in Apple Health. Under 7 h turns amber. Short sleep is one of the strongest injury and illness signals there is. Shows a dash rather than a stale number when nothing was recorded in the window.",
           ],
           [
             "VO₂max",
             r.vo2max !== null ? `${r.vo2max}` : "—",
             null,
             "var(--ink)",
-            "Apple's Cardio Fitness estimate, read straight from Health — RunGuard does not calculate it. It is one of the two inputs to the fitness score.",
+            "Apple's Cardio Fitness estimate, read straight from Health. RunGuard does not calculate it. It is one of the two inputs to the fitness score.",
           ],
         ] as const).map(([label, value, delta, color, info]) => (
           <div key={label}>

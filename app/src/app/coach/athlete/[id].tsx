@@ -318,7 +318,7 @@ export default function CoachAthleteScreen() {
                   <Text style={styles.trendText}>
                     Reported energy has fallen {data.energyTrend.days} check-ins running,{" "}
                     {data.energyTrend.from}/10 down to {data.energyTrend.to}/10. Not a number to
-                    act on by itself — worth asking about.
+                    act on by itself, worth asking about.
                   </Text>
                 </View>
               ) : null}
@@ -410,7 +410,7 @@ export default function CoachAthleteScreen() {
             <WeeklyKmChart weeks={data.weeks} />
             <Text style={styles.rangeNote}>
               Weekly mileage, pace, fitness and the training year are fixed
-              windows — the picker moves the two daily charts above.
+              windows: the picker moves the two daily charts above.
             </Text>
 
             <HrZones zones={data.load.weekZones} />
@@ -506,14 +506,14 @@ export default function CoachAthleteScreen() {
               <Text style={styles.blockTitle}>Pattern detection</Text>
               <PatternRow
                 label="Monotony"
-                info="Foster's training monotony: the average of the last 7 days' training load divided by how much that load varied from day to day. Every day looking the same scores high. Above 2 with real volume behind it starts adding to the risk score — hard days and easy days have to actually differ. Blank when the week's loads barely varied at all."
+                info="Foster's training monotony: the average of the last 7 days' training load divided by how much that load varied from day to day. Every day looking the same scores high. Above 2 with real volume behind it starts adding to the risk score. Hard days and easy days have to actually differ. Blank when the week's loads barely varied at all."
                 value={data.patterns.monotony === null ? null : data.patterns.monotony.toFixed(1)}
                 note="Above 2 means every day looks the same"
                 warn={data.patterns.monotony !== null && data.patterns.monotony > 2}
               />
               <PatternRow
                 label="Days since hard effort"
-                info="Days since a session whose load was more than 40% above their median training day. A long gap is not automatically bad — it is what a taper or a recovery week looks like — but it is the number to check before assuming an athlete is sharp."
+                info="Days since a session whose load was more than 40% above their median training day. A long gap is not automatically bad. It is what a taper or a recovery week looks like. But it is the number to check before assuming an athlete is sharp."
                 value={
                   data.patterns.daysSinceHardEffort === null
                     ? null
@@ -571,9 +571,9 @@ export default function CoachAthleteScreen() {
               />
               <PatternRow
                 label="Illness pattern"
-                info="Resting heart rate at least 5 bpm above their baseline at the same time as HRV at least 15% below it. That combination often appears a day or two before someone feels ill. A pattern, not a diagnosis — ask them how they feel."
+                info="Resting heart rate at least 5 bpm above their baseline at the same time as HRV at least 15% below it. That combination often appears a day or two before someone feels ill. A pattern, not a diagnosis. Ask them how they feel."
                 value={data.illness ? "yes" : "no"}
-                note="resting HR up with HRV down — ask how they feel"
+                note="resting HR up with HRV down. Ask how they feel"
                 warn={data.illness}
               />
             </Card>
@@ -758,7 +758,7 @@ export default function CoachAthleteScreen() {
               <Text style={styles.blockTitle}>What they&apos;ve asked</Text>
               <Text style={styles.note}>
                 Their last 30 messages. Anything the safety filter caught is not
-                here and never will be — see the route. You cannot reply from
+                here and never will be. See the route. You cannot reply from
                 here; this is a record, not a conversation.
               </Text>
             </Card>

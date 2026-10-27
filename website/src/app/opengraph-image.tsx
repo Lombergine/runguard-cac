@@ -20,7 +20,7 @@ import { ImageResponse } from "next/og";
  */
 
 export const alt =
-  "RunGuard — see the injury coming before it happens. Athlete monitoring for high school running teams.";
+  "RunGuard: see the injury coming before it happens. Athlete monitoring for high school running teams.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

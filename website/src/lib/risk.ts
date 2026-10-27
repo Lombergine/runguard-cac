@@ -101,7 +101,7 @@ export type DailyPoint = DayLoad & {
 const DAY_MS = 86400000;
 
 export const NOT_ENOUGH_ACWR_HISTORY =
-  "Not enough training history yet for a reliable workload ratio — sync more data or give it a couple of weeks.";
+  "Not enough training history yet for a reliable workload ratio. Sync more data or give it a couple of weeks.";
 
 /**
  * How far back `p.series` (the ACWR/Load daily series) reaches — the ceiling
@@ -508,17 +508,17 @@ export function computeRisk(
     if (acwr > 1.5) {
       score += Math.min(70, 40 + (acwr - 1.5) * 60);
       insights.push(
-        `Workload ratio is ${round(acwr, 2)} — training load is spiking far above their base. This is the classic pre-injury pattern.`
+        `Workload ratio is ${round(acwr, 2)}, training load is spiking far above their base. This is the classic pre-injury pattern.`
       );
     } else if (acwr > 1.3) {
       score += 20 + ((acwr - 1.3) / 0.2) * 20;
       insights.push(
-        `Workload ratio is ${round(acwr, 2)} — above the safe zone (0.8–1.3). Watch closely and avoid stacking hard days.`
+        `Workload ratio is ${round(acwr, 2)}, above the safe zone (0.8–1.3). Watch closely and avoid stacking hard days.`
       );
     } else if (acwr < 0.6 && weekKm > 2) {
       score += 15;
       insights.push(
-        `Workload ratio is ${round(acwr, 2)} — well below their base. Returning after time off: rebuild gradually, a sudden jump from here is high-risk.`
+        `Workload ratio is ${round(acwr, 2)}, well below their base. Returning after time off: rebuild gradually, a sudden jump from here is high-risk.`
       );
     } else if (acwr >= 0.8 && acwr <= 1.3) {
       insights.push(
@@ -536,14 +536,14 @@ export function computeRisk(
     );
   } else if (rampPct !== null && rampPct < -40 && prevWeekKm > 15) {
     insights.push(
-      `Mileage dropped ${Math.abs(Math.round(rampPct))}% this week — check in: taper, illness, or a niggle?`
+      `Mileage dropped ${Math.abs(Math.round(rampPct))}% this week. Check in: taper, illness, or a niggle?`
     );
   }
 
   if (monotony !== null && monotony > 2 && weekLoad > 300) {
     score += Math.min(25, (monotony - 2) * 10);
     insights.push(
-      `Training monotony is high (${round(monotony, 1)}) — every day looks the same. Mix in genuinely easy days; monotony amplifies injury and illness risk.`
+      `Training monotony is high (${round(monotony, 1)}), every day looks the same. Mix in genuinely easy days; monotony amplifies injury and illness risk.`
     );
   }
 
@@ -556,7 +556,7 @@ export function computeRisk(
   if (daysSinceRest >= 10) {
     score += 10;
     insights.push(
-      `${daysSinceRest} straight days without a rest day. Schedule one — adaptation happens in recovery.`
+      `${daysSinceRest} straight days without a rest day. Schedule one. Adaptation happens in recovery.`
     );
   }
 
@@ -566,11 +566,11 @@ export function computeRisk(
   if (recovery.restingHrDelta !== null && recovery.restingHrDelta >= 5) {
     score += Math.min(15, (recovery.restingHrDelta - 4) * 3);
     insights.push(
-      `Resting heart rate is up ${recovery.restingHrDelta} bpm over their baseline (${recovery.restingHrBaseline} → ${recovery.restingHr}). An elevated resting HR is one of the earliest signs of under-recovery or illness — often before the athlete feels it.`
+      `Resting heart rate is up ${recovery.restingHrDelta} bpm over their baseline (${recovery.restingHrBaseline} → ${recovery.restingHr}). An elevated resting HR is one of the earliest signs of under-recovery or illness. Often before the athlete feels it.`
     );
   } else if (recovery.restingHrDelta !== null && recovery.restingHrDelta <= -3) {
     insights.push(
-      `Resting heart rate is trending down (${recovery.restingHrBaseline} → ${recovery.restingHr} bpm) — a good sign that fitness is improving and recovery is on track.`
+      `Resting heart rate is trending down (${recovery.restingHrBaseline} → ${recovery.restingHr} bpm), a good sign that fitness is improving and recovery is on track.`
     );
   }
 
@@ -584,7 +584,7 @@ export function computeRisk(
   if (recovery.sleepAvg !== null && recovery.sleepAvg < 7) {
     score += Math.min(12, (7 - recovery.sleepAvg) * 4);
     insights.push(
-      `Averaging ${recovery.sleepAvg}h of sleep this week. Under 7 hours measurably raises injury risk for teenage athletes — the body does most of its tissue repair asleep.`
+      `Averaging ${recovery.sleepAvg}h of sleep this week. Under 7 hours measurably raises injury risk for teenage athletes. The body does most of its tissue repair asleep.`
     );
   }
 
@@ -605,7 +605,7 @@ export function computeRisk(
 
   if (self.persistentPart && self.persistentDays >= 3) {
     insights.push(
-      `The ${self.persistentPart} has been reported sore on ${self.persistentDays} of the last 7 days (peak ${self.persistentPeak}/10)${self.escalating ? ", and it is getting worse rather than settling" : ""}. Soreness that keeps returning to one area is how a running injury usually starts — worth assessing regardless of what the load numbers say.`
+      `The ${self.persistentPart} has been reported sore on ${self.persistentDays} of the last 7 days (peak ${self.persistentPeak}/10)${self.escalating ? ", and it is getting worse rather than settling" : ""}. Soreness that keeps returning to one area is how a running injury usually starts. Worth assessing regardless of what the load numbers say.`
     );
   } else if (self.todayMax >= 6) {
     insights.push(
@@ -617,7 +617,7 @@ export function computeRisk(
   // letting a silent week look like a clean one.
   if (!self.hasData) {
     insights.push(
-      "No check-ins on record — nothing is known about how this athlete actually feels."
+      "No check-ins on record. Nothing is known about how this athlete actually feels."
     );
   } else if ((self.daysSinceReport ?? 0) >= 5) {
     insights.push(

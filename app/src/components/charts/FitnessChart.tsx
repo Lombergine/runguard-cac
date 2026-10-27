@@ -121,7 +121,7 @@ export function FitnessChart({ weekly }: { weekly?: Fitness["weekly"] }) {
 
       <Text style={styles.key}>
         The model works this out from your synced training. It is not something
-        measured on you, and it is not a verdict — it moves when the training
+        measured on you, and it is not a verdict. It moves when the training
         behind it moves.
       </Text>
     </Panel>

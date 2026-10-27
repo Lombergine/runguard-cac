@@ -65,7 +65,7 @@ function AthleteSignupForm() {
         </Link>
         <h1 className="text-xl font-bold mt-4">Create your account</h1>
         <p className="text-sm mt-1 mb-6" style={{ color: "var(--ink-muted)" }}>
-          Sign up on your own — no team needed. Already have an account?{" "}
+          Sign up on your own. No team needed. Already have an account?{" "}
           <Link href="/athlete/login" style={{ color: "var(--brand-strong)" }} className="font-medium">
             Log in
           </Link>
@@ -74,7 +74,7 @@ function AthleteSignupForm() {
           <input
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="Team code (optional — leave blank to go solo)"
+            placeholder="Team code (optional: leave blank to go solo)"
             autoCapitalize="characters"
             className="w-full rounded-xl border bg-transparent px-4 py-2.5 text-sm outline-none focus:border-amber-500 tracking-wider font-medium"
             style={{ borderColor: "var(--hairline)" }}

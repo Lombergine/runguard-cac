@@ -90,8 +90,8 @@ function assertCanCreateHere(): void {
   if (pkg === "milemarker") return;
   throw new Error(
     `Refusing to create a new SQLite database at ${DB_PATH}. The path is resolved ` +
-      `from the working directory, which is ${process.cwd()} — not the website ` +
-      `package — so this would be a second, empty database rather than the real one, ` +
+      `from the working directory, which is ${process.cwd()}, not the website ` +
+      `package: so this would be a second, empty database rather than the real one, ` +
       `and the app would come up with an empty roster. Run npm/tsx from inside ` +
       `website/, or set DATABASE_PATH if you meant a database at this location.`
   );

@@ -143,7 +143,7 @@ export function applySqliteSchema(db: Database.Database): void {
 
     -- chatSummary() reads this on EVERY athlete page render, not just chat, so the
     -- unindexed scan sat on the dashboard's hot path. Cost without it depends on
-    -- rowid position, which makes the worst case a dormant athlete — exactly the
+    -- rowid position, which makes the worst case a dormant athlete, exactly the
     -- one a coach opens.
     CREATE INDEX IF NOT EXISTS idx_chat_messages_athlete_id
       ON chat_messages(athlete_id, id);

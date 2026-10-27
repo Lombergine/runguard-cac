@@ -23,7 +23,7 @@ export default function InviteCard({ joinCode }: { joinCode: string }) {
       title="Copy your team join code"
     >
       <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--ink-muted)" }}>
-        {copied ? "Copied!" : "Team code — tap to copy"}
+        {copied ? "Copied!" : "Team code: tap to copy"}
       </div>
       <div className="text-sm font-bold tracking-wider" style={{ color: "var(--brand-strong)" }}>
         {joinCode}

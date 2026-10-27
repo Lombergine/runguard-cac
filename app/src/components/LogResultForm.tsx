@@ -163,7 +163,7 @@ function parseSplits(raw: string, timeS: number): SplitParse {
 
   const parts = entry.split(/[,\s]+/).filter(Boolean);
   if (parts.length > 60) {
-    return { ok: false, why: `That is ${parts.length} splits — more than a race has laps. Check the entry.` };
+    return { ok: false, why: `That is ${parts.length} splits: more than a race has laps. Check the entry.` };
   }
 
   const splits: number[] = [];
@@ -209,7 +209,7 @@ function parseFinishTime(raw: string): TimeParse {
     if (NO_COLON.test(entry)) {
       return {
         ok: false,
-        why: `Put a colon between the minutes and the seconds — 18:42, not 1842. "${entry}" could be either.`,
+        why: `Put a colon between the minutes and the seconds, 18:42, not 1842. "${entry}" could be either.`,
       };
     }
     if (SHORT_SEC.test(entry)) {
@@ -221,12 +221,12 @@ function parseFinishTime(raw: string): TimeParse {
     if (OVER_SEC.test(entry)) {
       return {
         ok: false,
-        why: "Seconds only run 00 to 59, so 18:60 is not a time — that one is 19:00.",
+        why: "Seconds only run 00 to 59, so 18:60 is not a time. That one is 19:00.",
       };
     }
     return {
       ok: false,
-      why: "Write the time as minutes and seconds, like 18:42 — or with hours for a long race, like 1:02:33.",
+      why: "Write the time as minutes and seconds, like 18:42. Or with hours for a long race, like 1:02:33.",
     };
   }
 
@@ -452,7 +452,7 @@ export function LogResultForm({ onChanged }: { onChanged: () => void }) {
          */
         if (err instanceof ApiError && err.status === 0) {
           setProblem(
-            `${err.message} If it did save, logging again would add a second copy — check your history below before trying again.`
+            `${err.message} If it did save, logging again would add a second copy. Check your history below before trying again.`
           );
         } else {
           setProblem(err instanceof ApiError ? err.message : "Could not log that result.");

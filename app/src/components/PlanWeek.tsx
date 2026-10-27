@@ -479,7 +479,7 @@ function PlanRow({ day, dateLabel, expanded, onToggle }: PlanRowProps) {
               label="Coach wrote"
               body={`${formatDistance(day.coachDistanceKm)}. RunGuard suggests ${formatDistance(
                 day.distanceKm
-              )} for you today. Run your coach's number unless they say otherwise — this is something to show them, not an instruction.`}
+              )} for you today. Run your coach's number unless they say otherwise. This is something to show them, not an instruction.`}
               accent
             />
           ) : null}
@@ -567,7 +567,7 @@ export function PlanWeek({
             <View style={styles.taperCopy}>
               <Text style={styles.taperTitle}>Taper mode is active</Text>
               <Text style={styles.taperNote}>
-                Race week — the plan below is eased day by day until race day.
+                Race week: the plan below is eased day by day until race day.
               </Text>
             </View>
           </View>

@@ -64,7 +64,7 @@ export function AppleImportForm({
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          title="Only import from this date (optional — defaults to the whole export)"
+          title="Only import from this date (optional. Defaults to the whole export)"
           className="text-xs rounded-lg border px-2 py-1.5"
           style={{ borderColor: "var(--hairline)", background: "var(--page)" }}
         />

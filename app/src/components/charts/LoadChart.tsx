@@ -141,7 +141,7 @@ export function LoadChart({
   return (
     <Panel title="Training load" note={`last ${shownDays} days`}>
       <Text style={styles.lede}>
-        Each bar is one day&apos;s training load — how long you ran multiplied by
+        Each bar is one day&apos;s training load. How long you ran multiplied by
         how hard it was, with the effort estimated from your heart rate, or from
         your pace on a run that has none.
       </Text>

@@ -276,7 +276,7 @@ function recoveryTips(p: Profile): string[] {
 
   if (p.illness) {
     out.push(
-      "Your HRV is down and your resting heart rate is up at the same time. That combination is the pattern RunGuard watches for when a body is fighting something off — it is a signal, not a diagnosis, and it is worth mentioning to your coach.",
+      "Your HRV is down and your resting heart rate is up at the same time. That combination is the pattern RunGuard watches for when a body is fighting something off. It is a signal, not a diagnosis, and it is worth mentioning to your coach.",
     );
   }
 
@@ -402,7 +402,7 @@ function Readings({ profile }: { profile: Profile }) {
 
       <ListSection
         title="Scored from those"
-        footer="0–100, worked out rather than measured — not a reading off the watch."
+        footer="0–100, worked out rather than measured. Not a reading off the watch."
       >
         {/*
           `freshness` is always a number, so `hasActivityHistory` is the guard.

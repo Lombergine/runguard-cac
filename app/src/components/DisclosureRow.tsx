@@ -80,7 +80,7 @@ export function DisclosureRow({
         <View style={styles.disclaimer}>
           <Text style={styles.disclaimerText}>
             RunGuard describes what it observed. It does not diagnose anything,
-            and it never tells you to stop, rest or see anyone — that is your
+            and it never tells you to stop, rest or see anyone, that is your
             coach&apos;s call, and a doctor&apos;s.
           </Text>
         </View>

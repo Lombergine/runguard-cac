@@ -119,7 +119,7 @@ export function TodayBlock({ day, dateLabel }: TodayBlockProps) {
       day.distanceKm !== null &&
       Math.abs(day.coachDistanceKm - day.distanceKm) > 0.15 ? (
         <Text style={styles.eased}>
-          {`Your coach wrote ${formatDistance(day.coachDistanceKm)}. Run their number unless they say otherwise — show them this.`}
+          {`Your coach wrote ${formatDistance(day.coachDistanceKm)}. Run their number unless they say otherwise, show them this.`}
         </Text>
       ) : null}
 

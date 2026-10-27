@@ -108,9 +108,9 @@ export default function InjuryManager({
       <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
         {tab === "current"
           ? active.length
-            ? `${active.length} active — showing on the body scan`
-            : "Nothing active — the body scan is clear"
-          : "Healed — kept as history for the risk engine, not shown on the body scan"}
+            ? `${active.length} active: showing on the body scan`
+            : "Nothing active: the body scan is clear"
+          : "Healed: kept as history for the risk engine, not shown on the body scan"}
       </p>
 
       <div className="space-y-2.5">

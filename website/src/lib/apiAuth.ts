@@ -187,7 +187,7 @@ export function isSelf(via: AuthPath): boolean {
 export function selfOnlyResponse(what: string): Response {
   return Response.json(
     {
-      error: `Only the athlete can ${what}. Coaches can see it once it is recorded, but entering it for them would put words in their mouth — and readiness is built out of exactly this.`,
+      error: `Only the athlete can ${what}. Coaches can see it once it is recorded, but entering it for them would put words in their mouth. And readiness is built out of exactly this.`,
     },
     { status: 403 }
   );
@@ -207,7 +207,7 @@ export function selfOnlyResponse(what: string): Response {
 export function coachOnlyResponse(what: string): Response {
   return Response.json(
     {
-      error: `Only a coach can ${what}. If something hurts, log it as soreness on your check-in — that reaches your coach and it is yours to describe.`,
+      error: `Only a coach can ${what}. If something hurts, log it as soreness on your check-in. That reaches your coach and it is yours to describe.`,
     },
     { status: 403 }
   );

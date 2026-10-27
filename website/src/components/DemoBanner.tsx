@@ -38,14 +38,14 @@ export default function DemoBanner() {
           Demo
         </span>
         <span style={{ color: "var(--ink-2)" }}>
-          A sample team with made-up runners. Look anywhere — nothing you change is saved.
+          A sample team with made-up runners. Look anywhere. Nothing you change is saved.
         </span>
         <Link
           href="/signup"
           className="ml-auto rounded-full px-4 py-1.5 text-xs font-semibold text-black whitespace-nowrap"
           style={{ background: "var(--brand)" }}
         >
-          Create your own team — free →
+          Create your own team, free →
         </Link>
       </div>
     </div>

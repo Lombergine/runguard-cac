@@ -137,7 +137,7 @@ export function resolveHrMax(
   return {
     value: HR_MAX_DEFAULT,
     source: "default",
-    label: "generic fallback — set a real value for better numbers",
+    label: "generic fallback: set a real value for better numbers",
     sessions: 0,
   };
 }

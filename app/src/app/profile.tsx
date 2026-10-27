@@ -416,7 +416,7 @@ function HrMaxPanel({
       {isEstimate ? (
         <Text style={styles.body}>
           This is an estimate, not something measured on you. It updates on its own once
-          enough workouts have synced from Apple Health — every run&apos;s intensity, your
+          enough workouts have synced from Apple Health. Every run&apos;s intensity, your
           training load and your workload ratio are all scored against it.
         </Text>
       ) : isSet ? (
@@ -494,7 +494,7 @@ function DevicePanel() {
               if (erased) return;
               Alert.alert(
                 "This device is still paired",
-                "This phone's keychain would not release the pairing, so nothing changed — this device is still paired, and it will sign back in the next time the app starts. Try again once the phone is unlocked."
+                "This phone's keychain would not release the pairing, so nothing changed. This device is still paired, and it will sign back in the next time the app starts. Try again once the phone is unlocked."
               );
             })();
           },

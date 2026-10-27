@@ -92,7 +92,7 @@ export async function POST(request: Request) {
   }
 
   if (await getAthleteByEmail(email)) {
-    return Response.json({ error: "An account with that email already exists — log in instead." }, { status: 409 });
+    return Response.json({ error: "An account with that email already exists, log in instead." }, { status: 409 });
   }
 
   const athlete = await createAthleteAccount({

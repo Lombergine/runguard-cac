@@ -57,7 +57,7 @@ export default function PrivacyPage() {
           tool for runners. It reads training and recovery data, computes an injury-risk score, and shares
           that score with the athlete and their coach. This policy explains what we collect, how we use it,
           who we share it with, and the choices you have. It applies to the RunGuard iOS app and the RunGuard
-          web dashboard. Many RunGuard athletes are minors — please read the <strong>Minors</strong> section
+          web dashboard. Many RunGuard athletes are minors, please read the <strong>Minors</strong> section
           carefully. Questions? Email <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: "var(--brand-strong)" }}>{CONTACT_EMAIL}</a>.
         </P>
 
@@ -116,7 +116,7 @@ export default function PrivacyPage() {
         <H2>How your information is shared</H2>
         <P>
           We share information only as needed to run the service: with your coach (your risk score, training
-          history, activity maps, and check-ins are visible to the coach of your team — this is the core purpose
+          history, activity maps, and check-ins are visible to the coach of your team. This is the core purpose
           of the product); with the service providers that host and operate RunGuard on our behalf (below); for
           legal reasons if required; and as part of a business transfer subject to this policy. We do not sell
           your personal information or health data, and we do not share it with data brokers or advertisers.

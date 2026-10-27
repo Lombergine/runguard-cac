@@ -213,7 +213,7 @@ export async function checkRequestRate(
 export function tooManyRequests(retryAfter: number): Response {
   return Response.json(
     {
-      error: `That's a lot of questions at once — give it ${retryAfter} second${
+      error: `That's a lot of questions at once, give it ${retryAfter} second${
         retryAfter === 1 ? "" : "s"
       } and ask again.`,
     },

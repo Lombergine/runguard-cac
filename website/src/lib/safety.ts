@@ -319,7 +319,7 @@ export const CARDIAC_PATTERNS: RegExp[] = [
  */
 export const CRISIS_REPLY = `I'm really glad you told me that, and I'm not going to pretend I'm the right thing for it. This needs a person, not an app.
 
-Please tell someone today — a parent, a teacher, an older sibling, any adult you trust. If saying it out loud is too much right now, you can call or text 988 any time, or text HOME to 741741. Both are free, both are open all night, and you can text instead of talking.
+Please tell someone today. A parent, a teacher, an older sibling, any adult you trust. If saying it out loud is too much right now, you can call or text 988 any time, or text HOME to 741741. Both are free, both are open all night, and you can text instead of talking.
 
 One thing worth saying plainly: "I'm not bad enough for this." There is no bar to clear. Wanting to talk is enough.`;
 
@@ -332,7 +332,7 @@ One thing worth saying plainly: "I'm not bad enough for this." There is no bar t
  */
 export const PURGE_REPLY = `Thank you for telling me. I'm not going to give you training advice on top of that, because it wouldn't be the thing you actually need right now.
 
-What you're describing is a medical thing, not a training thing, and it's one that gets harder to deal with the longer it goes on. Please tell someone — whoever is easiest, not whoever seems most official. A parent, your doctor, a school counselor, an older sibling. You do not need to have the right words ready. "Something's going on with eating and I need help" is enough.
+What you're describing is a medical thing, not a training thing, and it's one that gets harder to deal with the longer it goes on. Please tell someone. Whoever is easiest, not whoever seems most official. A parent, your doctor, a school counselor, an older sibling. You do not need to have the right words ready. "Something's going on with eating and I need help" is enough.
 
 If starting with a stranger is easier, you can text HOME to 741741 and there's a real person on the other end, free, any time.
 
@@ -346,19 +346,19 @@ Getting help early makes the biggest difference, and nobody is in trouble for th
  * Concedes the likely benign causes both before and after the escalation,
  * because anti-hiding is load-bearing here.
  */
-export const CARDIAC_REPLY = `Stop running until an adult has heard about this. Not this week — today.
+export const CARDIAC_REPLY = `Stop running until an adult has heard about this. Not this week, today.
 
 It is probably something ordinary. Asthma, dehydration, a chest cold and nerves all do this, and that is genuinely the most likely answer. But chest symptoms and fainting during exercise are the two things nobody in running gets to wait on, because the rare cause is the one you only get to catch once.
 
-Tell a parent and your athletic trainer today, and use these words: "I've been having chest symptoms during exercise." That exact phrase matters — it's what tells a doctor to look at your heart rather than your stomach. If it's happening right now, or you fainted, that's an urgent care or emergency room today rather than an appointment next week.
+Tell a parent and your athletic trainer today, and use these words: "I've been having chest symptoms during exercise." That exact phrase matters, it's what tells a doctor to look at your heart rather than your stomach. If it's happening right now, or you fainted, that's an urgent care or emergency room today rather than an appointment next week.
 
 Say it even if it has stopped and you feel fine now. Especially then.`;
 
-export const DRUGS_REPLY = `I don't do medication, dosing, or supplements — not because it's a bad question, but because getting it wrong genuinely hurts people your age, and I can't see enough to answer it safely.
+export const DRUGS_REPLY = `I don't do medication, dosing, or supplements, not because it's a bad question, but because getting it wrong genuinely hurts people your age, and I can't see enough to answer it safely.
 
 For anything you'd swallow, inhale, or rub on: a parent, your doctor, or the pharmacist at any drugstore. Pharmacists answer this exact question all day for free and you don't need an appointment. Never use someone else's prescription, including a sibling's inhaler.
 
-One thing I will say straight: painkillers before a long run are not a neutral choice — they change how your kidneys handle a hard effort, and they hide the pain that tells you to stop. If you're reaching for them to get through a session, that's worth telling your trainer about instead.
+One thing I will say straight: painkillers before a long run are not a neutral choice. They change how your kidneys handle a hard effort, and they hide the pain that tells you to stop. If you're reaching for them to get through a session, that's worth telling your trainer about instead.
 
 Happy to help with the training side any time.`;
 
@@ -371,9 +371,9 @@ Happy to help with the training side any time.`;
  */
 export const WEIGHT_REPLY = `That's a fair question, and a really common one, so let me give you a straight answer.
 
-Runners get faster by getting stronger and better fueled, not lighter. The dangerous part isn't asking — it's the under-fueling, and the evidence there is not subtle: it's a leading cause of stress fractures, stalled times, hormone problems and injuries that end careers. That's the IOC's RED-S consensus, not one coach's opinion. Your body cannot build the fitness you're training for out of a deficit.
+Runners get faster by getting stronger and better fueled, not lighter. The dangerous part isn't asking: it's the under-fueling, and the evidence there is not subtle: it's a leading cause of stress fractures, stalled times, hormone problems and injuries that end careers. That's the IOC's RED-S consensus, not one coach's opinion. Your body cannot build the fitness you're training for out of a deficit.
 
-If thoughts about food or weight are taking up real space in your head — or if this came from something somebody said to you — talk to a parent or your doctor first. Someone outside of running, who isn't scoring you. A coach can be a good person to tell too, but they're also the person whose expectations are already in your head, so they don't have to be first.
+If thoughts about food or weight are taking up real space in your head. Or if this came from something somebody said to you. Talk to a parent or your doctor first. Someone outside of running, who isn't scoring you. A coach can be a good person to tell too, but they're also the person whose expectations are already in your head, so they don't have to be first.
 
 My job is to make you fast and healthy for years, and that road runs through eating enough. Tell me what you actually want to get faster at and let's work on that.`;
 
@@ -388,9 +388,9 @@ export const MENSTRUAL_REPLY = `Good question, and an important one.
 
 Training on your period is fine. Energy dips around it are normal, so run those days by feel and don't read anything into one slower workout.
 
-The part that genuinely matters for a runner: a period that gets irregular or stops is not a normal "fit athlete" sign. The most likely explanation is that you're not eating enough for your training — but it isn't the only one, and that's exactly why it's worth a real appointment rather than a guess. A doctor rules several other things out before landing on it. What isn't in doubt is that it weakens bone while it's happening, which is why it shows up in the research as part of RED-S and the female athlete triad, and why catching it early protects your skeleton and your seasons.
+The part that genuinely matters for a runner: a period that gets irregular or stops is not a normal "fit athlete" sign. The most likely explanation is that you're not eating enough for your training, but it isn't the only one, and that's exactly why it's worth a real appointment rather than a guess. A doctor rules several other things out before landing on it. What isn't in doubt is that it weakens bone while it's happening, which is why it shows up in the research as part of RED-S and the female athlete triad, and why catching it early protects your skeleton and your seasons.
 
-And if you've never had a period at all — you're 15 or older and it just hasn't started — that's the same conversation, not a different one. Worth raising even if nobody has ever asked you about it.
+And if you've never had a period at all, you're 15 or older and it just hasn't started: that's the same conversation, not a different one. Worth raising even if nobody has ever asked you about it.
 
 Talk to a parent and a doctor. Fueling enough is far more often the answer than training less.`;
 

@@ -90,7 +90,7 @@ function workoutBlocks(d: {
   if (!isWorkout) {
     // easy/steady runs: single block + a strides note if the type mentions strides
     const blocks = [main];
-    if (t.includes("stride")) blocks.push({ label: "Finish", text: "Relaxed strides on grass, walk-back recovery — turnover, not effort." });
+    if (t.includes("stride")) blocks.push({ label: "Finish", text: "Relaxed strides on grass, walk-back recovery, turnover, not effort." });
     return blocks;
   }
   return [
@@ -272,12 +272,12 @@ export function HomeTab({ p }: { p: CoreProfile }) {
           sub={verdict ?? "no check-in or sensor data"}
           accent={ready.known ? z : undefined}
           big
-          info="0–100, built from your sleep, HRV and resting heart rate against your own baselines, then adjusted down for soreness you reported. It answers one question: how ready are you to absorb hard work today. Under 40 means back off; 65 and up means you're clear to run it as written. It is not a fitness score — you can be very fit and very flat."
+          info="0–100, built from your sleep, HRV and resting heart rate against your own baselines, then adjusted down for soreness you reported. It answers one question: how ready are you to absorb hard work today. Under 40 means back off; 65 and up means you're clear to run it as written. It is not a fitness score. You can be very fit and very flat."
         />
         <BentoTile
           i={2}
           label="Sleep · 7d"
-          info="Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h turns amber — short sleep is one of the strongest injury and illness signals there is. A dash means nothing was recorded in that window; it never fills the gap with older nights."
+          info="Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h turns amber. Short sleep is one of the strongest injury and illness signals there is. A dash means nothing was recorded in that window; it never fills the gap with older nights."
           value={r.sleepAvg !== null ? String(r.sleepAvg) : "—"}
           unit={r.sleepAvg !== null ? "h" : undefined}
           // No reading is not "on target" — with sleepAvg null the value is "—"
@@ -288,7 +288,7 @@ export function HomeTab({ p }: { p: CoreProfile }) {
         <BentoTile
           i={3}
           label="HRV"
-          info="Heart rate variability — the tiny timing differences between your heartbeats. Higher usually means recovered; a drop means your body is still under stress. It is measured against your own baseline, so the % change is the part that means anything. Don't compare the ms number to a teammate's."
+          info="Heart rate variability: the tiny timing differences between your heartbeats. Higher usually means recovered; a drop means your body is still under stress. It is measured against your own baseline, so the % change is the part that means anything. Don't compare the ms number to a teammate's."
           value={r.hrv !== null ? String(r.hrv) : "—"}
           unit={r.hrv !== null ? "ms" : undefined}
           sub={r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : "trend vs baseline"}
@@ -297,7 +297,7 @@ export function HomeTab({ p }: { p: CoreProfile }) {
         <BentoTile
           i={4}
           label="Resting HR"
-          info="Your heart rate at rest, from Apple Health, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery — it is an early warning, often before you feel anything."
+          info="Your heart rate at rest, from Apple Health, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery. It is an early warning, often before you feel anything."
           value={r.restingHr !== null ? String(r.restingHr) : "—"}
           unit={r.restingHr !== null ? "bpm" : undefined}
           sub={r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : "morning resting"}
@@ -332,8 +332,8 @@ export function HomeTab({ p }: { p: CoreProfile }) {
               the athlete is behind on. With nothing synced there is no target.
             */}
             {p.risk.hasActivityHistory
-              ? `${rawPct}% of weekly target${rawPct > 115 ? " — well over plan, this is the spike RunGuard is flagging" : ""}`
-              : "No target yet — it's set from your training history"}
+              ? `${rawPct}% of weekly target${rawPct > 115 ? ", well over plan, this is the spike RunGuard is flagging" : ""}`
+              : "No target yet: it's set from your training history"}
           </div>
         </Panel>
       </div>
@@ -434,7 +434,7 @@ function RecentRuns({ runs }: { runs: CoreProfile["recentRuns"] }) {
                 {r.spike.pctAbove}% longer than your longest run in the month before it
               </span>{" "}
               ({miNum(r.spike.longestKm)} mi). In a study of 5,205 adult runners, single sessions well past
-              a runner&apos;s recent longest carried a higher injury rate — the clearest load signal
+              a runner&apos;s recent longest carried a higher injury rate. The clearest load signal
               there is, though it hasn&apos;t been shown specifically in teenagers.
             </p>
           )}
@@ -464,7 +464,7 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
             This week&apos;s plan is a little lighter than usual.
           </span>{" "}
           {p.plan.adjustment.reason}{" "}
-          If that doesn&apos;t match how you actually feel, say so — your coach can override it.
+          If that doesn&apos;t match how you actually feel, say so. Your coach can override it.
         </div>
       )}
       {p.plan.taperMode && (
@@ -472,7 +472,7 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
           <span className="text-2xl font-extrabold tabular-nums" style={{ color: "var(--brand-strong)" }}>{p.plan.taperCountdown}</span>
           <div>
             <div className="text-sm font-semibold">Taper mode is active</div>
-            <div className="text-xs" style={{ color: "var(--ink-2)" }}>Race week detected — your plan below is automatically adjusted day by day until race day.</div>
+            <div className="text-xs" style={{ color: "var(--ink-2)" }}>Race week detected: your plan below is automatically adjusted day by day until race day.</div>
           </div>
         </div>
       )}
@@ -528,14 +528,14 @@ export function TrainingTab({ p }: { p: CoreProfile }) {
                   <p className="text-xs" style={{ color: "var(--status-warning)" }}>
                     Your coach wrote {miNum(d.coachDistanceKm)} mi. RunGuard is suggesting{" "}
                     {miNum(d.distanceKm)} mi for you today
-                    {p.plan.adjustment.reason ? ` — ${p.plan.adjustment.reason.toLowerCase()}` : "."}{" "}
+                    {p.plan.adjustment.reason ? `, ${p.plan.adjustment.reason.toLowerCase()}` : "."}{" "}
                     Run the coach&apos;s number unless they say otherwise; this is a flag to
                     show them, not an instruction.
                   </p>
                 )}
               <p className="text-xs" style={{ color: "var(--ink-muted)" }}>Why: {d.why}</p>
               {d.supplemental && (
-                <p className="text-xs" style={{ color: "var(--brand-strong)" }}>+ Supplemental — {d.supplemental}</p>
+                <p className="text-xs" style={{ color: "var(--brand-strong)" }}>+ Supplemental: {d.supplemental}</p>
               )}
             </div>
           </details>
@@ -576,30 +576,30 @@ export function StatsTab({ p }: { p: CoreProfile }) {
             label="VO₂max"
             value={p.fitness.vo2max !== null ? String(p.fitness.vo2max) : "—"}
             sub="Apple Cardio Fitness"
-            info="Apple's Cardio Fitness estimate, read straight from Health — RunGuard doesn't calculate this one. It feeds into your fitness score."
+            info="Apple's Cardio Fitness estimate, read straight from Health, RunGuard doesn't calculate this one. It feeds into your fitness score."
           />
           <Stat
             label="Week TRIMP"
             value={String(p.load.weekTrimp)}
             sub="training impulse"
-            info="Training impulse over the last 7 days — how long each run was, weighted sharply upward by how hard your heart was working. Two runs the same distance can score very differently. Runs synced without heart-rate data count as zero."
+            info="Training impulse over the last 7 days. How long each run was, weighted sharply upward by how hard your heart was working. Two runs the same distance can score very differently. Runs synced without heart-rate data count as zero."
           />
           <Stat
             label="7-day mi"
             value={`${miNum(p.risk.weekKm)}`}
             sub={`target ${miNum(p.weeklyTargetKm)}`}
-            info="Distance over the last 7 days — a rolling window, not since Monday. The target is your weekly-distance goal if you've set one; otherwise it's a placeholder just above your current week."
+            info="Distance over the last 7 days. A rolling window, not since Monday. The target is your weekly-distance goal if you've set one; otherwise it's a placeholder just above your current week."
           />
           <Stat
             label="Longest streak"
             value={`${p.badges.find((b) => b.id === "streak7")?.detail.replace("Longest streak: ", "") ?? "—"}`}
-            info="The most days in a row you trained without a rest day, over the last 120 days. Earns the 7-Day Streak badge at 7 — it's a record of consistency, not a target to chase."
+            info="The most days in a row you trained without a rest day, over the last 120 days. Earns the 7-Day Streak badge at 7, it's a record of consistency, not a target to chase."
           />
         </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Pace trend — season" note="up = faster"><PaceChart data={p.paceSeason} /></Panel>
+        <Panel title="Pace trend: season" note="up = faster"><PaceChart data={p.paceSeason} /></Panel>
         <Panel title="Fitness score trend" note="improving or plateauing?"><FitnessChart data={p.fitness.weekly} /></Panel>
         <Panel title="Weekly mileage"><WeeklyKmChart data={p.weeks} /></Panel>
         <Panel title="Workload ratio over time" note="band = 0.8–1.3 · dashed = universal 1.5 · violet = your own 95th"><AcwrChart data={p.series} personal={p.audit?.personalZones?.high ?? null} /></Panel>
@@ -612,7 +612,7 @@ export function StatsTab({ p }: { p: CoreProfile }) {
       <Panel title="Training load history" note="spot exactly when you spiked"><LoadChart data={p.series} /></Panel>
 
       {/* HR zones */}
-      <Panel title="Time in HR zones — this week" note={`${Object.values(p.load.weekZones).reduce((s, x) => s + x, 0)} total minutes`}>
+      <Panel title="Time in HR zones, this week" note={`${Object.values(p.load.weekZones).reduce((s, x) => s + x, 0)} total minutes`}>
         <div className="flex h-6 rounded-lg overflow-hidden" style={{ background: "var(--surface-2)" }}>
           {(["z1", "z2", "z3", "z4", "z5"] as const).map((z, i) => {
             const total = Object.values(p.load.weekZones).reduce((s, x) => s + x, 0) || 1;
@@ -689,9 +689,9 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
     return v.length ? (v.reduce((s, x) => s + x, 0) / v.length).toFixed(1) : "—";
   };
   const tips: string[] = [];
-  if (r.sleepAvg !== null && r.sleepAvg < 7.5) tips.push(`Your sleep is low (${r.sleepAvg}h avg) — prioritize 8 hours tonight${p.plan.days.some((d) => d.type.includes("Workout") && !d.status) ? " before your next hard workout" : ""}.`);
-  if (r.hrvDeltaPct !== null && r.hrvDeltaPct <= -12) tips.push("HRV is suppressed — today should be genuinely easy; it rebounds fastest with sleep + low intensity.");
-  if (p.patterns.sleepDebtH !== null && p.patterns.sleepDebtH > 4) tips.push(`You're carrying ${p.patterns.sleepDebtH}h of sleep debt this week — one early night erases half of it.`);
+  if (r.sleepAvg !== null && r.sleepAvg < 7.5) tips.push(`Your sleep is low (${r.sleepAvg}h avg), prioritize 8 hours tonight${p.plan.days.some((d) => d.type.includes("Workout") && !d.status) ? " before your next hard workout" : ""}.`);
+  if (r.hrvDeltaPct !== null && r.hrvDeltaPct <= -12) tips.push("HRV is suppressed: today should be genuinely easy; it rebounds fastest with sleep + low intensity.");
+  if (p.patterns.sleepDebtH !== null && p.patterns.sleepDebtH > 4) tips.push(`You're carrying ${p.patterns.sleepDebtH}h of sleep debt this week. One early night erases half of it.`);
   if (p.illness) tips.push("HRV drop + elevated resting HR looks like your body fighting something. Hydrate, sleep, and skip intensity for 48h.");
   tips.push("Hydration: start sipping now, not at practice. Before hard days and race days: extra water + electrolytes with lunch.");
 
@@ -709,10 +709,10 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
             {!ready.known
               ? "Not reported yet"
               : ready.value >= 65
-                ? "Green — recovered"
+                ? "Green: recovered"
                 : ready.value >= 40
-                  ? "Yellow — partial"
-                  : "Red — under-recovered"}
+                  ? "Yellow: partial"
+                  : "Red: under-recovered"}
           </div>
         </div>
         <div className="flex-1" />
@@ -730,21 +730,21 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
           label="Sleep (7d avg)"
           value={r.sleepAvg !== null ? `${r.sleepAvg} h` : "—"}
           color={r.sleepAvg !== null && r.sleepAvg < 7 ? "var(--status-warning)" : undefined}
-          info="Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h turns amber — short sleep is one of the strongest injury and illness signals there is."
+          info="Your average hours asleep over the last 7 nights, from Apple Health. Under 7 h turns amber. Short sleep is one of the strongest injury and illness signals there is."
         />
         <Stat
           label="HRV"
           value={r.hrv !== null ? `${r.hrv} ms` : "—"}
           sub={r.hrvDeltaPct !== null ? `${r.hrvDeltaPct > 0 ? "+" : ""}${r.hrvDeltaPct}% vs base` : undefined}
           color={r.hrvDeltaPct !== null && r.hrvDeltaPct <= -12 ? "var(--status-critical)" : undefined}
-          info="Heart rate variability — the tiny timing differences between heartbeats. Higher usually means recovered; a drop means your body is still under stress. Compared against your own baseline, not anyone else's, so only the % change matters."
+          info="Heart rate variability: the tiny timing differences between heartbeats. Higher usually means recovered; a drop means your body is still under stress. Compared against your own baseline, not anyone else's, so only the % change matters."
         />
         <Stat
           label="Resting HR"
           value={r.restingHr !== null ? `${r.restingHr} bpm` : "—"}
           sub={r.restingHrDelta !== null ? `${r.restingHrDelta > 0 ? "+" : ""}${r.restingHrDelta} vs base` : undefined}
           color={r.restingHrDelta !== null && r.restingHrDelta >= 5 ? "var(--status-critical)" : undefined}
-          info="Your heart rate at rest, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery — it's an early warning, often before you feel it."
+          info="Your heart rate at rest, versus your normal. Sitting 5+ bpm above baseline usually means fatigue, a bug coming on, or not enough recovery, it's an early warning, often before you feel it."
         />
         {/* Freshness is derived from acute-vs-chronic load, and under no load at
             all that ratio falls back to 1 — which scores 67/100. An athlete the
@@ -755,7 +755,7 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
           label="Body battery"
           value={p.risk.hasActivityHistory ? String(p.fitness.freshness) : "—"}
           sub={p.risk.hasActivityHistory ? "freshness 0-100" : "no training data yet"}
-          info="How fresh your legs are: how far this week's training sits below what your body is used to. High after an easy week or a taper, low mid-block. Not the same as fitness — you can be very fit and very tired."
+          info="How fresh your legs are: how far this week's training sits below what your body is used to. High after an easy week or a taper, low mid-block. Not the same as fitness. You can be very fit and very tired."
         />
         <Stat
           label="Sleep consistency"
@@ -775,10 +775,10 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
       </Panel>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Sleep — last 30 days" note="dashed line = 8h target">
+        <Panel title="Sleep: last 30 days" note="dashed line = 8h target">
           <SleepChart data={p.sleep30.map((s) => ({ date: s.date, hours: s.hours }))} />
         </Panel>
-        <Panel title="Sleep stages — 7-day average" note="from Apple Watch">
+        <Panel title="Sleep stages: 7-day average" note="from Apple Watch">
           <div className="space-y-3 pt-2">
             {([["Deep", avg("deep"), "var(--cat-blue)"], ["REM", avg("rem"), "var(--cat-violet)"], ["Light", avg("light"), "var(--cat-green)"]] as const).map(([label, val, color]) => (
               <div key={label} className="flex items-center gap-3">
@@ -796,7 +796,7 @@ export function RecoveryTab({ p }: { p: CoreProfile }) {
         </Panel>
       </div>
 
-      <Panel title="Recovery tips — based on today's data">
+      <Panel title="Recovery tips: based on today's data">
         <div className="space-y-2">
           {tips.map((t, i) => (
             <p key={i} className="text-sm leading-relaxed flex gap-2" style={{ color: "var(--ink-2)" }}>
@@ -815,7 +815,7 @@ export function RaceTab({ p }: { p: CoreProfile }) {
   return (
     <div className="space-y-4">
       {/* add a race you're planning to run */}
-      <Panel title="Add a race" note="races you add are yours to edit or remove — coach-added races aren't">
+      <Panel title="Add a race" note="races you add are yours to edit or remove, coach-added races aren't">
         <RaceForm athleteId={p.athlete.id} events={["800m", "Mile", "5K", "XC 5K"]} />
       </Panel>
 
@@ -835,7 +835,7 @@ export function RaceTab({ p }: { p: CoreProfile }) {
                     className="text-[10px] font-bold rounded-full px-2 py-0.5"
                     title={
                       r.priority === "A"
-                        ? "Peak race — the one worth tapering for"
+                        ? "Peak race: the one worth tapering for"
                         : r.priority === "B"
                           ? "Race it, but don't reshape the week around it"
                           : "Training effort"
@@ -896,7 +896,7 @@ export function RaceTab({ p }: { p: CoreProfile }) {
                   <p key={i} className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>• {line}</p>
                 ))
               ) : (
-                <p className="text-sm leading-relaxed" style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a race prediction — sync some runs first.</p>
+                <p className="text-sm leading-relaxed" style={{ color: "var(--ink-muted)" }}>Not enough training data yet for a race prediction. Sync some runs first.</p>
               )}
             </div>
             <div>
@@ -1140,21 +1140,21 @@ export function ProfileTab({ p }: { p: CoreProfile }) {
           />
           <span className="text-sm font-medium">
             {p.connectedSources.includes("Apple Watch")
-              ? "Apple Health — connected & syncing"
+              ? "Apple Health: connected & syncing"
               : p.connectedSources.includes("No data yet")
-                ? "No data yet — connect the RunGuard app for live data"
+                ? "No data yet: connect the RunGuard app for live data"
                 : "Not synced yet"}
           </span>
         </div>
         <p className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
           Your runs, heart rate, HRV, sleep, and VO₂max flow in <b>live from the RunGuard iPhone app</b>,
-          which reads Apple Health in the background — you never have to upload anything. This web app
+          which reads Apple Health in the background. You never have to upload anything. This web app
           is your full dashboard for that data on a bigger screen.
         </p>
         <div className="mt-3 rounded-xl px-4 py-3 text-sm leading-relaxed" style={{ background: "var(--surface-2)", color: "var(--ink-2)" }}>
           <b>Have a Garmin, Coros, Fitbit, or WHOOP?</b> Connect it to Apple Health in that device&apos;s
           app (Garmin Connect → Settings → Apple Health), and every run and night of sleep lands in RunGuard
-          automatically — no separate hookup needed.
+          automatically: no separate hookup needed.
         </div>
       </Panel>
 

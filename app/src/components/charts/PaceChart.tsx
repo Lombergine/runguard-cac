@@ -71,7 +71,7 @@ export function PaceChart({ paceSeason }: { paceSeason?: Profile["paceSeason"] }
 
   if (!s.enough) {
     return (
-      <Panel title="Pace trend — season">
+      <Panel title="Pace trend: season">
         {/* No "up = faster" here: with no plot drawn there is no axis for it to
             describe, and a reading instruction for a picture that is not on the
             screen is just noise. */}
@@ -106,7 +106,7 @@ export function PaceChart({ paceSeason }: { paceSeason?: Profile["paceSeason"] }
   };
 
   return (
-    <Panel title="Pace trend — season" note={UP_IS_FASTER}>
+    <Panel title="Pace trend: season" note={UP_IS_FASTER}>
       <Plot
         data={s.points}
         /* `[slowest, fastest]` — the inversion, by order. See the header. */

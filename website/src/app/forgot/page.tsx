@@ -56,7 +56,7 @@ function ForgotForm() {
               stops working after an hour.
             </p>
             <p className="text-sm mt-4" style={{ color: "var(--ink-muted)" }}>
-              Nothing arrived? Check spam, then try again — requesting a new link
+              Nothing arrived? Check spam, then try again. Requesting a new link
               cancels the previous one.
             </p>
           </>

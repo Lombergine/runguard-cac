@@ -75,10 +75,10 @@ export const DAILY_DAYS = 30;
 
 /** The website's `InsufficientData` default (`EmptyState.tsx:2`). */
 const NOT_ENOUGH =
-  "Not enough training history yet — sync more data or give it a couple of weeks.";
+  "Not enough training history yet. Sync more data or give it a couple of weeks.";
 /** `website/src/lib/risk.ts:102`. */
 const NOT_ENOUGH_ACWR =
-  "Not enough training history yet for a reliable workload ratio — sync more data or give it a couple of weeks.";
+  "Not enough training history yet for a reliable workload ratio. Sync more data or give it a couple of weeks.";
 
 /**
  * At least `min` entries are real. Mirrors `hasEnoughData`

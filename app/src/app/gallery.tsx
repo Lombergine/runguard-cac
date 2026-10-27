@@ -289,13 +289,13 @@ const SLEEP_NO_STAGES: SleepDay[] = SLEEP_NIGHTS.map((n) => ({
 const SLEEP_NO_REM: SleepDay[] = SLEEP_NIGHTS.map((n) => ({ ...n, rem: null }));
 
 const TYPE_SCALE: { role: TextRole; sample: string; use: string }[] = [
-  { role: "micro", sample: "Distance", use: "11.5 mono, +0.12em — micro-labels" },
-  { role: "meta", sample: "Tue 14 Oct · before practice", use: "14 body — secondary metadata" },
-  { role: "base", sample: "The app describes. It does not instruct.", use: "16.5 body — base" },
-  { role: "baseSemi", sample: "Checked in 6:12am", use: "16.5 body 600 — emphasis, controls" },
-  { role: "title", sample: "Yesterday's run", use: "19 display — card titles" },
-  { role: "stat", sample: "8:51 /mi", use: "22 mono — inline stats" },
-  { role: "prompt", sample: "How did you sleep?", use: "34 display 800 — the check-in prompt" },
+  { role: "micro", sample: "Distance", use: "11.5 mono, +0.12em: micro-labels" },
+  { role: "meta", sample: "Tue 14 Oct · before practice", use: "14 body: secondary metadata" },
+  { role: "base", sample: "The app describes. It does not instruct.", use: "16.5 body: base" },
+  { role: "baseSemi", sample: "Checked in 6:12am", use: "16.5 body 600: emphasis, controls" },
+  { role: "title", sample: "Yesterday's run", use: "19 display: card titles" },
+  { role: "stat", sample: "8:51 /mi", use: "22 mono: inline stats" },
+  { role: "prompt", sample: "How did you sleep?", use: "34 display 800: the check-in prompt" },
 ];
 
 /**
@@ -335,7 +335,7 @@ function SpecimenSheet() {
          * -------------------------------------------------------- */}
         <Section
           title="Greyscale check"
-          note="Desaturate this block — every cell must still read apart"
+          note="Desaturate this block: every cell must still read apart"
         />
         <Text style={styles.note}>
           Colour is the last cue, never the only one. Dashed means &quot;we
@@ -345,22 +345,22 @@ function SpecimenSheet() {
         <View style={styles.trio}>
           <View style={styles.trioCell}>
             <Absent />
-            <Caption>Absent — dashed rule, sunken fill</Caption>
+            <Caption>Absent: dashed rule, sunken fill</Caption>
           </View>
           <View style={styles.trioCell}>
             <Zero unit="mi" />
-            <Caption>Zero — solid rule, card fill</Caption>
+            <Caption>Zero: solid rule, card fill</Caption>
           </View>
           <View style={styles.trioCell}>
             <NoRun />
-            <Caption>No run — dotted rule, no fill</Caption>
+            <Caption>No run: dotted rule, no fill</Caption>
           </View>
         </View>
         <View style={styles.dotRow}>
           {FLAGS.map((flag) => (
             <View key={flag} style={styles.dotCell}>
               <StatusDot flag={flag} size={28} />
-              <Caption center>{`${flag} — ${DOT_CUE[flag]}`}</Caption>
+              <Caption center>{`${flag}, ${DOT_CUE[flag]}`}</Caption>
             </View>
           ))}
         </View>
@@ -370,19 +370,19 @@ function SpecimenSheet() {
           title="Three kinds of nothing"
           note="Three components, never one with a variant prop"
         />
-        <Specimen label="Absent — with eyebrow, default label">
+        <Specimen label="Absent: with eyebrow, default label">
           <Absent eyebrow="Readiness" />
         </Specimen>
-        <Specimen label="Absent — custom label">
+        <Specimen label="Absent: custom label">
           <Absent eyebrow="Sleep" label="No check-in yet" />
         </Specimen>
-        <Specimen label="Zero — with eyebrow, unit welded">
+        <Specimen label="Zero: with eyebrow, unit welded">
           <Zero eyebrow="Distance" unit="mi" />
         </Specimen>
-        <Specimen label="NoRun — with eyebrow, default label">
+        <Specimen label="NoRun: with eyebrow, default label">
           <NoRun eyebrow="Tue 14 Oct" />
         </Specimen>
-        <Specimen label="NoRun — custom label">
+        <Specimen label="NoRun: custom label">
           <NoRun eyebrow="Wed 15 Oct" label="No run. Nothing scheduled." />
         </Specimen>
 
@@ -399,7 +399,7 @@ function SpecimenSheet() {
         {/* ---------------------------------------------------------- */}
         <Section
           title="Advisory"
-          note="Body weight, lowercase — description, not instruction"
+          note="Body weight, lowercase: description, not instruction"
         />
         {FLAGS.map((flag) => (
           <Specimen key={flag} label={`flag="${flag}"`}>
@@ -413,7 +413,7 @@ function SpecimenSheet() {
           <Card>
             <Text style={styles.cardTitle}>Yesterday&apos;s run</Text>
             <Text style={styles.cardBody}>
-              Any elevation is shadow.card — never a hand-rolled one, and never
+              Any elevation is shadow.card. Never a hand-rolled one, and never
               used to make one card louder than its neighbour.
             </Text>
           </Card>
@@ -421,7 +421,7 @@ function SpecimenSheet() {
         <Specimen label="padded={false}">
           <Card padded={false}>
             <Text style={styles.cardFlush}>
-              Flush content — the card supplies no padding.
+              Flush content: the card supplies no padding.
             </Text>
           </Card>
         </Specimen>
@@ -457,16 +457,16 @@ function SpecimenSheet() {
           Distance / Time / Pace, always that order, right of the route glyph.
           Nothing here is coloured, so the greyscale copy should be identical.
         </Text>
-        <Specimen label="Ordinary run — eyebrow carries the date and the team's word">
+        <Specimen label="Ordinary run: eyebrow carries the date and the team's word">
           <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" sessionLabel="Easy run" />
         </Specimen>
-        <Specimen label="Spiked run — advisory inline, split dot, no banner or modal">
+        <Specimen label="Spiked run: advisory inline, split dot, no banner or modal">
           <RunCard run={SPIKED_RUN} dateLabel="Sun 12 Oct" sessionLabel="Long run" />
         </Specimen>
-        <Specimen label="No pace — the third column goes dashed, never '0:00 /mi'">
+        <Specimen label="No pace: the third column goes dashed, never '0:00 /mi'">
           <RunCard run={PACELESS_RUN} dateLabel="Sat 11 Oct" />
         </Specimen>
-        <Specimen label="No session type — eyebrow is the date alone">
+        <Specimen label="No session type: eyebrow is the date alone">
           <RunCard run={PLAIN_RUN} dateLabel="Tue 14 Oct" />
         </Specimen>
 
@@ -486,17 +486,17 @@ function SpecimenSheet() {
           Side and geometry separate the speakers, not hue: the athlete&apos;s
           bubble is right-aligned and unruled, the coach&apos;s is left and held
           by a rule.
-          The safety notice has no bubble geometry at all — no radius, no side,
+          The safety notice has no bubble geometry at all. No radius, no side,
           one heavy left rule; it is full-bleed in the thread and only inset
           here by the page. In greyscale the three stay unmistakable.
         </Text>
-        <Specimen label="Athlete — right, accent fill, 12px radius">
+        <Specimen label="Athlete: right, accent fill, 12px radius">
           <ChatRow message={ATHLETE_MESSAGE} />
         </Specimen>
-        <Specimen label="Coach — left, well fill and a rule">
+        <Specimen label="Coach: left, well fill and a rule">
           <ChatRow message={COACH_MESSAGE} />
         </Specimen>
-        <Specimen label="Safety intercept — routed away from the bubble by bubbleText()">
+        <Specimen label="Safety intercept: routed away from the bubble by bubbleText()">
           <ChatRow message={SAFETY_MESSAGE} />
         </Specimen>
 
@@ -508,7 +508,7 @@ function SpecimenSheet() {
           athlete describing their body rather than actuating the system. Hit
           areas are 48pt even where the drawing is a few points wide.
         </Text>
-        <Specimen label="Calf selected — tap to check the targets and the fill">
+        <Specimen label="Calf selected: tap to check the targets and the fill">
           <BodyMap
             selected={soreParts}
             onToggle={(partKey) =>
@@ -524,7 +524,7 @@ function SpecimenSheet() {
         {/* ---------------------------------------------------------- */}
         <Section
           title="Chart primitives"
-          note="Tap a column — the readout names the day"
+          note="Tap a column: the readout names the day"
         />
         <Text style={styles.note}>
           One frame, one height, one interaction for all eight charts. Inside a
@@ -535,7 +535,7 @@ function SpecimenSheet() {
           they are still two different objects.
         </Text>
 
-        <Specimen label="Bars — a measured zero (Wed) next to an unknown (Thu)">
+        <Specimen label="Bars: a measured zero (Wed) next to an unknown (Thu)">
           <Card>
             <Plot
               data={BAR_SPECIMEN}
@@ -558,7 +558,7 @@ function SpecimenSheet() {
           </Card>
         </Specimen>
 
-        <Specimen label="Line — a two-day hole, a lone reading, a band and a reference line">
+        <Specimen label="Line: a two-day hole, a lone reading, a band and a reference line">
           <Card>
             <Plot
               data={LINE_SPECIMEN}
@@ -589,15 +589,15 @@ function SpecimenSheet() {
           </Card>
         </Specimen>
 
-        <Specimen label="sleepSeries — six recorded nights out of thirty, densified">
+        <Specimen label="sleepSeries: six recorded nights out of thirty, densified">
           <Card>
             <SleepSpecimen />
           </Card>
         </Specimen>
 
-        <Specimen label="Not enough data — the ordinary Absent, at the plot's height">
+        <Specimen label="Not enough data: the ordinary Absent, at the plot's height">
           <Card>
-            <ChartAbsent label="Not enough training history yet — sync more data or give it a couple of weeks." />
+            <ChartAbsent label="Not enough training history yet. Sync more data or give it a couple of weeks." />
           </Card>
         </Specimen>
 
@@ -609,31 +609,31 @@ function SpecimenSheet() {
          * -------------------------------------------------------- */}
         <Section
           title="Weekly mileage & pace"
-          note="Pace runs upside down — up = faster"
+          note="Pace runs upside down, up = faster"
         />
         <Text style={styles.note}>
           Both panels draw themselves, note and all. The pace axis is INVERTED
           so improvement climbs, which is the one place in the app where reading
-          the picture the obvious way gives you the opposite of the truth — so
+          the picture the obvious way gives you the opposite of the truth, so
           the caption is welded to the panel rather than left to a legend. The
           null week is the point of the third specimen: no qualifying run is not
           a slow run, so the line breaks and the week gets the dashed mark
           instead of being quietly closed up.
         </Text>
 
-        <Specimen label="WeeklyKmChart — twelve weeks, zero-based bars">
+        <Specimen label="WeeklyKmChart: twelve weeks, zero-based bars">
           <WeeklyKmChart weeks={SPECIMEN_WEEKS} />
         </Specimen>
 
-        <Specimen label="WeeklyKmChart — weeks={undefined}, the leg the payload omitted">
+        <Specimen label="WeeklyKmChart: weeks={undefined}, the leg the payload omitted">
           <WeeklyKmChart />
         </Specimen>
 
-        <Specimen label="PaceChart — two weeks with no qualifying run (Apr 21, May 12)">
+        <Specimen label="PaceChart: two weeks with no qualifying run (Apr 21, May 12)">
           <PaceChart paceSeason={SPECIMEN_PACE} />
         </Specimen>
 
-        <Specimen label="PaceChart — only two paced weeks, under the three-week floor">
+        <Specimen label="PaceChart: only two paced weeks, under the three-week floor">
           <PaceChart paceSeason={THIN_PACE} />
         </Specimen>
 
@@ -652,27 +652,27 @@ function SpecimenSheet() {
           middle of the chart is dashed and hollow, the one night that really
           logged zero is a solid stub in the bar fill, and tapping either says
           which it was: &quot;Not recorded&quot; against &quot;0.0 h&quot;. The
-          meter has the same split one level down — a stage the watch never
+          meter has the same split one level down. A stage the watch never
           tracked is a dashed track, not an empty one.
         </Text>
 
-        <Specimen label="SleepChart — a genuine zero, then five adjacent unrecorded nights">
+        <Specimen label="SleepChart: a genuine zero, then five adjacent unrecorded nights">
           <SleepChart sleep30={SLEEP_NIGHTS} />
         </Specimen>
 
-        <Specimen label="SleepChart — sleep30={undefined}, the optional field absent">
+        <Specimen label="SleepChart: sleep30={undefined}, the optional field absent">
           <SleepChart />
         </Specimen>
 
-        <Specimen label="SleepStages — the zero night averages in; the stageless night does not">
+        <Specimen label="SleepStages: the zero night averages in; the stageless night does not">
           <SleepStages sleep30={SLEEP_NIGHTS} />
         </Specimen>
 
-        <Specimen label="SleepStages — REM never tracked: one dashed row, two real ones">
+        <Specimen label="SleepStages: REM never tracked: one dashed row, two real ones">
           <SleepStages sleep30={SLEEP_NO_REM} />
         </Specimen>
 
-        <Specimen label="SleepStages — hours all week, no stages at all: Absent, not three empty bars">
+        <Specimen label="SleepStages: hours all week, no stages at all: Absent, not three empty bars">
           <SleepStages sleep30={SLEEP_NO_STAGES} />
         </Specimen>
 
@@ -683,19 +683,19 @@ function SpecimenSheet() {
          * this app does not: watch the lines stop at the holes, and watch a day
          * with only one half recorded keep its point AND get a dashed mark.
          * -------------------------------------------------------- */}
-        <Specimen label="MentalChart — 8 check-ins in 30 days, a 14-day hole, and days with only one half recorded">
+        <Specimen label="MentalChart: 8 check-ins in 30 days, a 14-day hole, and days with only one half recorded">
           <MentalChart mental30={HALF_ANSWERED_MENTAL} />
         </Specimen>
 
-        <Specimen label="MentalChart — mental30={undefined}: the not-enough-data state, at the plot's height">
+        <Specimen label="MentalChart: mental30={undefined}: the not-enough-data state, at the plot's height">
           <MentalChart />
         </Specimen>
 
-        <Specimen label="FitnessChart — a model output on a fixed 0–100 axis: no trend arrow, no badge, no colour verdict">
+        <Specimen label="FitnessChart: a model output on a fixed 0–100 axis: no trend arrow, no badge, no colour verdict">
           <FitnessChart weekly={SEASON_FITNESS} />
         </Specimen>
 
-        <Specimen label="FitnessChart — two weeks only: under the three-week threshold, so nothing is drawn">
+        <Specimen label="FitnessChart: two weeks only: under the three-week threshold, so nothing is drawn">
           <FitnessChart weekly={SEASON_FITNESS.slice(0, 2)} />
         </Specimen>
 
@@ -713,28 +713,28 @@ function SpecimenSheet() {
          * -------------------------------------------------------- */}
         <Section
           title="PR progression"
-          note="Upside down again — and every step is a step down the clock"
+          note="Upside down again: and every step is a step down the clock"
         />
         <Text style={styles.note}>
           One block per event, in one card. The website draws a panel per event
           in a two-column grid; stacked on a phone that is four ~250pt panels,
           three of which hold a single dot, so an event under three PRs is
-          listed rather than drawn. Nothing is lost — every PR the payload
+          listed rather than drawn. Nothing is lost. Every PR the payload
           carries is on screen with its explicit local day either way. The step
           is `stepAfter`, not a slope: a PR HOLDS until it is beaten, and a
           diagonal would draw the athlete improving through months in which
           nothing was measured.
         </Text>
 
-        <Specimen label="PrChart — five PRs unevenly spread (chart), two (list), one (list)">
+        <Specimen label="PrChart: five PRs unevenly spread (chart), two (list), one (list)">
           <PrChart progression={PR_PROGRESSION} />
         </Specimen>
 
-        <Specimen label="PrChart — progression={undefined}: the not-enough-data state, at the plot's height">
+        <Specimen label="PrChart: progression={undefined}: the not-enough-data state, at the plot's height">
           <PrChart />
         </Specimen>
 
-        <Specimen label="PrChart — an event key with an empty list: Absent, naming the event">
+        <Specimen label="PrChart: an event key with an empty list: Absent, naming the event">
           <PrChart progression={PR_EMPTY_EVENT} />
         </Specimen>
 
@@ -754,7 +754,7 @@ function SpecimenSheet() {
           website&apos;s own tooltip calls it &quot;Workload ratio&quot; and so
           does this. Neither chart wears a status colour: `ok` / `watch` /
           `unusual` are verdicts, and a band is a region of an axis, not a
-          judgement about a fifteen-year-old — so the safe zone is a neutral
+          judgement about a fifteen-year-old. So the safe zone is a neutral
           wash and the 1.5 rule is `muted`, with the words underneath doing the
           interpreting. The load panel is where the zero rule bites hardest:
           seven of these thirty days are rest days that really logged zero and
@@ -762,19 +762,19 @@ function SpecimenSheet() {
           the payload draw dashed and break all three series.
         </Text>
 
-        <Specimen label="AcwrChart — nineteen days inside the band, four below it, three over the 1.5 rule">
+        <Specimen label="AcwrChart: nineteen days inside the band, four below it, three over the 1.5 rule">
           <AcwrChart series={LOAD_SERIES} />
         </Specimen>
 
-        <Specimen label="AcwrChart — series={undefined}: the workload-ratio wording of Absent, at the plot's height">
+        <Specimen label="AcwrChart: series={undefined}: the workload-ratio wording of Absent, at the plot's height">
           <AcwrChart />
         </Specimen>
 
-        <Specimen label="LoadChart — seven measured zeros, two absent days, and the two averages crossing">
+        <Specimen label="LoadChart: seven measured zeros, two absent days, and the two averages crossing">
           <LoadChart series={LOAD_SERIES} />
         </Specimen>
 
-        <Specimen label="LoadChart — a week of running under the five-day floor: nothing is drawn">
+        <Specimen label="LoadChart: a week of running under the five-day floor: nothing is drawn">
           <LoadChart series={THIN_LOAD_SERIES} />
         </Specimen>
 
@@ -801,18 +801,18 @@ function SpecimenSheet() {
           The explainers a stat tile can carry, ported from the website&apos;s
           `info=` props. Two things are on test here and neither shows in a
           screenshot. First, the dot is drawn at 16px but its tap target is the
-          full 48px — added as `hitSlop`, so the label row is exactly as tall as
+          full 48px: added as `hitSlop`, so the label row is exactly as tall as
           the tile below it with no dot at all. Second, the panel is placed from
           the dot&apos;s window coordinates inside a `Modal` and clamped to the
           screen, so the RIGHT-HAND tile of the pair opens a panel that is
-          left-aligned with the page rather than one that runs off the edge —
+          left-aligned with the page rather than one that runs off the edge, 
           which is the case worth actually tapping. While a panel is open its
           invisible full-bleed overlay is the only thing that can be touched, so
           a second dot cannot open over the first: that, and not a store, is
           what makes only one open at a time.
         </Text>
 
-        <Specimen label="Tile with info — the pair, so the right-hand panel's clamp can be tapped">
+        <Specimen label="Tile with info: the pair, so the right-hand panel's clamp can be tapped">
           <View style={styles.infoDotRow}>
             <Tile
               label="Week TRIMP"
@@ -828,14 +828,14 @@ function SpecimenSheet() {
           </View>
         </Specimen>
 
-        <Specimen label="Tile with info, value absent — the explainer survives the dash">
+        <Specimen label="Tile with info, value absent. The explainer survives the dash">
           <View style={styles.infoDotRow}>
             <Tile label="VO₂max" value={null} info={EXPLAINERS.vo2max} />
             <Tile label="Fitness score" value={null} info={EXPLAINERS.fitnessScore} />
           </View>
         </Specimen>
 
-        <Specimen label="Tile without info — unchanged, and the reference for the label row's height">
+        <Specimen label="Tile without info: unchanged, and the reference for the label row's height">
           <View style={styles.infoDotRow}>
             <Tile label="Week TRIMP" value="284 TRIMP" sub="training impulse, last 7 days" />
             <Tile label="Sleep consistency" value="71/100" />

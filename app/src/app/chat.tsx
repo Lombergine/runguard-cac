@@ -313,7 +313,7 @@ export default function ChatScreen() {
             <Panel title="Earlier messages" note="Could not load">
               <Text style={styles.plain}>
                 Earlier messages will be back when the connection is. You can
-                still send one now — it stays on screen only if it sends.
+                still send one now. It stays on screen only if it sends.
               </Text>
             </Panel>
           </View>

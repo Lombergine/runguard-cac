@@ -103,7 +103,7 @@ function explainUnavailable(a: Exclude<Availability, { ok: true }>): string {
     case "healthConnectOutdated":
       return "Health Connect on this phone is too old for RunGuard to read. Update it from the Play Store, then come back.";
     case "notIos":
-      return "This device has no health store RunGuard can read — Apple Health on iPhone, Health Connect on Android.";
+      return "This device has no health store RunGuard can read. Apple Health on iPhone, Health Connect on Android.";
     case "noModule":
       return "This build of RunGuard cannot open Apple Health. Reading Health data needs a build that carries Apple's HealthKit entitlement, which Expo Go and the iOS Simulator do not.";
     case "noHealthStore":
@@ -125,7 +125,7 @@ function explainFailure(err: unknown): string {
     case "server":
       // Deliberately encouraging: every insert dedupes and every metric day is
       // an upsert, so a retry finishes the job rather than doubling it.
-      return "The server did not finish the upload. Syncing again is safe — nothing is stored twice.";
+      return "The server did not finish the upload. Syncing again is safe. Nothing is stored twice.";
   }
 }
 
@@ -306,7 +306,7 @@ export default function ConnectScreen() {
                       : last === null
                         ? "Access has been requested, but nothing has been read yet. Sync to find out what Apple Health will hand over."
                         : readNothing
-                          ? "Apple Health returned nothing. That is either an empty Health app, or access that was declined — Apple does not tell an app which, so RunGuard cannot claim to be connected."
+                          ? "Apple Health returned nothing. That is either an empty Health app, or access that was declined. Apple does not tell an app which, so RunGuard cannot claim to be connected."
                           : "Reading from Apple Health on this phone."}
                 </Text>
 

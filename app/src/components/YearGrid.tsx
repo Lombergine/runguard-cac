@@ -420,13 +420,13 @@ function readoutFor(cell: Cell): string {
     case "absent":
       // The same words as the legend's <Absent/> swatch, so the tapped cell and
       // the key that explains it cannot describe the same square differently.
-      return `${day} — nothing recorded for this day.`;
+      return `${day}, nothing recorded for this day.`;
     case "norun":
-      return `${day} — rest day, no run scheduled.`;
+      return `${day}, rest day, no run scheduled.`;
     case "zero":
-      return `${day} — no run recorded.`;
+      return `${day}, no run recorded.`;
     default:
-      return `${day} — ${formatDistance(cell.km)} · ${LEVEL_WORD[cell.level]} (load ${Math.round(cell.load)})`;
+      return `${day}, ${formatDistance(cell.km)} · ${LEVEL_WORD[cell.level]} (load ${Math.round(cell.load)})`;
   }
 }
 

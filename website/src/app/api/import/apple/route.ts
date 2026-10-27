@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
   if (file.size > 400 * 1024 * 1024) {
     return Response.json(
-      { error: "File is over 400 MB — export a smaller date range." },
+      { error: "File is over 400 MB. Export a smaller date range." },
       { status: 400 }
     );
   }

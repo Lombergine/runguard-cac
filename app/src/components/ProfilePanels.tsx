@@ -255,7 +255,7 @@ export function InjuryHistory({ injuries }: { injuries: Injury[] | undefined }) 
             <Text style={styles.rowNote}>
               {inj.resolved_at === null
                 ? `Recorded ${dayLabel(inj.date)}`
-                : `${dayLabel(inj.date)} — healed ${dayLabel(inj.resolved_at)}`}
+                : `${dayLabel(inj.date)}, healed ${dayLabel(inj.resolved_at)}`}
             </Text>
             {inj.note ? <Text style={styles.rowNote}>{inj.note}</Text> : null}
           </GroupRow>

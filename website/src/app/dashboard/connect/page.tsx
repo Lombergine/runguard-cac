@@ -39,7 +39,7 @@ export default async function ConnectPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Data sources</h1>
         <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>
-          Runs arrive from Apple Health — Apple Watch, Garmin, anything that writes
+          Runs arrive from Apple Health. Apple Watch, Garmin, anything that writes
           to it. Athletes install the RunGuard iPhone app and sign in with their own
           email and password, and workouts flow in the moment they finish.
         </p>

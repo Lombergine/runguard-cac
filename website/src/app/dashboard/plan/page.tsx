@@ -73,7 +73,7 @@ export default async function PlanPage({
           <p className="text-sm mt-1 max-w-2xl leading-relaxed" style={{ color: "var(--ink-muted)" }}>
             {team ? `${team.name} · ` : ""}
             Click any day and write the session. It appears on every athlete&apos;s
-            Training tab the moment you save — {roster.length} runner
+            Training tab the moment you save, {roster.length} runner
             {roster.length === 1 ? "" : "s"} right now. Days you leave blank keep
             RunGuard&apos;s own suggestion, which adapts to each athlete individually.
           </p>
@@ -88,7 +88,7 @@ export default async function PlanPage({
       >
         <p>
           <b>What your athletes see.</b> A day you write here replaces RunGuard&apos;s
-          suggestion for everyone on the team, and it is labelled as coming from you —
+          suggestion for everyone on the team, and it is labelled as coming from you, 
           including during race week, where your session overrides the automatic taper.
         </p>
         <p className="mt-2">

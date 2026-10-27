@@ -651,7 +651,7 @@ function SeverityScale({
         <Text style={styles.readout}>
           {`${label} `}
           <Text style={styles.score}>{`${severity}/${SCALE_MAX}`}</Text>
-          {" — tap it again to clear."}
+          {", tap it again to clear."}
         </Text>
       )}
 

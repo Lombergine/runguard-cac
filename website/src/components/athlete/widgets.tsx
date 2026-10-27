@@ -42,7 +42,7 @@ export function TeamMembership({ teamName }: { teamName: string | null }) {
     return (
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm" style={{ color: "var(--ink-2)" }}>
-          You&apos;re on <b style={{ color: "var(--ink)" }}>{teamName}</b> — your coach can see your training.
+          You&apos;re on <b style={{ color: "var(--ink)" }}>{teamName}</b>, your coach can see your training.
         </span>
         <button
           onClick={leave}
@@ -59,7 +59,7 @@ export function TeamMembership({ teamName }: { teamName: string | null }) {
   return (
     <div>
       <p className="text-sm mb-3" style={{ color: "var(--ink-2)" }}>
-        You&apos;re riding solo — the whole app is yours. Got a code from a coach? Join their team and
+        You&apos;re riding solo: the whole app is yours. Got a code from a coach? Join their team and
         you&apos;ll show up on their roster.
       </p>
       <form onSubmit={join} className="flex flex-wrap gap-2">
@@ -170,7 +170,7 @@ export function CheckinWidget({
 
       {/* where? — each chip is colored by that part's own logged severity, independent of the others */}
       <div className="text-[11px] mb-1.5" style={{ color: "var(--ink-muted)" }}>
-        Where? <span style={{ opacity: 0.7 }}>(tap to score — lights up the body scan)</span>
+        Where? <span style={{ opacity: 0.7 }}>(tap to score: lights up the body scan)</span>
       </div>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {BODY_PARTS.map((p) => {
@@ -251,7 +251,7 @@ export function CheckinWidget({
             {currentSeverity !== null && (
               <span className="font-semibold" style={{ color: severityColor(currentSeverity) }}>
                 {" "}
-                — {currentSeverity}/10
+ {currentSeverity}/10
               </span>
             )}{" "}
             <span style={{ opacity: 0.7 }}>(tap again to clear)</span>
@@ -449,7 +449,7 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
             <p>
               {onCoachSurface
                 ? "Nothing to show from this athlete's chat."
-                : "Ask anything about your training — I'm reading your last 14 days of data automatically, and I get smarter the longer you use me."}
+                : "Ask anything about your training, I'm reading your last 14 days of data automatically, and I get smarter the longer you use me."}
             </p>
           </div>
         )}
@@ -469,7 +469,7 @@ export function ChatBox({ athleteId }: { athleteId: number }) {
           athlete's private transcript; a coach reads a redacted copy of it. */}
       {onCoachSurface ? (
         <p className="text-xs pt-2" style={{ color: "var(--ink-muted)" }}>
-          Read-only. This is the athlete&apos;s own chat — you can&apos;t write to it.
+          Read-only. This is the athlete&apos;s own chat. You can&apos;t write to it.
         </p>
       ) : (
         <>
@@ -656,8 +656,8 @@ export function RaceLogForm({ athleteId, events }: { athleteId: number; events: 
         <option value="ok">Felt ok</option>
         <option value="rough">Felt rough</option>
       </select>
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} title="Race date — defaults to today" className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
-      <input value={splits} onChange={(e) => setSplits(e.target.value)} placeholder="Splits — 74, 76, 79 or 1:14 1:16" className="w-56 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} title="Race date: defaults to today" className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
+      <input value={splits} onChange={(e) => setSplits(e.target.value)} placeholder="Splits: 74, 76, 79 or 1:14 1:16" className="w-56 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <input value={conditions} onChange={(e) => setConditions(e.target.value)} placeholder="Conditions (hot, windy, muddy…)" className="w-52 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How it went, tactics, anything worth remembering" className="w-full sm:w-80 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <button className="rounded-xl px-4 py-2 text-sm font-semibold text-black cursor-pointer" style={{ background: "var(--brand)" }}>
@@ -699,7 +699,7 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
       return;
     }
     if (date < localDay()) {
-      setMsg("That race date is in the past — pick an upcoming date.");
+      setMsg("That race date is in the past. Pick an upcoming date.");
       return;
     }
     const res = await fetch("/api/race", {
@@ -758,11 +758,11 @@ export function RaceForm({ athleteId, events }: { athleteId: number; events: str
         <option value="Road">Road</option>
         <option value="Trail">Trail</option>
       </select>
-      <select value={priority} onChange={(e) => setPriority(e.target.value)} title="How much this one matters — A races are the ones worth tapering for" className="rounded-xl border px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)", background: "var(--page)" }}>
+      <select value={priority} onChange={(e) => setPriority(e.target.value)} title="How much this one matters. A races are the ones worth tapering for" className="rounded-xl border px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)", background: "var(--page)" }}>
         <option value="">Priority…</option>
-        <option value="A">A — peak race</option>
-        <option value="B">B — race it, don&apos;t taper</option>
-        <option value="C">C — training effort</option>
+        <option value="A">A: peak race</option>
+        <option value="B">B: race it, don&apos;t taper</option>
+        <option value="C">C: training effort</option>
       </select>
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Course notes, travel, anything else (optional)" className="w-full sm:w-72 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none" style={{ borderColor: "var(--hairline)" }} />
       <button className="rounded-xl px-4 py-2 text-sm font-semibold text-black cursor-pointer" style={{ background: "var(--brand)" }}>
@@ -857,7 +857,7 @@ export function HrMaxSetting({
 
       <p className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
         Every run&apos;s intensity is scored against this number, so it feeds your training load,
-        workload ratio and TRIMP. If you know your real max from a test or a hard race, enter it —
+        workload ratio and TRIMP. If you know your real max from a test or a hard race, enter it, 
         it&apos;s more accurate than anything we can infer.
       </p>
 

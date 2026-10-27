@@ -365,7 +365,7 @@ export default function ActivityScreen() {
                 <Head title="Not in your log" note="Nothing to show" />
                 <Text style={styles.plain}>
                   RunGuard could not open this run. It may not exist, or it may belong to
-                  another athlete — your server answers the same way for both, so there
+                  another athlete: your server answers the same way for both, so there
                   is nothing more it can tell you. The runs you can open are in your run
                   log.
                 </Text>

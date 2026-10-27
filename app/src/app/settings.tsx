@@ -322,7 +322,7 @@ export default function SettingsScreen() {
           <StaticRow
             label="PACE"
             value="Minutes per mile"
-            reason="Kilometres are not a setting yet — the conversion is written into the app rather than read from a preference, so there is nothing here to switch."
+            reason="Kilometres are not a setting yet. The conversion is written into the app rather than read from a preference, so there is nothing here to switch."
           />
         </Panel>
 
@@ -339,7 +339,7 @@ export default function SettingsScreen() {
           <StaticRow
             label="CHECK-IN REMINDER"
             value="Off"
-            reason="RunGuard cannot send notifications yet — nothing in this build can deliver one, so there is no switch to turn on. Until then the check-in waits for you on the home screen."
+            reason="RunGuard cannot send notifications yet. Nothing in this build can deliver one, so there is no switch to turn on. Until then the check-in waits for you on the home screen."
           />
         </Panel>
 
@@ -405,7 +405,7 @@ export default function SettingsScreen() {
         <Panel title="Unpair this device" note="Affects this phone only">
           <Text style={styles.body}>
             Unpairing removes this phone&apos;s pairing from its keychain and signs
-            the app out. Nothing on the RunGuard server changes — your runs,
+            the app out. Nothing on the RunGuard server changes, your runs,
             check-ins and history stay exactly as they are. To use the app again
             you will need the token from the web app.
           </Text>

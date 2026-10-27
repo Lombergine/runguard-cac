@@ -71,12 +71,12 @@ export default function PlanCalendar({
   async function save() {
     if (!draft) return;
     if (!draft.type || !draft.type.trim()) {
-      setMsg("Give the session a name — “Easy run”, “6×800m”, “Rest”.");
+      setMsg("Give the session a name, “Easy run”, “6×800m”, “Rest”.");
       return;
     }
     const typed = distanceInput.trim();
     if (typed && !/^\d{1,2}(\.\d{1,2})?$/.test(typed)) {
-      setMsg("Distance should be a number of miles — 5, or 5.5. Leave it blank for a rest day.");
+      setMsg("Distance should be a number of miles, 5, or 5.5. Leave it blank for a rest day.");
       return;
     }
     setBusy(true);
@@ -179,7 +179,7 @@ export default function PlanCalendar({
                   key={cell.date}
                   type="button"
                   onClick={() => open(cell)}
-                  aria-label={`${label(cell.date)} — ${written ? cell.type : "no session written"}`}
+                  aria-label={`${label(cell.date)}, ${written ? cell.type : "no session written"}`}
                   className="text-left border-t border-r p-2 min-h-24 transition-colors hover:bg-black/[0.03] cursor-pointer"
                   style={{
                     borderColor: "var(--hairline)",
@@ -258,7 +258,7 @@ export default function PlanCalendar({
             <input
               value={draft.type ?? ""}
               onChange={(e) => setDraft({ ...draft, type: e.target.value })}
-              placeholder="Session — e.g. 6×800m"
+              placeholder="Session: e.g. 6×800m"
               className="sm:col-span-1 rounded-xl border bg-transparent px-3 py-2 text-sm outline-none"
               style={{ borderColor: "var(--hairline)" }}
             />
@@ -266,14 +266,14 @@ export default function PlanCalendar({
               value={distanceInput}
               onChange={(e) => setDistanceInput(e.target.value)}
               inputMode="decimal"
-              placeholder="Distance (mi) — blank for rest"
+              placeholder="Distance (mi), blank for rest"
               className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none"
               style={{ borderColor: "var(--hairline)" }}
             />
             <input
               value={draft.targetPace ?? ""}
               onChange={(e) => setDraft({ ...draft, targetPace: e.target.value })}
-              placeholder="Target pace — e.g. 7:30/mi"
+              placeholder="Target pace: e.g. 7:30/mi"
               className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none"
               style={{ borderColor: "var(--hairline)" }}
             />
@@ -283,7 +283,7 @@ export default function PlanCalendar({
             value={draft.details ?? ""}
             onChange={(e) => setDraft({ ...draft, details: e.target.value })}
             rows={2}
-            placeholder="What to actually do — reps, recovery, where you're meeting"
+            placeholder="What to actually do. Reps, recovery, where you're meeting"
             className="w-full rounded-xl border bg-transparent px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--hairline)" }}
           />
@@ -291,7 +291,7 @@ export default function PlanCalendar({
             value={draft.why ?? ""}
             onChange={(e) => setDraft({ ...draft, why: e.target.value })}
             rows={2}
-            placeholder="Why they're doing it — athletes read this, and it's the part that makes them buy in"
+            placeholder="Why they're doing it: athletes read this, and it's the part that makes them buy in"
             className="w-full rounded-xl border bg-transparent px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--hairline)" }}
           />

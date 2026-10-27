@@ -97,7 +97,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Splits must be a list of lap times." }, { status: 400 });
     }
     if (body.splits.length > 60) {
-      return Response.json({ error: "That is more than 60 splits — check the entry." }, { status: 400 });
+      return Response.json({ error: "That is more than 60 splits, check the entry." }, { status: 400 });
     }
     const bad = body.splits.some(
       (x: unknown) => typeof x !== "number" || !Number.isFinite(x) || x <= 0 || x > 3600

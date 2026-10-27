@@ -49,7 +49,7 @@ export const DEMO_CHAT_ATHLETE: readonly ChatMessage[] = [
       "Three things moved. Your resting heart rate is 4 bpm above your own " +
       "baseline across the last three mornings, sleep averaged 6.8 h against " +
       "your usual 7.9 h, and you reported your left shin at 4 out of 10 " +
-      "yesterday — the third day running you have named it. Readiness weighs " +
+      "yesterday: the third day running you have named it. Readiness weighs " +
       "self-report most heavily, so the shin is most of the change.",
     safety: false,
   },
@@ -63,7 +63,7 @@ export const DEMO_CHAT_ATHLETE: readonly ChatMessage[] = [
     text:
       "It was 8.7 mi, which is 31% longer than anything you had run in the " +
       "month before it. Your acute:chronic ratio moved from 0.94 to 1.28 that " +
-      "week. That is the pattern RunGuard flags as unusual — it is a " +
+      "week. That is the pattern RunGuard flags as unusual, it is a " +
       "description of the jump, not a verdict on the run. Your coach sees the " +
       "same figures.",
     safety: false,
@@ -95,7 +95,7 @@ export const DEMO_CHAT_COACH: readonly ChatMessage[] = [
   {
     role: "assistant",
     text:
-      "Yes — 172.8 mi across the athletes with run history, against 433.6 mi " +
+      "Yes: 172.8 mi across the athletes with run history, against 433.6 mi " +
       "the week before. Most of that is three athletes who logged nothing " +
       "rather than a squad-wide drop, so the total reads lower than the " +
       "training actually was.",

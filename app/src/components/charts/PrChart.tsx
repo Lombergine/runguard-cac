@@ -94,7 +94,7 @@ const MIN_PR_CHART_POINTS = 3;
  * The second sentence is the x axis owning up to itself — see the header.
  */
 const AXIS_NOTE =
-  "Faster is higher — this axis runs backwards, from slowest at the bottom to fastest at the top. PRs sit evenly spaced, not by date; tap one for its day.";
+  "Faster is higher: this axis runs backwards, from slowest at the bottom to fastest at the top. PRs sit evenly spaced, not by date; tap one for its day.";
 
 /** The whole block has nothing in it. The website's label, minus the event. */
 const NO_PRS = "No PRs logged yet.";
@@ -226,7 +226,7 @@ function EventBlock({ event, points }: { event: string; points: PrPoint[] }) {
         tickFormat={s.tickFormat}
         unitLabel={s.unitLabel}
         readout={s.readout}
-        accessibilityLabel={`${event} PR progression. ${countLabel(n)}, from ${say(0)} on ${s.points[0].label} to ${say(n - 1)} on ${s.points[n - 1].label}. Faster times are higher — the time axis is inverted.`}
+        accessibilityLabel={`${event} PR progression. ${countLabel(n)}, from ${say(0)} on ${s.points[0].label} to ${say(n - 1)} on ${s.points[n - 1].label}. Faster times are higher. The time axis is inverted.`}
       >
         {(frame) => (
           <>

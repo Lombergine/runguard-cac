@@ -310,9 +310,9 @@ const PRE_RACE = [
  * run flat out is how a season gets wrecked in September.
  */
 const PRIORITY_WORD: Record<string, string> = {
-  A: "A race — the one this season points at",
-  B: "B race — race it, but the week is not built around it",
-  C: "C race — a training effort",
+  A: "A race: the one this season points at",
+  B: "B race: race it, but the week is not built around it",
+  C: "C race: a training effort",
 };
 
 const FEEL_WORD: Record<string, string> = {

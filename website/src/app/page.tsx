@@ -71,7 +71,7 @@ export default function Landing() {
           style={{ ["--i" as string]: 2, color: "var(--ink-2)" }}
         >
           RunGuard syncs your athletes&apos; watches, tracks every runner&apos;s training
-          load, and flags who&apos;s at risk — before practice even starts.
+          load, and flags who&apos;s at risk. Before practice even starts.
         </p>
 
         {/*
@@ -111,12 +111,12 @@ export default function Landing() {
                 : { background: "var(--ember)", boxShadow: "0 6px 28px rgba(245,158,11,0.32)" }
             }
           >
-            Create your team — free{demo ? "" : " →"}
+            Create your team: free{demo ? "" : " →"}
           </Link>
         </div>
         {demo && (
           <p className="enter mt-5 text-sm" style={{ ["--i" as string]: 4, color: "var(--ink-muted)" }}>
-            No sign-up, no card — the dashboard opens on a sample team. Or see{" "}
+            No sign-up, no card. The dashboard opens on a sample team. Or see{" "}
             <Link
               href="/api/demo/athlete"
               prefetch={false}
@@ -194,17 +194,17 @@ export default function Landing() {
           <Step
             n="1"
             title="Athletes sync automatically"
-            body="Runs flow in from Apple Health the moment a workout ends — Apple Watch, Garmin, anything that writes to it. No spreadsheets, no asking kids to log anything."
+            body="Runs flow in from Apple Health the moment a workout ends. Apple Watch, Garmin, anything that writes to it. No spreadsheets, no asking kids to log anything."
           />
           <Step
             n="2"
             title="RunGuard does the math"
-            body="Every athlete's acute and chronic training load, mileage ramps, monotony, and recovery — recalculated after every single run."
+            body="Every athlete's acute and chronic training load, mileage ramps, monotony, and recovery. Recalculated after every single run."
           />
           <Step
             n="3"
             title="You get flagged, not surprised"
-            body="Open the dashboard before practice and see exactly who's in the danger zone and why — in plain English, not sports-science jargon."
+            body="Open the dashboard before practice and see exactly who's in the danger zone and why. In plain English, not sports-science jargon."
           />
         </div>
       </section>
@@ -229,7 +229,7 @@ export default function Landing() {
             Know what your own data says
           </h3>
           <ul className="mt-6 space-y-3 text-sm" style={{ color: "var(--ink-2)" }}>
-            <Li>Sign up on your own — no coach or team required</Li>
+            <Li>Sign up on your own. No coach or team required</Li>
             <Li>Your readiness score, weekly plan, and race predictions</Li>
             <Li>
               {aiEnabled()

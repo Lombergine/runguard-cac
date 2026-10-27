@@ -132,7 +132,7 @@ export function WeekProgress({ weekKm, weeklyTargetKm }: WeekProgressProps) {
             <Text style={styles.captionFigure}>{`${rawPct}%`}</Text>
             {" of weekly target"}
             {over
-              ? " — well over plan, this is the spike RunGuard is flagging"
+              ? ", well over plan, this is the spike RunGuard is flagging"
               : ""}
           </Text>
         </>

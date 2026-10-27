@@ -104,15 +104,15 @@ export function athleteInsights(risk: RiskSnapshot): string[] {
   if (acwr !== null) {
     if (acwr > 1.5) {
       out.push(
-        `Your training load is way above what your body is used to (ratio ${acwr.toFixed(2)}). This is the zone where most running injuries happen — the smartest thing you can do this week is back off before your body forces you to.`
+        `Your training load is way above what your body is used to (ratio ${acwr.toFixed(2)}). This is the zone where most running injuries happen. The smartest thing you can do this week is back off before your body forces you to.`
       );
     } else if (acwr > 1.3) {
       out.push(
-        `You're pushing above your safe zone (ratio ${acwr.toFixed(2)}). You don't need to stop — just don't stack more hard days on top of this.`
+        `You're pushing above your safe zone (ratio ${acwr.toFixed(2)}). You don't need to stop, just don't stack more hard days on top of this.`
       );
     } else if (acwr < 0.6 && weekKm > 2) {
       out.push(
-        `You're rebuilding after time off. Your engine is ready before your bones and tendons are — keep the jumps small even when it feels easy.`
+        `You're rebuilding after time off. Your engine is ready before your bones and tendons are. Keep the jumps small even when it feels easy.`
       );
     } else if (weekKm <= 2) {
       /*
@@ -137,38 +137,38 @@ export function athleteInsights(risk: RiskSnapshot): string[] {
       );
     } else {
       out.push(
-        `Your load ratio is ${acwr?.toFixed(2)} — right in the sweet spot. You're building fitness about as fast as your body can absorb it.`
+        `Your load ratio is ${acwr?.toFixed(2)}, right in the sweet spot. You're building fitness about as fast as your body can absorb it.`
       );
     }
   }
 
   if (rampPct !== null && rampPct > 30) {
     out.push(
-      `Your mileage jumped ${Math.round(rampPct)}% this week (${miNum(prevWeekKm)} → ${miNum(weekKm)} mi). Anything past ~10% per week starts stacking risk — hold here for a week before adding more.`
+      `Your mileage jumped ${Math.round(rampPct)}% this week (${miNum(prevWeekKm)} → ${miNum(weekKm)} mi). Anything past ~10% per week starts stacking risk. Hold here for a week before adding more.`
     );
   }
 
   if (monotony !== null && monotony > 2) {
     out.push(
-      `Almost every run this week was the same effort. Easy days need to feel almost too easy — that's when your body actually absorbs the training.`
+      `Almost every run this week was the same effort. Easy days need to feel almost too easy, that's when your body actually absorbs the training.`
     );
   }
 
   if (daysSinceRest >= 10) {
     out.push(
-      `You haven't taken a rest day in ${daysSinceRest} days. Rest isn't lost fitness — it's where the fitness gets built.`
+      `You haven't taken a rest day in ${daysSinceRest} days. Rest isn't lost fitness: it's where the fitness gets built.`
     );
   }
 
   const r = risk.recovery;
   if (r.restingHrDelta !== null && r.restingHrDelta >= 5) {
     out.push(
-      `Your resting heart rate is up ${r.restingHrDelta} bpm from your normal (${r.restingHrBaseline} → ${r.restingHr}). That usually means you're not fully recovered — or something's coming on. Prioritize sleep and easy days.`
+      `Your resting heart rate is up ${r.restingHrDelta} bpm from your normal (${r.restingHrBaseline} → ${r.restingHr}). That usually means you're not fully recovered, or something's coming on. Prioritize sleep and easy days.`
     );
   }
   if (r.hrvDeltaPct !== null && r.hrvDeltaPct <= -12) {
     out.push(
-      `Your HRV is down ${Math.abs(r.hrvDeltaPct)}% from baseline — your body is still carrying stress from recent training. A true easy day will bring it back faster than pushing through.`
+      `Your HRV is down ${Math.abs(r.hrvDeltaPct)}% from baseline: your body is still carrying stress from recent training. A true easy day will bring it back faster than pushing through.`
     );
   }
   if (r.sleepAvg !== null && r.sleepAvg < 7) {
@@ -178,7 +178,7 @@ export function athleteInsights(risk: RiskSnapshot): string[] {
   }
 
   if (out.length === 0) {
-    out.push("Everything looks healthy. Keep the rhythm going — consistency is the whole game.");
+    out.push("Everything looks healthy. Keep the rhythm going. Consistency is the whole game.");
   }
   return out;
 }
@@ -220,7 +220,7 @@ export function recommendedWorkouts(risk: RiskSnapshot): Workout[] {
     return [
       {
         day: dayName(1),
-        title: "Genuine easy day — 35 min",
+        title: "Genuine easy day: 35 min",
         detail: "Slower than feels natural. This is the variety your week is missing.",
       },
       {
@@ -244,7 +244,7 @@ export function recommendedWorkouts(risk: RiskSnapshot): Workout[] {
     {
       day: dayName(2),
       title: "Workout: 4–5 × 4 min tempo",
-      detail: "Comfortably hard — around the effort you could race for an hour. 2 min jog between.",
+      detail: "Comfortably hard: around the effort you could race for an hour. 2 min jog between.",
     },
     {
       day: dayName(3),

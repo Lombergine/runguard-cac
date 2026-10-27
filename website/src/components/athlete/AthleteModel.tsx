@@ -433,8 +433,8 @@ export default function AthleteModel({
         ) : (
           <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
             {zone === "unknown"
-              ? "No soreness or injuries reported yet — this fills in once they check in."
-              : "No flagged areas — nothing lit up. Keep it that way."}
+              ? "No soreness or injuries reported yet. This fills in once they check in."
+              : "No flagged areas: nothing lit up. Keep it that way."}
           </div>
         )}
       </div>

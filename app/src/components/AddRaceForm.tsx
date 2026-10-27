@@ -102,9 +102,9 @@ const COURSES: readonly { id: RaceCourseType; label: string }[] = RACE_COURSE_TY
 );
 
 const PRIORITIES: readonly { id: RacePriority; label: string }[] = [
-  { id: "A", label: "A — the one you peak for" },
-  { id: "B", label: "B — race it, no taper" },
-  { id: "C", label: "C — a training effort" },
+  { id: "A", label: "A: the one you peak for" },
+  { id: "B", label: "B: race it, no taper" },
+  { id: "C", label: "C: a training effort" },
 ];
 
 /**
@@ -410,7 +410,7 @@ export function AddRaceForm({ onChanged }: { onChanged: () => void }) {
     const miles = entry === "" ? 0 : Number(entry);
     if (entry !== "" && (!Number.isFinite(miles) || miles <= 0)) {
       setMessage(
-        "Enter the race distance in miles as a number greater than zero — 3.1 for a 5K."
+        "Enter the race distance in miles as a number greater than zero, 3.1 for a 5K."
       );
       return;
     }

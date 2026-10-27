@@ -103,7 +103,7 @@ function spikeReason(spike: SessionSpike): string {
  */
 const SPIKE_PROVENANCE =
   "In a study of 5,205 adult runners, single sessions well past a runner's " +
-  "recent longest carried a higher injury rate — the clearest load signal " +
+  "recent longest carried a higher injury rate. The clearest load signal " +
   "there is, though it hasn't been shown specifically in teenagers.";
 
 /**
@@ -212,7 +212,7 @@ export function RunCard({ run, dateLabel, sessionLabel }: RunCardProps) {
     `Distance ${distance}`,
     duration === null ? "Time not recorded" : `Time ${duration}`,
     pace === null ? "Pace not recorded" : `Pace ${pace}`,
-    run.spike ? `${SPIKE_FLAG[run.spike.level]} — ${spikeReason(run.spike)}` : null,
+    run.spike ? `${SPIKE_FLAG[run.spike.level]}, ${spikeReason(run.spike)}` : null,
     run.spike ? SPIKE_PROVENANCE : null,
   ]
     .filter((part): part is string => Boolean(part))

@@ -66,10 +66,10 @@ export default async function RosterPage({
           className="rounded-2xl border p-8 text-center"
           style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
         >
-          <div className="text-lg font-semibold">Your roster is empty — for now</div>
+          <div className="text-lg font-semibold">Your roster is empty, for now</div>
           <p className="text-sm mt-2 max-w-md mx-auto" style={{ color: "var(--ink-muted)" }}>
             Share your team code with your athletes. When they sign up with it, they show up
-            here automatically — the moment their watch syncs.
+            here automatically: the moment their watch syncs.
           </p>
           {team && (
             <div
@@ -175,7 +175,7 @@ export default async function RosterPage({
 
       <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
         The window above moves the distance figures. Soreness patterns stay on their own
-        7-day lookback and acute:chronic workload stays 7-day vs 28-day — both are defined
+        7-day lookback and acute:chronic workload stays 7-day vs 28-day, both are defined
         on fixed windows and would mean nothing rescaled. Numbers update as watches sync.
       </p>
     </div>

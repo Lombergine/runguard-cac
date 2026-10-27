@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     rpe !== null || energy !== null || motivation !== null || academicStress !== null;
   if (!hasScores && !hasPart) {
     return Response.json(
-      { error: "Nothing to record — send a score, or a soreness part and severity." },
+      { error: "Nothing to record: send a score, or a soreness part and severity." },
       { status: 400 }
     );
   }

@@ -12,9 +12,9 @@ import "./globals.css";
  */
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-const TITLE = "RunGuard — See the injury coming before it happens";
+const TITLE = "RunGuard: See the injury coming before it happens";
 const DESCRIPTION =
-  "Athlete monitoring for high school running teams. RunGuard syncs your athletes' watches, tracks every runner's training load, and flags who's at risk — before practice even starts.";
+  "Athlete monitoring for high school running teams. RunGuard syncs your athletes' watches, tracks every runner's training load, and flags who's at risk: before practice even starts.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

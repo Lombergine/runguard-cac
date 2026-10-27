@@ -369,7 +369,7 @@ export default function LoginScreen() {
             <Text style={styles.body}>
               {pairing
                 ? "On the RunGuard web app, open Profile → Pair the RunGuard iPhone app and copy the code shown there."
-                : "Use the email and password from your RunGuard account. This signs the app in on its own — you do not need a pairing code."}
+                : "Use the email and password from your RunGuard account. This signs the app in on its own. You do not need a pairing code."}
             </Text>
 
             {/* One control, two choices, both visible: the athlete cannot pick
@@ -545,7 +545,7 @@ export default function LoginScreen() {
             blunted by being spent here.
           */}
           <Text style={styles.disclaimer}>
-            Not medical advice. RunGuard monitors training load and recovery — it describes
+            Not medical advice. RunGuard monitors training load and recovery, it describes
             what your runs, sleep and check-ins show, and it does not diagnose anything.
           </Text>
         </ScrollView>

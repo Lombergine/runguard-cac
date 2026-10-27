@@ -129,10 +129,10 @@ export default async function Dashboard({
           className="rounded-2xl border p-8 text-center enter"
           style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}
         >
-          <div className="text-lg font-semibold">Your roster is empty — for now</div>
+          <div className="text-lg font-semibold">Your roster is empty, for now</div>
           <p className="text-sm mt-2 max-w-md mx-auto" style={{ color: "var(--ink-muted)" }}>
             Share your team code with your athletes. When they sign up with it, they show up
-            here automatically — risk-ranked, the moment their watch syncs.
+            here automatically: risk-ranked, the moment their watch syncs.
           </p>
           {team && (
             <div
@@ -245,7 +245,7 @@ export default async function Dashboard({
 
           <Panel
             title="Workload spread"
-            note="context only — this ratio showed no link to injury in a 5,205-runner study"
+            note="context only: this ratio showed no link to injury in a 5,205-runner study"
           >
             {bands.rated === 0 ? (
               <p className="text-sm" style={{ color: "var(--ink-muted)" }}>
@@ -307,7 +307,7 @@ export default async function Dashboard({
               total={athletes.length}
             />
             <p className="text-xs mt-3" style={{ color: "var(--ink-muted)" }}>
-              Today only — the tile above counts anyone quiet for {STALE_AFTER_DAYS}+ days,
+              Today only: the tile above counts anyone quiet for {STALE_AFTER_DAYS}+ days,
               which is the one worth chasing. Self-reports are the only input RunGuard cannot
               read from a watch: a quiet athlete is not a healthy one, they are an unknown one.
             </p>

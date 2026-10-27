@@ -100,7 +100,7 @@ export function middleware(request: NextRequest) {
     NextResponse.json(
       {
         error:
-          "This is the read-only demo, so nothing you change here is saved — the sample team stays the same for the next person. Create a free team and everything on this screen becomes yours to edit.",
+          "This is the read-only demo, so nothing you change here is saved. The sample team stays the same for the next person. Create a free team and everything on this screen becomes yours to edit.",
         demo: true,
       },
       { status: 403 }

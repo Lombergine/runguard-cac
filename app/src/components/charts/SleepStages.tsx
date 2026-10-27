@@ -253,7 +253,7 @@ export function SleepStages({ sleep30 }: SleepStagesProps) {
       </Card>
       {known.length < keys.length ? (
         <Text style={styles.legend}>
-          A dashed track is a stage your watch did not record — not a stage you
+          A dashed track is a stage your watch did not record. Not a stage you
           did not get.
         </Text>
       ) : null}

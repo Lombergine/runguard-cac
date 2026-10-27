@@ -1,5 +1,5 @@
 export function InsufficientData({
-  label = "Not enough training history yet — sync more data or give it a couple of weeks.",
+  label = "Not enough training history yet. Sync more data or give it a couple of weeks.",
   height = 140,
 }: {
   label?: string;

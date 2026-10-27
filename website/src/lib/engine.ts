@@ -330,7 +330,7 @@ export function pacingStrategy(event: EventName, predictedS: number): string[] {
     const lap = predictedS / 2;
     return [
       `You're fit enough to go out in ${fmtTime(lap - 1)} for the first 400.`,
-      `Hold form through 600m — the race starts with 200 to go.`,
+      `Hold form through 600m. The race starts with 200 to go.`,
       `Target finish: ${fmtTime(predictedS)}.`,
     ];
   }
@@ -338,13 +338,13 @@ export function pacingStrategy(event: EventName, predictedS: number): string[] {
     const lap = predictedS / 4;
     return [
       `Even 400s of ${fmtTime(lap)} gets you ${fmtTime(predictedS)}.`,
-      `Don't go out faster than ${fmtTime(lap - 2)} — banked time is borrowed time.`,
+      `Don't go out faster than ${fmtTime(lap - 2)}, banked time is borrowed time.`,
       `Start your drive with 500 to go.`,
     ];
   }
   const perKm = predictedS / (d / 1000);
   return [
-    `Target ${fmtPaceMi(perKm)} — that's ${fmtTime(predictedS)} at the line.`,
+    `Target ${fmtPaceMi(perKm)}, that's ${fmtTime(predictedS)} at the line.`,
     `First mile no faster than ${fmtPaceMi(perKm + 5)}; negative-split the back half.`,
     `Attack the last 800m if you're still in control at 2 to go.`,
   ];
@@ -405,7 +405,7 @@ const SUPPLEMENTAL = [
   "Mobility: hip flexor + calf stretching, 10 min, especially post-run",
   "Core: side planks 3×30s each side, hollow holds 3×20s",
   null,
-  "Legs: eccentric calf drops 3×12 — best shin/achilles insurance there is",
+  "Legs: eccentric calf drops 3×12. Best shin/achilles insurance there is",
   null,
 ];
 
@@ -510,11 +510,11 @@ export function weeklyPlan(
 
   const template: Omit<PlanDay, "date" | "day" | "status" | "isToday" | "isTaper" | "source" | "coachDistanceKm">[] = [
     { type: "Easy run", distanceKm: round(base * 0.14 * scale), targetPace: easy, why: "Flush the weekend's long run and start the week aerobic.", details: "Fully conversational. Heart rate under 150. If it feels fast, it is.", supplemental: SUPPLEMENTAL[0] },
-    { type: "Workout: 5×4 min tempo", distanceKm: round(base * 0.16 * scale), targetPace: tempo, why: "Threshold work raises the pace you can hold without blowing up.", details: "2 min jog between reps. Comfortably hard — you could say short sentences.", supplemental: SUPPLEMENTAL[1] },
+    { type: "Workout: 5×4 min tempo", distanceKm: round(base * 0.16 * scale), targetPace: tempo, why: "Threshold work raises the pace you can hold without blowing up.", details: "2 min jog between reps. Comfortably hard. You could say short sentences.", supplemental: SUPPLEMENTAL[1] },
     { type: "Recovery run", distanceKm: round(base * 0.11 * scale), targetPace: easy, why: "Active recovery clears the workout without adding stress.", details: "Slowest run of the week on purpose. Add 4 relaxed strides at the end.", supplemental: SUPPLEMENTAL[2] },
     { type: "Workout: 8×400m", distanceKm: round(base * 0.15 * scale), targetPace: interval, why: "Speed touch keeps turnover sharp while volume builds.", details: "Full 90s recovery. Even splits beat heroic first reps.", supplemental: SUPPLEMENTAL[3] },
     { type: "Easy run + strides", distanceKm: round(base * 0.13 * scale), targetPace: easy, why: "Consolidate the week before the long run.", details: "6×20s strides on grass, walk-back recovery.", supplemental: SUPPLEMENTAL[4] },
-    { type: "Long run", distanceKm: round(base * 0.26 * scale), targetPace: longP, why: "The aerobic engine is built here — biggest single fitness lever.", details: "Steady, relaxed. Fuel before, water during if hot.", supplemental: SUPPLEMENTAL[5] },
+    { type: "Long run", distanceKm: round(base * 0.26 * scale), targetPace: longP, why: "The aerobic engine is built here. Biggest single fitness lever.", details: "Steady, relaxed. Fuel before, water during if hot.", supplemental: SUPPLEMENTAL[5] },
     { type: "Rest", distanceKm: null, targetPace: null, why: "Adaptation happens in recovery, not in training.", details: "Full day off. Sleep in. Legs up.", supplemental: SUPPLEMENTAL[6] },
   ];
 
@@ -627,9 +627,9 @@ export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, soreness: 
     return {
       flag: "unusual",
       reason:
-        "Resting heart rate is up and HRV is down together — the pattern that often precedes illness. Worth asking how they feel before training.",
+        "Resting heart rate is up and HRV is down together. The pattern that often precedes illness. Worth asking how they feel before training.",
       athleteReason:
-        "Your resting heart rate was up and your HRV was down together this morning — the pattern that often shows up before an illness.",
+        "Your resting heart rate was up and your HRV was down together this morning. The pattern that often shows up before an illness.",
     };
   if (worst && worst.severity >= 7)
     return {
@@ -640,7 +640,7 @@ export function prePracticeFlag(risk: RiskSnapshot, illness: boolean, soreness: 
   if (worst && worst.severity >= 4)
     return {
       flag: "watch",
-      reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra} — worth checking in on before hard work.`,
+      reason: `They reported soreness ${worst.severity}/10 in the ${worst.part}${extra}, worth checking in on before hard work.`,
       athleteReason: `Your ${worst.part} was ${worst.severity}/10 in today's check-in${extra}.`,
     };
   return {
@@ -749,11 +749,11 @@ export function readinessScore(risk: RiskSnapshot, checkin: CheckinRow | null, s
 export function aiInsight(risk: RiskSnapshot, fitness: Fitness, patterns: Patterns): string {
   const rec = risk.recovery;
   if (patterns.overreaching) return "Your training has been stacking up without much let-up lately. An easy day now is cheaper than a forced week off later.";
-  if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct >= 10) return `Your HRV is up ${rec.hrvDeltaPct}% this week — good time to push hard.`;
-  if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct <= -12) return `HRV is ${Math.abs(rec.hrvDeltaPct)}% below baseline — make today genuinely easy and it rebounds faster.`;
-  if (fitness.peakThisWeek) return "You hit a new fitness peak this week — the training is working.";
-  if (patterns.sleepDebtH !== null && patterns.sleepDebtH > 5) return `You're carrying ${patterns.sleepDebtH}h of sleep debt — tonight's sleep is worth more than tomorrow's run.`;
-  if (fitness.trend === "improving") return "Fitness is trending up week over week. Consistency is compounding — keep the rhythm.";
+  if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct >= 10) return `Your HRV is up ${rec.hrvDeltaPct}% this week: good time to push hard.`;
+  if (rec.hrvDeltaPct !== null && rec.hrvDeltaPct <= -12) return `HRV is ${Math.abs(rec.hrvDeltaPct)}% below baseline: make today genuinely easy and it rebounds faster.`;
+  if (fitness.peakThisWeek) return "You hit a new fitness peak this week. The training is working.";
+  if (patterns.sleepDebtH !== null && patterns.sleepDebtH > 5) return `You're carrying ${patterns.sleepDebtH}h of sleep debt, tonight's sleep is worth more than tomorrow's run.`;
+  if (fitness.trend === "improving") return "Fitness is trending up week over week. Consistency is compounding, keep the rhythm.";
   return "Everything's stable. Stack another clean week.";
 }
 
@@ -776,10 +776,10 @@ export function buildNotifications(args: {
   const { risk, fitness, patterns, illness, nextRace, daysToRace, predictions, prs, lastActivityDaysAgo } = args;
 
   if (patterns.overreaching) out.push({ type: "load", text: "You've had a long stretch of hard days without much recovery. Worth an easy one.", severity: "warning" });
-  if (nextRace && daysToRace !== null && daysToRace <= 3 && daysToRace >= 0) out.push({ type: "race", text: `Race in ${daysToRace} day${daysToRace === 1 ? "" : "s"} — here's your taper plan in the Training tab.`, severity: "info" });
+  if (nextRace && daysToRace !== null && daysToRace <= 3 && daysToRace >= 0) out.push({ type: "race", text: `Race in ${daysToRace} day${daysToRace === 1 ? "" : "s"}, here's your taper plan in the Training tab.`, severity: "info" });
   if (fitness.peakThisWeek) out.push({ type: "fitness", text: "You hit a new training fitness peak this week.", severity: "info" });
   if (risk.recovery.restingHrDelta !== null && risk.recovery.restingHrDelta >= 5) out.push({ type: "rhr", text: "Your resting HR is elevated, check your recovery today.", severity: "warning" });
-  if (illness) out.push({ type: "illness", text: "HRV drop + elevated resting HR — classic getting-sick pattern. Hydrate, sleep, skip intensity.", severity: "warning" });
+  if (illness) out.push({ type: "illness", text: "HRV drop + elevated resting HR. Classic getting-sick pattern. Hydrate, sleep, skip intensity.", severity: "warning" });
   if (lastActivityDaysAgo !== null && lastActivityDaysAgo >= 2) out.push({ type: "streak", text: `You haven't logged a workout in ${lastActivityDaysAgo} days, staying on track?`, severity: "info" });
   for (const ev of EVENTS) {
     const pr = prs[ev];
@@ -788,7 +788,7 @@ export function buildNotifications(args: {
       break;
     }
   }
-  if (patterns.undertraining) out.push({ type: "undertraining", text: "Volume has dropped well below your base — rebuild gently to hold fitness.", severity: "info" });
+  if (patterns.undertraining) out.push({ type: "undertraining", text: "Volume has dropped well below your base. Rebuild gently to hold fitness.", severity: "info" });
   return out;
 }
 

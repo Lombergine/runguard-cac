@@ -56,7 +56,7 @@ export default function WaitlistForm() {
       </button>
       {state === "error" && (
         <p className="text-sm self-center" style={{ color: "var(--status-serious)" }}>
-          Something went wrong — try again.
+          Something went wrong: try again.
         </p>
       )}
     </form>

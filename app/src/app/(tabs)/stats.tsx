@@ -144,7 +144,7 @@ function Header({ stale }: { stale?: boolean }) {
       <Text style={styles.eyebrow}>Your numbers</Text>
       <Text style={styles.heading}>Stats</Text>
       <Text style={styles.note}>
-        Fitness, load and heart rate — and the year behind them.
+        Fitness, load and heart rate. And the year behind them.
       </Text>
       {stale ? (
         <Text style={styles.note}>

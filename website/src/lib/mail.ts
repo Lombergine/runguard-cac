@@ -78,7 +78,7 @@ export function resetEmail(link: string, expiresMinutes: number): { subject: str
       "",
       `The link stops working in ${expiresMinutes} minutes, and it can only be used once.`,
       "",
-      "If this wasn't you, you can ignore this email — nothing has changed, and",
+      "If this wasn't you, you can ignore this email. Nothing has changed, and",
       "your current password still works. Nobody can see this link but you.",
       "",
       "RunGuard will never ask you for your password by email.",
