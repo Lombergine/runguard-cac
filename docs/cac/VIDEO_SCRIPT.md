@@ -1,109 +1,113 @@
-# RunGuard demo video — script (target 2:50, hard stop 3:00)
+# RunGuard: Congressional App Challenge video script
 
-Order the rules require: names, app name, purpose in one sentence, audience,
-tools and languages, functionality shown. Judges stop at 3:00.
+Final cut. Target 2:50, hard limit 3:00. Two cameras: your phone screen
+(screen recording) and your laptop screen (QuickTime or OBS), plus you on
+camera for the open and close. Every line is something the screen can show.
 
-**Setup.** Horizontal. No music. Open on Aditya on camera with the iPhone.
-Everything after 0:20 is a screen recording of the phone running the app
-against the RunGuard server on the laptop. Say "sample data" out loud when the
-gait panel is on screen. Only 2.0 is highlighted for consideration; the base
-app is shown as context.
-
-Fill in: [grade], [school], [district], and the numbers in brackets from the
-phone on recording night.
+Fill the three brackets from your own Stats tab before recording:
+[GRADE], [SCHOOL], [X]% and [Y] from the "Your threshold" card.
 
 ---
 
-**0:00–0:20, on camera**
-> I'm Aditya Garg, a [grade] at [school] in San Jose, [district], and this is
-> RunGuard, built with my teammate Pranav. Between a quarter and a third of
-> high-school runners get hurt every season. [One sentence: your own injury,
-> or a teammate's.] RunGuard reads a runner's training from Apple Health and
-> tells them, and their coach, when the load says an injury is coming. Our
-> team, Leland XC, uses it. Version 2.0, which this video is about, makes it
-> the only running app that tells you how much to trust its own score. It's
-> TypeScript end to end: a Next.js server, an Expo iOS app, and the
-> statistics from a Python package I published.
+**0:00 to 0:14. You on camera, phone in hand.**
 
-**0:20–0:45, Home and Stats**
-> This is the product: morning check-in, readiness, body scan, your runs from
-> Apple Health. Here on Stats is the workload ratio, your last seven days
-> against your last month. Every running app shows this number, and every one
-> uses the same cutoff, 1.5, from a 2016 paper.
+> I'm Aditya Garg, a [GRADE] at [SCHOOL] in San Jose, and I run cross-country.
+> This is RunGuard. It's the app our team uses for training, recovery, races
+> and check-ins. And it does one thing no other running app does: it checks
+> whether its own injury score is true for you.
 
-**0:45–1:15, Your threshold**
-> 2.0 puts that cutoff next to the athlete it's applied to. On my history, 1.5
-> flags 3.5% of my days, my 96th percentile. My own 95th percentile is 1.37,
-> and it's drawn on the chart in violet next to the universal line. And it says
-> the honest thing: a cutoff from your own history flags a fixed share of your
-> days by construction. It shows how arbitrary 1.5 is. It doesn't claim to
-> replace it.
+**0:14 to 0:32. Phone: Stats tab, the workload chart with the 1.5 line.**
 
-**1:15–1:45, Self-audit**
-> In 2021 the field showed the ratio mostly repeats your weekly mileage: swap
-> the denominator for noise and the prediction barely changes. RunGuard runs
-> that test on your own data. Rank correlation between my score and my last
-> seven days alone, with a bootstrap interval: 0.83, between 0.77 and 0.89.
-> Near 1 the score is just mileage in different units; at 0.83 most of mine
-> is, and the four-week baseline adds a little. The app tells you which case
-> you're in.
+> Every running app shows this number. It's your last week of training
+> divided by your last four weeks, with a warning line at 1.5. In 2021 a
+> study of 5,205 runners found the formula mostly measures this week alone,
+> and predicts injury no better than noise. Every app still ships it.
 
-**1:45–2:15, Gait: tap "Check your gait with the camera", then the sample switch**
-> And for everyone who doesn't own an Apple Watch, me included: film ten
-> seconds from the side and the phone measures cadence, bounce and whether
-> one foot stays down longer than the other, with Apple's own pose detector,
-> on the device. The clip never leaves the phone. [Show a result if you
-> recorded one before filming.]
+**0:32 to 0:50. Phone: scroll to "Your threshold".**
 
-**(fallback copy for the same scene, Apple Watch channel)**
-> Load alone is yesterday's model. The gait channel reads ground contact time
-> and vertical oscillation from Apple Watch running dynamics and flags
-> mechanical drift against your own four-week baseline when pace didn't
-> change. My watch is a Garmin, which doesn't write those, so this is the
-> labelled sample set, right there: "sample data". The thresholds are
-> heuristics, and the panel says so.
+> So RunGuard puts the number next to the runner. For me, 1.5 flags [X] of
+> my days. My own 95th percentile is [Y]. The chart draws my line, in violet,
+> next to the borrowed one, and says which line is mine.
 
-**2:05–2:20, Explain my numbers, tap the button**
-> And if the numbers are too much, the app explains them. The model only
-> gets the numbers the server computed, has to answer in a fixed shape, and
-> every figure in its reply is checked against what it was given. It explains
-> the score. It never makes it.
+**0:50 to 1:08. Phone: "Self-audit", tap Details.**
 
-**(2:05–2:20 alternative) Data check**
-> Before any score, RunGuard checks the log it was given: too little history,
-> a watch left running, a long break, a change of units. It tells you; it never
-> silently fixes anything, because whether a gap was rest or a dead battery is
-> your call.
+> Then it runs the study's own test on my data. This is how much the score
+> just repeats my last seven days, with a confidence interval. Below 0.7 the
+> four-week baseline is doing real work. Above 0.9 it isn't, and the app says
+> so in plain words. No other app tells you this.
 
-**2:20–2:35, laptop, coach dashboard**
-> The coach sees it for the whole team. Median self-audit across the squad,
-> who the universal cutoff can never warn, and the 2021 paper's own experiment
-> run on our injury log: does the score beat a ratio built on noise? With our
-> injuries logged it answers; until then it says it can't. One engine, both
-> screens.
+**1:08 to 1:18. Phone: "Data check".**
 
-**(2:20–2:35 alternative) Learned from this team**
-> And it learns. Fourteen athletes, a year of their own days, a model trained
-> in a second on the phone's server, scored on each athlete it never saw.
-> On our sample team it beats the universal formula, and it shows its weights:
-> this week against the last four, then soreness. Readable, not a black box.
+> Before any of that it checks the log it was given: a watch left running, a
+> long break, a change of units. It tells you. It never silently fixes
+> anything.
 
-**2:35–2:52, terminal, green tests**
-> Every statistic is checked against the Python reference. Fifty-one tests:
-> every ratio value, percentile and correlation to nine decimal places. The one
-> that didn't match, rank correlation on days with ties, turned out to be
-> floating-point tie-breaking in pandas, and the test now documents it.
+**1:18 to 1:50. Phone: Gait card, "Check your gait with the camera",
+choose your stride clip, wait for the result.**
 
-**2:52–2:58**
-> RunGuard. The injury score that tests itself.
+> Load alone is yesterday. This is me, filmed from the side. Apple's
+> body-pose model runs on the phone, nothing is uploaded, and RunGuard reads
+> my cadence, how much I bounce, and how long each foot stays on the ground,
+> left against right. Every clip is compared to my earlier ones, so a change
+> shows up as a change, not a verdict.
+
+**1:50 to 2:20. Laptop: coach dashboard, scrolled to "Can the score be
+trusted on this team?" then "Learned from this team".**
+
+> The coach sees the whole team. First, the 2021 paper's experiment rerun on
+> our own injury log: the real score against a score whose baseline was
+> replaced with noise. It refuses to run below ten injuries, because two
+> events is a coin flip. Then a model trained on this team's own year, scored
+> on each runner by a model that never saw them. Here it beats the universal
+> formula by 0.04 with an interval that excludes zero, and it shows what it
+> learned. These sample injuries are generated, and the panel says so.
+
+**2:20 to 2:35. Phone: "Explain my numbers", tap Explain.**
+
+> The AI layer only explains numbers the server computed. Every figure in its
+> reply is checked against the input. If one doesn't match, the reply is
+> thrown away and the app's own wording is used. The AI never generates the
+> score.
+
+**2:35 to 2:45. Laptop: terminal, `npm test`, green.**
+
+> Every statistic is checked against the Python reference in 51 tests. The
+> base app took a year. The features I just showed were added this month
+> with an AI pair programmer, and the repo discloses exactly which files.
+
+**2:45 to 2:52. You on camera.**
+
+> RunGuard. Every other app shows you a number. This one tells you whether to
+> believe it.
 
 ---
 
-## Recording checklist
-- [ ] Laptop: `cd website && npm run dev` running; `cd app && npx expo start` running; phone on the same Wi-Fi
-- [ ] If the laptop changed networks since the last build: put the new address (`ipconfig getifaddr en0`) into `app/.env` as `EXPO_PUBLIC_API_URL=http://<ip>:3000`, restart Metro, and in the app's dev launcher pick the server at that address. Every screen says "couldn't be loaded" when this is stale
-- [ ] Phone: RunGuard open and signed in; Stats tab reachable
-- [ ] If demoing your own runs: Home → Connect Apple Health → sync, then pull to refresh Stats
-- [ ] Terminal: `cd website && npm test` pre-run; show the summary line
-- [ ] The numbers above are from the seeded account on Oct 26 (3.5% / 96th / 1.37 / ρ 0.83). If you sync your own Garmin runs before recording, re-read them off the Stats tab
-- [ ] Upload to YouTube unlisted or public; link into the portal
+## Shot list, in recording order
+
+| # | Screen | What to capture | Where it goes |
+|---|---|---|---|
+| 1 | You | Intro and outro, one take each, phone in hand | 0:00, 2:45 |
+| 2 | Phone | Stats tab from the top: chart, then slow scroll through the four panels | 0:14 to 1:18 |
+| 3 | Phone | Gait card, camera check, Choose from library, pick the stride clip, result | 1:18 |
+| 4 | Laptop | Demo coach link, dashboard, scroll to the two team panels | 1:50 |
+| 5 | Phone | Explain my numbers, tap Explain, reply appears | 2:20 |
+| 6 | Laptop | `cd website && npm test` in a terminal, wait for green | 2:35 |
+
+## Before recording
+
+- Phone on home Wi-Fi, Metro and the web server running on the Mac.
+- Swipe away the yellow "Open debugger" bar on the phone once. It is a dev
+  notice, not the app.
+- Tap Explain once before recording so the reply is cached and appears fast.
+- Laptop: open http://localhost:3000/api/demo/coach, then /dashboard. Hide
+  bookmarks bar; zoom the browser to 110% so text reads on video.
+- Terminal: font size 18 or more, run the test once beforehand so the second
+  run is fast.
+- The stride clip: side view, whole body in frame, ten seconds or more.
+
+## Rules the judges will check against
+
+- Under three minutes. This cut is 2:52 at a normal speaking pace.
+- The app is shown working, not slides. Every scene is a live screen.
+- Say "sample data" wherever it is sample data. The script does, twice.
+- Say what the AI did. The script does, and DISCLOSURE.md backs it up.
