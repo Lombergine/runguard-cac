@@ -61,6 +61,9 @@ import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color, shadow } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
+// Screen recordings for the CAC video (dev builds only): no stuck refresh spinner.
+const RECORDING = __DEV__ && process.env.EXPO_PUBLIC_HIDE_DEV_WARNINGS === "1";
+
 /**
  * This screen reads `Profile` directly.
  *
@@ -272,7 +275,7 @@ export default function StatsScreen() {
         /* Pull to refetch. Nothing below dims while it runs: a figure that
            fades reads as a figure losing confidence, which it is not. */
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+          <RefreshControl refreshing={RECORDING ? false : refreshing} onRefresh={() => void refresh()} />
         }
       >
         <Header stale={failed} />

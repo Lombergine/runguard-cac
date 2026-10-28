@@ -93,6 +93,9 @@ import { layout, radius, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
+// Screen recordings for the CAC video (dev builds only): no stuck refresh spinner.
+const RECORDING = __DEV__ && process.env.EXPO_PUBLIC_HIDE_DEV_WARNINGS === "1";
+
 /**
  * The website's three bands, in the app's register: lowercase, descriptive, no
  * colour word. `readinessBand` already carries the website's own thresholds
@@ -573,7 +576,7 @@ export default function RecoveryScreen() {
       <ScrollView
         contentContainerStyle={styles.page}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+          <RefreshControl refreshing={RECORDING ? false : refreshing} onRefresh={() => void refresh()} />
         }
       >
         <Header stale={failed} />

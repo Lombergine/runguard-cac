@@ -49,6 +49,9 @@ import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { font, tabular, text } from "../../theme/type";
 
+// Screen recordings for the CAC video (dev builds only): no stuck refresh spinner.
+const RECORDING = __DEV__ && process.env.EXPO_PUBLIC_HIDE_DEV_WARNINGS === "1";
+
 /**
  * Inside this many days the card wears the ember strip. Ported from the
  * website, which switches the race card's border to `--brand` at the same
@@ -445,7 +448,7 @@ export default function RacesScreen() {
         /* Pull to refetch. Nothing below dims while it runs — a predicted time
            that fades reads as a prediction losing confidence, which it is not. */
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+          <RefreshControl refreshing={RECORDING ? false : refreshing} onRefresh={() => void refresh()} />
         }
       >
         <Header count={upcoming.length + history.length} stale={failed} />

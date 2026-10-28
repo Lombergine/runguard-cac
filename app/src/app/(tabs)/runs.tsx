@@ -40,6 +40,9 @@ import { layout, radius, ruleWidth, space, target } from "../../theme/space";
 import { color } from "../../theme/tokens";
 import { text } from "../../theme/type";
 
+// Screen recordings for the CAC video (dev builds only): no stuck refresh spinner.
+const RECORDING = __DEV__ && process.env.EXPO_PUBLIC_HIDE_DEV_WARNINGS === "1";
+
 /** How many placeholder cards to hold while the profile is in flight. */
 const SKELETON_ROWS = 3;
 
@@ -237,7 +240,7 @@ export default function RunsScreen() {
         /* A refetch never dims or shimmers what is already here: the spinner
            says a request is out, the numbers stay exactly as true as they were. */
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+          <RefreshControl refreshing={RECORDING ? false : refreshing} onRefresh={() => void refresh()} />
         }
         /*
          * The plan rides in the list header so the whole tab is ONE scroll —
