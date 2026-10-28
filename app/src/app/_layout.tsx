@@ -15,6 +15,11 @@ import { ProfileProvider } from "../lib/profileStore";
 import { SessionProvider, useSession } from "../lib/session";
 import { color, useColors } from "../theme/tokens";
 import { font } from "../theme/type";
+import { LogBox } from "react-native";
+
+// Screen recordings for the CAC video: `EXPO_PUBLIC_HIDE_DEV_WARNINGS=1` in
+// app/.env hides the development warning toast. Dev builds only.
+if (__DEV__ && process.env.EXPO_PUBLIC_HIDE_DEV_WARNINGS === "1") LogBox.ignoreAllLogs(true);
 
 /**
  * Hold the splash until the fonts are ready. The alternative — rendering in a

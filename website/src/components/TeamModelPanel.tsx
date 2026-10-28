@@ -16,7 +16,9 @@ export default function TeamModelPanel({ model, sampleTeam }: { model: TeamModel
   const verdict = r
     ? r.auc > r.noiseCiHigh && r.deltaCiLow > 0
       ? `Beats the universal formula by ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}, paired bootstrap), and beats noise.`
-      : r.auc > r.noiseCiHigh
+      : r.deltaCiHigh < 0
+        ? `The universal formula does better on this team, by ${sign(-r.deltaRatio)} AUC (${sign(-r.deltaCiHigh)} to ${sign(-r.deltaCiLow)}, paired bootstrap). The panel reports that rather than hiding it.`
+        : r.auc > r.noiseCiHigh
         ? `Beats noise. Its gap over the formula, ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), includes zero.`
         : "Nothing here separates injury weeks from the rest beyond noise. With this much data, no formula and no model should claim to."
     : null;

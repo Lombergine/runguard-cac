@@ -151,7 +151,9 @@ function TeamModelCard({ model, sampleTeam }: { model: TeamModel; sampleTeam: bo
   const verdict = r
     ? r.noiseCiHigh != null && r.auc > r.noiseCiHigh && r.deltaCiLow != null && r.deltaCiLow > 0
       ? `Beats the universal formula by ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), and beats noise.`
-      : r.noiseCiHigh != null && r.auc > r.noiseCiHigh
+      : r.deltaCiHigh != null && r.deltaCiHigh < 0
+        ? `The universal formula does better on this team, by ${sign(-r.deltaRatio)} AUC (${sign(-r.deltaCiHigh)} to ${sign(r.deltaCiLow == null ? null : -r.deltaCiLow)}).`
+        : r.noiseCiHigh != null && r.auc > r.noiseCiHigh
         ? `Beats noise. Its gap over the formula, ${sign(r.deltaRatio)} AUC (${sign(r.deltaCiLow)} to ${sign(r.deltaCiHigh)}), includes zero.`
         : "Nothing here separates injury weeks from the rest beyond noise."
     : null;
